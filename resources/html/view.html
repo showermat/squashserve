@@ -1,0 +1,24 @@
+<html>
+<head>
+<title>%TITLE</title>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="icon" href="%ICON">
+<script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/view.js"></script>
+</head>
+<body data-volid="%ID" style="margin: 0px;">
+<div id="topbar"><div id="toolbar"><div id="toolbar-inner"><div id="toolbar-left">
+	<a href="%HOME" class="toolbar-button" target="_top"><img src="/rsrc/icon/home.svg" alt="Home"></a>
+	<a href="/" class="toolbar-button" target="_top"><img src="/rsrc/icon/library.svg" alt="Library"></a>
+	<a href="%CONTENT" class="toolbar-button" target="_top"><img src="/rsrc/icon/removebar.svg" alt="Remove toolbar"></a>
+	<!--<a href="%PREFS" class="toolbar-button" target="_top"><img src="/rsrc/icon/prefs.svg" alt="Preferences"></a>-->
+</div><div id="toolbar-right">
+	<form id="search">
+	<input id="search-input" type="search" placeholder="Search">
+	<button type="submit" >Go</button>
+	</form>
+</div></div></div></div>
+<iframe id="page" name="page" src="%CONTENT"></iframe>
+</body>
+</html>
