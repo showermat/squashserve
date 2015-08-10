@@ -75,7 +75,7 @@ img.favicon
 	height: 48px;
 }
 
-a.volume-title
+a.item-title
 {
 	display: block;
 	margin-top: 4px;
@@ -92,6 +92,12 @@ span.volume-desc
 a.volume-title:visited
 {
 	color: inherit;
+}
+
+td.search-percent
+{
+	vertical-align: middle;
+	padding-right: 16px;
 }
 
 input.form-value
@@ -127,7 +133,7 @@ div#topbar
 	left: 0;
 	width: 100%;
 	height: 16px;
-	padding: 8px;
+	padding: 8px 0px;
 	background: rgba(200, 200, 200, 0.6);
 }
 

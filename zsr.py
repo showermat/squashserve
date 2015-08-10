@@ -61,7 +61,8 @@ class Zsr:
 			else:
 				inf.seek(child.start);
 				out = open(child.name, 'wb');
-				out.write(lzma.decompress(inf.read(child.length)));
+				try: out.write(lzma.decompress(inf.read(child.length)));
+				except lzma.LZMAError as e: print("Couldn't extract " + os.path.join(os.getcwd(), child.name) + ": " + str(e));
 				out.close();
 
 	def treeprint(self, idx, indent):
@@ -76,6 +77,7 @@ class Zsr:
 
 	def create(self, path, outf): # Creates an archive from a file or directory
 		out = open(outf, 'wb');
+		oldwd = os.getcwd();
 		os.chdir(path);
 		out.write(b"!ZSR\x00\x00\x00\x00\x00\x00\x00\x00");
 		self.fileloc = 12;
@@ -86,11 +88,12 @@ class Zsr:
 		out.seek(4);
 		out.write(struct.pack("<Q", self.fileloc));
 		out.close();
+		os.chdir(oldwd);
 		#for ent in self.index: ent.printout();
 
-	def extract(self, path): # Extracts the contents of the archive to the given path
-		os.mkdir(path);
-		os.chdir(path);
+	def extract(self, dest): # Extracts the contents of the archive to the given path
+		os.mkdir(dest);
+		os.chdir(dest);
 		self.recursive_restore(self.tree[0], self.inf);
 
 	def read(self, path): # Reads an archive from a file
@@ -137,6 +140,16 @@ class Zsr:
 		self.inf.seek(cur.start);
 		return lzma.decompress(self.inf.read(cur.length));
 
+	def getdir(self, path, dest): # Retrieve the contents of a directory
+		cur = self.node(path);
+		if cur is None: raise KeyError("Requested directory does not exists");
+		if cur.start != 0: raise KeyError("Cannot extract contents of regular file");
+		if not os.path.isdir(dest): os.mkdir(dest);
+		oldwd = os.getcwd();
+		os.chdir(dest);
+		self.recursive_restore(cur, self.inf);
+		os.chdir(oldwd);
+
 if __name__ == "__main__":
 	if sys.argv[1] == 'c':
 		Zsr().create(sys.argv[2], sys.argv[3]);
@@ -145,6 +158,10 @@ if __name__ == "__main__":
 		zsr.read(sys.argv[2]);
 		if len(sys.argv) >= 5: open(sys.argv[3], 'wb').write(zsr.get(sys.argv[4]));
 		else: zsr.extract(sys.argv[3]);
+	elif sys.argv[1] == 't':
+		zsr = Zsr();
+		zsr.read(sys.argv[2]);
+		zsr.getdir(sys.argv[3], sys.argv[4]);
 	else:
 		raise RuntimeError("Usage: c <dir> <dest> | x <archive>");
 

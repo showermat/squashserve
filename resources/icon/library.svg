@@ -7,17 +7,18 @@
    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
    xmlns:svg="http://www.w3.org/2000/svg"
    xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="25.184013"
-   height="23.999878"
-   viewBox="0 0 25.184013 23.999877"
-   id="svg5612"
+   width="6.774456mm"
+   height="6.4559407mm"
+   viewBox="0 0 24.003978 22.87538"
+   id="svg4321"
    version="1.1"
    inkscape:version="0.91 r13725"
    sodipodi:docname="library.svg">
   <defs
-     id="defs5614" />
+     id="defs4323" />
   <sodipodi:namedview
      id="base"
      pagecolor="#ffffff"
@@ -25,9 +26,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="11.2"
-     inkscape:cx="27.470574"
-     inkscape:cy="19.357074"
+     inkscape:zoom="15.839192"
+     inkscape:cx="17.959591"
+     inkscape:cy="8.0909536"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -39,10 +40,9 @@
      inkscape:window-height="1048"
      inkscape:window-x="0"
      inkscape:window-y="14"
-     inkscape:window-maximized="0"
-     units="px" />
+     inkscape:window-maximized="0" />
   <metadata
-     id="metadata5617">
+     id="metadata4326">
     <rdf:RDF>
       <cc:Work
          rdf:about="">
@@ -57,28 +57,44 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-193.98453,-644.23077)">
+     transform="translate(-353.54056,-498.9841)">
+    <use
+       height="100%"
+       width="100%"
+       transform="matrix(0.14551919,0,0,0.14551919,363.51625,464.63895)"
+       id="use4236"
+       xlink:href="#path4140"
+       y="0"
+       x="0" />
+    <use
+       height="100%"
+       width="100%"
+       transform="matrix(0.09837698,0,0,0.09837698,314.58324,477.94771)"
+       id="use4243"
+       xlink:href="#g4901"
+       y="0"
+       x="0" />
     <g
-       transform="matrix(0.10321315,0,0,0.10321315,148.77718,580.04924)"
+       transform="matrix(0.09837698,0,0,0.09837698,310.45144,437.80991)"
        style="fill:#1a1a1a;stroke:#1a1a1a;stroke-width:4;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none"
-       id="use5544">
+       id="use4245">
       <rect
          style="opacity:1;fill:#1a1a1a;fill-opacity:1;stroke:#1a1a1a;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
-         id="rect5556"
+         id="rect4311"
          width="40"
          height="200"
          x="440"
          y="652.36218" />
       <rect
          style="opacity:1;fill:#1a1a1a;fill-opacity:1;stroke:#1a1a1a;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
-         id="rect5558"
+         id="rect4313"
          width="60"
          height="160"
          x="490"
          y="692.36218" />
       <rect
          style="opacity:1;fill:#1a1a1a;fill-opacity:1;stroke:#1a1a1a;stroke-width:4;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
-         id="rect5560"
+         id="rect4315"
          width="30"
          height="190"
          x="560"
@@ -86,7 +102,7 @@
       <path
          style="fill:#1a1a1a;fill-rule:evenodd;stroke:#1a1a1a;stroke-width:4;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
          d="m 600,692.36221 40,-10 39.99999,160 -39.99999,10 z"
-         id="path5562"
+         id="path4317"
          inkscape:connector-curvature="0" />
     </g>
   </g>
