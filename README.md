@@ -67,8 +67,6 @@ Of course, if you're going to be archiving sites for local browsing, Wikipedia i
 
 ## Accessory Tools
 
-Coming soon (wikidump, linkcheck)
-
 ### Wikidump
 
 While this project is more concerned with converting file trees to browsable archives than with creating the file trees in the first place, it does include a utility for copying Wikimedia sites (with plans to eventually support Wikia) to local storage.  It's only been tested on a couple of sites, so it's quite likely that it will do stupid things when applied to wikis that aren't similar enough to my test sites.  If it gives you problems on a certain site, please let me know and I'll look into fixing it.
@@ -78,6 +76,10 @@ Usage is as follows:
     ./wikidump.py -vv -s 2 http://en.wikipedia.org/wiki/Main_Page
 
 With no verbosity arguments, Wikidump will just display a continuously updating count of the number of items in its queue, which can be misleading because the program eliminates duplicates on removal rather than insertion.  I like the output with a verbosity level of 2; you can increase this further to get debugging output.  *Please* ask the program to sleep between retrievals (`-s` option) to reduce server load if you aren't dumping your own installation.
+
+### Linkcheck
+
+Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` attribute is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
 
 ## Issues
 
