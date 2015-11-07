@@ -103,7 +103,7 @@ namespace zsr
 		void write(std::ostream &out);
 		void extract(const std::string &dest, const std::string &subdir = "");
 		bool check(const std::string &path) const;
-		bool checkdir(const std::string &path) const;
+		bool isdir(const std::string &path) const;
 		void debug_treeprint() { root_->debug_treeprint(); }
 		std::vector<char> get(const std::string &path) const;
 	};
@@ -137,7 +137,7 @@ namespace zsr
 		archive(std::ifstream &&in) : impl_{new archive_file{std::move(in)}} { }
 		archive(archive &&orig) : impl_{std::move(orig.impl_)} { }
 		bool check(const std::string &path) const { return impl_->check(path); }
-		bool checkdir(const std::string &path) const { return impl_->checkdir(path); }
+		bool isdir(const std::string &path) const { return impl_->isdir(path); }
 		void write(std::ostream &out) { impl_->write(out); }
 		void extract(const std::string &dest, const std::string &subdir = "") { impl_->extract(dest, subdir); }
 		std::vector<char> get(const std::string &path) { return impl_->get(path); }

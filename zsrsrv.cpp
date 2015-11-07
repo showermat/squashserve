@@ -61,10 +61,12 @@ std::vector<std::string> docsplit(const std::string &doc, const std::string &del
 	return ret;
 }
 
-std::string token_replace(const std::string &str, const std::map<std::string, std::string> &tokens)
+std::string token_replace(const std::string &in, const std::map<std::string, std::string> &tokens)
 {
+	const std::string percent_token{"#__TOKEN_PERCENT#"};
 	std::stringstream ret{};
-	std::regex tokenre{"%[A-Z]+"}; // FIXME Allow %% to be used for a literal %
+	std::string str = std::regex_replace(in, std::regex{"%%"}, percent_token); // Hacky!
+	std::regex tokenre{"%[A-Z]+"};
 	std::string::size_type lastend = 0;
 	for (std::sregex_iterator iter{str.begin(), str.end(), tokenre}; iter != std::sregex_iterator{}; iter++)
 	{
@@ -75,7 +77,7 @@ std::string token_replace(const std::string &str, const std::map<std::string, st
 		lastend = iter->position() + iter->length();
 	}
 	ret << str.substr(lastend);
-	return ret.str(); //std::regex_replace(ret.str(), std::regex{"%%"}, "%");
+	return std::regex_replace(ret.str(), std::regex{percent_token}, "%"); // Doesn't need to use regex (here or above)
 }
 
 http::doc error(const std::string &header, const std::string &body)
@@ -168,7 +170,7 @@ http::doc add()
 	return http::doc{util::pathjoin({exedir, rsrcdname, "html", "add.html"})};
 }
 
-std::map<std::string, Volume> buildlist() // TODO Make loading multithreaded
+std::map<std::string, Volume> buildlist()
 {
 	std::map<std::string, Volume> ret{};
 	std::set<std::string> contents{};
@@ -208,7 +210,7 @@ http::doc action(const std::string &verb, const std::map<std::string, std::strin
 	{
 		for (const std::pair<const std::string, std::string> &kvpair : args)
 		{
-			try { userp.setstr(util::urldecode(kvpair.first), util::urldecode(kvpair.second)); }
+			try { userp.setstr(kvpair.first, kvpair.second); }
 			catch (std::out_of_range &e) { continue; }
 		}
 		userp.write();
@@ -217,6 +219,10 @@ http::doc action(const std::string &verb, const std::map<std::string, std::strin
 	else if (verb == "add")
 	{
 		return http::redirect("/"); // TODO Implement
+	}
+	else if (verb == "quit")
+	{
+		exit(0);
 	}
 	else if (verb == "debug")
 	{
@@ -230,14 +236,15 @@ http::doc action(const std::string &verb, const std::map<std::string, std::strin
 http::doc urlhandle(const std::string &url, const std::string &querystr)
 {
 	std::vector<std::string> path = util::strsplit(url, '/');
+	for (std::string &elem : path) elem = util::urldecode(elem);
 	std::map<std::string, std::string> query{};
 	if (querystr.size() > 0)
 	{
 		for (const std::string &qu : util::strsplit(querystr, '&'))
 		{
 			std::string::size_type idx = qu.find("=");
-			if (idx == qu.npos) query[qu] = "";
-			else query[qu.substr(0, idx)] = qu.substr(idx + 1);
+			if (idx == qu.npos) query[util::urldecode(qu)] = "";
+			else query[util::urldecode(qu.substr(0, idx))] = util::urldecode(qu.substr(idx + 1));
 		}
 	}
 	try

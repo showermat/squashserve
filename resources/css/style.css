@@ -81,6 +81,7 @@ a.item-title
 	margin-top: 4px;
 	color: black;
 	font-weight: bold;
+	/*text-decoration: none;*/
 	font-size: 10pt;
 }
 

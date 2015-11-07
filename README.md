@@ -4,7 +4,7 @@
 
 ZSR attempts to provide an alternative to the [Open ZIM Project](http://www.openzim.org//wiki/OpenZIM) with slightly different aims.  The primary drawbacks of ZIM and Kiwix are that (a) ZIM files are optimized for access through the standalone application Kiwix, which essentially duplicates the functionality of a stripped-down web browser, and (b) converting ZIM files to and from other formats is difficult and lossy.  Kiwix is lacking in a lot of places -- for example, you can't have tabs open in multiple ZIM files simultaneously, and if you zoom a web page, you have to re-zoom every new tab you open.  Creating a ZIM file using zimwriterdb requires the user to install several Perl libraries and run a Postgresql server; extracting the original files with zimdump is simple enough, but the original directory structure is lost.  Additionally, all the internal links in the documents have to be rewritten to point to the `zim://` resources rather than their original targets, which is an iffy and imperfect process.
 
-ZSR is designed to provide browsing with existing web browsers rather than a standalone application and the ability to extract the original, unmodified HTML tree from the archives.  The project contains an archive format thet is used for storing mirrored sites and a C++ application that runs a small local webserver, allowing the user to browse the archives with their web browser of choice.
+ZSR is designed to provide browsing with existing web browsers rather than a standalone application and the ability to extract the original, unmodified HTML tree from the archives.  The project contains an archive format that is used for storing mirrored sites and a C++ application that runs a small local webserver, allowing the user to browse the archives with their web browser of choice.
 
 ## Project Structure and Building
 
@@ -75,7 +75,7 @@ To decompress a single file:
 
     zsrutil in.zsr outfile relative/path/to/file/within/archive
 
-The enocder can also be used as a library in other C++ programs by including the header zsr.h.  The only class you should have to deal with is `zsr::archive`.  Use as follows:
+The encoder can also be used as a library in other C++ programs by including the header zsr.h.  The only class you should have to deal with is `zsr::archive`.  Use as follows:
 
     #include <fstream>
     #include <zsr.h>
@@ -88,7 +88,7 @@ The enocder can also be used as a library in other C++ programs by including the
     zsr::archive ar2{"/data/wikipedia.zsr"}; // Open the archive file...
     ar2.extract("/data/wikipedia2"); // ...and extract it to a new location.
     if (ar2.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive...
-        std::vector<char> article = ar2.get("/wiki/Douglas_Adams.html") // ...then retrieve its contents.
+        std::vector<char> article = ar2.get("wiki/Douglas_Adams.html") // ...then retrieve its contents.
 
 ## Creating Volumes
 
@@ -108,7 +108,7 @@ zsrsrv will make use of a standard Xapian index provided at `_meta/index` in the
 
 ## So, What about Wikipedia?
 
-Of course, if you're going to be archiving sites for local browsing, Wikipedia is both the ultimate stress-test for the system and the first thing that everyone wants to have.  Of course, mirroring is out of the questions; I played around for a while with the XML database dumps that [Wikipedia provides](https://en.wikipedia.org/wiki/Wikipedia_database), but it seems that there are few good wiki-to-HTML converters out there, and none in Python (and besides, that doesn't take care of the images).  The best HTML archive of Wikipedia available, to my knowledge, is the ZIM file [provided by Kiwix](http://download.kiwix.org/portable/wikipedia_en_all.zip).  It proved time-consuming but not technically difficult to convert the ZIM archive to a locally browsable HTML directory.  From there, it should be a simple matter of indexing and compressing it.  Unfortunately, I've been havinggt issues with Xapian running out of memory (It's not periodically flushing the index to disk?), and without search functionality it's not worth my time to continue.  I'm working on figuring it out and will update when I know more.
+Of course, if you're going to be archiving sites for local browsing, Wikipedia is both the ultimate stress-test for the system and the first thing that everyone wants to have.  Of course, mirroring is out of the questions; I played around for a while with the XML database dumps that [Wikipedia provides](https://en.wikipedia.org/wiki/Wikipedia_database), but it seems that there are few good wiki-to-HTML converters out there, and none in Python (and besides, that doesn't take care of the images).  The best HTML archive of Wikipedia available, to my knowledge, is the ZIM file [provided by Kiwix](http://download.kiwix.org/portable/wikipedia_en_all.zip).  It proved time-consuming but not technically difficult to convert the ZIM archive to a locally browsable HTML directory.  From there, it should be a simple matter of indexing and compressing it.  Unfortunately, I've been having issues with Xapian running out of memory (It's not periodically flushing the index to disk?), and without search functionality it's not worth my time to continue.  I'm working on figuring it out and will update when I know more.
 
 ## Accessory Tools
 

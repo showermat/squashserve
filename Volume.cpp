@@ -1,4 +1,5 @@
 #include <regex>
+//#include <experimental/filesystem>
 #include "Volume.h"
 
 Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifstream{fname})},*/ archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, index_{}
@@ -14,7 +15,7 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 		info_[line.substr(0, splitloc)] = line.substr(splitloc + 1);
 	}
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
-	if (archive_->checkdir(util::pathjoin({metadir, "index"})));
+	if (archive_->isdir(util::pathjoin({metadir, "index"})));
 	{
 		dbfname_ = "/tmp/zsridx_" + id();
 		archive_->extract(dbfname_, util::pathjoin({metadir, "index"}));
@@ -27,7 +28,7 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 Volume::~Volume()
 {
 	// TODO Remove directory tree rooted at dbfname
-	//if (util::isdir(dbfname_)) std::remove(dbfname_.c_str());
+	//if (util::isdir(dbfname_)) std::experimental::filesystem::remove_all(std::experimental::filesystem::path{dbfname});
 }
 
 bool Volume::check(const std::string &path) const
@@ -35,7 +36,7 @@ bool Volume::check(const std::string &path) const
 	return archive_->check(path);
 }
 
-http::doc Volume::get(const std::string &path) const
+http::doc Volume::get(std::string path) const
 {
 	if (! check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::vector<char> content = archive_->get(path);
@@ -60,7 +61,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		r.url = http::mkpath({"view", id(), relpath});
 		std::vector<char> raw = archive_->get(relpath);
 		std::string content{&raw[0], raw.size()};
-		r.title = http::title(content);
+		r.title = http::title(content, util::basename(relpath));
 		r.preview = http::strings(content).substr(0, prevlen);
 		ret.push_back(r);
 	}
@@ -96,7 +97,8 @@ std::map<std::string, std::string> Volume::tokens(optional<std::string> member) 
 	if (info_.count("origin") && member)
 	{
 		std::vector<std::string> params = util::strsplit(info_.at("origin"), ';');
-		if (params.size() == 3) ret["live"] = params[0] + "/" + std::regex_replace(*member, std::regex{params[1]}, params[2]);
+		if (params.size() == 3) ret["live"] = params[0] + "/" +  std::regex_replace(*member, std::regex{params[1]}, params[2]);
+		else if (params.size() >= 1) ret["live"] = params[0] + "/" + *member;
 	}
 	return ret;
 }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.3)
 project(zsr-utils)
 set(VERSION 0.1)
-set(CMAKE_CXX_FLAGS "-std=gnu++1y -Wall -O3")
+set(CMAKE_CXX_FLAGS "-std=gnu++14 -Wall -Og -g")
 include_directories(".")
 add_library(util util.cpp)
 target_link_libraries(util magic)

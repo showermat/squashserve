@@ -8,7 +8,7 @@ import time;
 import queue;
 import hashlib;
 import requests;
-from urllib.parse import urlsplit, urlunparse, urljoin, unquote_plus, unquote;
+from urllib.parse import urlsplit, urlunsplit, urljoin, unquote_plus, unquote;
 from bs4 import BeautifulSoup as bs4;
 
 def basename(path):
@@ -31,14 +31,16 @@ argp.add_argument("-s", "--sleep", metavar="S", default=0, type=int, help="Sleep
 argp.add_argument("-n", "--name", metavar="NAME", help="Explicitly set MediaWiki site name");
 argp.add_argument("home", help="Home page of the site to mirror");
 args = argp.parse_args();
-if not re.search("^https?://.+/wiki/.+$", args.home): raise RuntimeError("Try a full path to a wiki page (http://.../wiki/Main_Page)");
+match = re.search("^https?://.+/([a-zA-Z0-9._-]*)/.+$", args.home); # Allow the article name to be a query string (?) rather than a path element (/)?
+if match: hpath = match.group(1);
+else: raise RuntimeError("Try a full path to a wiki page (http://.../wiki/Main_Page)");
 
 # Miscellaneous setup
-default_metapages=["Special", "Portal", "File", "Talk", "User", "Template", "User_talk", "Category_talk", "Template_talk", "User_blog", "Help", "Wikipedia", "MediaWiki", "Draft", "Wikipedia_talk"]; # Category
+default_metapages = ["Special", "Portal", "File", "Talk", "User", "Template", "User_talk", "Category_talk", "Template_talk", "User_blog", "Help", "Wikipedia", "MediaWiki", "Draft", "Wikipedia_talk"]; # Category
 info = dict();
 info["created"] = time.strftime("%Y-%m-%d");
 info["refer"] = args.home;
-recursive = True; # Set to false to prevent queueing of HTML pages for debug
+recursive = False; # Set to false to prevent queueing of HTML pages for debug
 
 # Determine site name
 base = urlsplit(args.home);
@@ -66,7 +68,7 @@ if args.verbose >= 1: print("Site: %s (%s)" % (wikiname, wikitype));
 os.makedirs(wikiname, exist_ok=True);
 os.chdir(wikiname);
 for subdir in ["wiki", "rsrc", "img", "misc", "_meta"]: os.makedirs(subdir, exist_ok=True);
-info["home"] = "wiki/" + re.sub("^/wiki/", "", base.path) + ".html";
+info["home"] = "wiki/" + re.sub("^/" + hpath + "/", "", base.path) + ".html";
 info["origin"] = base.scheme + "://" + base.netloc;
 infofile = open("_meta/info.txt", "w");
 for (key, value) in info.items(): infofile.write(key + ":" + value + "\n");
@@ -81,7 +83,7 @@ while not urls.empty():
 		sys.stdout.flush();
 	(utype, url) = urls.get();
 	if utype == "wiki":
-		articlepath = re.search("^.*/wiki/(.*)$", urlsplit(url).path);
+		articlepath = re.search("^.*/" + hpath + "/+(.*)$", urlsplit(url).path); # FIXME Accepting multiple slashes is necessary for articles like "/etc/fstab" that start with a slash.  However, it breaks all links to such articles.
 		if not articlepath:
 			if args.verbose >= 1: print("Warning: Skipping non-conformant wiki URL %r" % (url));
 			continue;
@@ -117,7 +119,7 @@ while not urls.empty():
 		if args.verbose >= 1: print("Warning: Could not fetch URL %r" % (url));
 		continue;
 	if r.status_code != 200:
-		if args.verbose >= 1: print("Warning: Could not fetch URL %r" % (url));
+		if args.verbose >= 1: print("Warning: %r does not exist" % (url));
 		continue;
 	if utype == "wiki":
 		html = bs4(r.text, "lxml");
@@ -131,50 +133,50 @@ while not urls.empty():
 			href = unquote(ahref["href"]);
 			hrefurl = urlsplit(urljoin(url, href));
 			if args.verbose == 3: print("HREF %s" % (href));
-			metamatch = re.search("^/wiki/([^:/]*):.*", hrefurl.path);
+			metamatch = re.search("^/" + hpath + "/([^:/]*):.*", hrefurl.path);
 			if metamatch: metapage = metamatch.group(1);
 			else: metapage = "";
 			if re.search("^#", href):
 				if args.verbose >= 4: print("Anchor link: %s" % (href));
 			elif hrefurl.netloc != urlsplit(url).netloc or metapage == wikiname or metapage in default_metapages:
 				if args.verbose >= 4: print("Passthrough link: %s" % (href));
-				ahref["href"] = urlunparse(hrefurl);
-			elif re.search("^/wiki/", hrefurl.path):
+				ahref["href"] = urlunsplit(hrefurl);
+			elif re.search("^/" + hpath + "/", hrefurl.path):
 				if args.verbose >= 4: print("Proper wiki link: %s" % (href));
-				ahref["href"] = re.sub("^/wiki/", prefix, hrefurl.path) + ".html";
+				ahref["href"] = re.sub("^/" + hpath + "/", prefix, hrefurl.path) + ".html";
 				if args.verbose >= 5: print("Wiki link converted to local %s" % (ahref["href"]));
-				if recursive: urls.put(("wiki", urlunparse(hrefurl)));
+				if recursive: urls.put(("wiki", urlunsplit(hrefurl)));
 			elif re.search("^/load.php", hrefurl.path):
 				if args.verbose >= 4: print("Loaded resource: %s" % (href)); # Make the poor assumption that it is CSS
-				fhash = hashlib.md5(urlunparse(hreful).encode("UTF-8")).hexdigest();
+				fhash = hashlib.md5(urlunsplit(hreful).encode("UTF-8")).hexdigest();
 				ahref["href"] = prefix + "../rsrc/" + fhash + ".css";
-				urls.put(("css", urlunparse(hrefurl)));
+				urls.put(("css", urlunsplit(hrefurl)));
 			elif re.search("^/index.php", hrefurl.path):
 				if args.verbose >= 4: print("Index link: %s" % (href));
 				if not hrefurl.query:
 					if args.verbose >= f: print("Index link with no query treated as passthrough");
-					ahref["href"] = urlunparse(hrefurl);
+					ahref["href"] = urlunsplit(hrefurl);
 				else:
 					query = queryparse(urlsplit(urljoin(url, ahref["href"])).query);
 					if "title" in query and "redlink" not in query:
 						if args.verbose >= 5: print("Index link treated as wiki link to %s" % (query["title"]));
 						ahref["href"] = prefix + query["title"] + ".html";
-						if recursive: urls.put(("wiki", urljoin(url, "/wiki/" + query["title"])));
+						if recursive: urls.put(("wiki", urljoin(url, "/" + hpath + "/" + query["title"])));
 					else:
 						if args.verbose >= 5: print("Index link %s treated as passthrough" % (href));
-						ahref["href"] = urlunparse(hrefurl);
+						ahref["href"] = urlunsplit(hrefurl);
 			#elif re.search("^/load.php", hrefurl.path): # TODO
 			else:
 				if args.verbose >= 4: print("Unknown local resource: %s" % (href));
 				ahref["href"] = prefix + "../misc/" + basename(hrefurl.path);
-				urls.put(("misc", urlunparse(hrefurl)));
+				urls.put(("misc", urlunsplit(hrefurl)));
 		for imgsrc in html("img", src=True):
 			img = unquote(imgsrc["src"]);
 			imgurl = urlsplit(urljoin(url, img));
 			if imgurl.scheme == "data": continue;
 			imgsrc["src"] = prefix + "../img/" + basename(imgurl.path);
 			if args.verbose >= 3: print("IMG %s -> %s" % (img, imgsrc["src"]));
-			urls.put(("img", urlunparse(imgurl)));
+			urls.put(("img", urlunsplit(imgurl)));
 		for linkhref in html("link", href=True, rel=True):
 			href = unquote(linkhref["href"]);
 			linkurl = urlsplit(urljoin(url, href));
@@ -182,23 +184,23 @@ while not urls.empty():
 			rel = " ".join(linkhref["rel"]);
 			if rel == "stylesheet":
 				if args.verbose >= 4: print("Capturing stylesheet link %s" % (href));
-				fhash = hashlib.md5(urlunparse(linkurl).encode("UTF-8")).hexdigest();
+				fhash = hashlib.md5(urlunsplit(linkurl).encode("UTF-8")).hexdigest();
 				linkhref["href"] = prefix + "../rsrc/" + fhash + ".css";
-				urls.put(("css", urlunparse(linkurl)));
+				urls.put(("css", urlunsplit(linkurl)));
 			elif rel == "shortcut icon":
 				if args.verbose >= 4: print("Capturing favicon link %s" % (href));
 				linkhref["href"] = prefix + "../img/" + basename(linkurl.path);
-				urls.put(("img", urlunparse(linkurl)));
+				urls.put(("img", urlunsplit(linkurl)));
 			else:
 				if args.verbose >= 4: print("Passing through %r link %s" % (linkhref["rel"][0], href));
-				linkhref["href"] = urlunparse(linkurl);
+				linkhref["href"] = urlunsplit(linkurl);
 		for scriptsrc in html("script", src=True):
 			src = unquote(scriptsrc["src"]);
 			scripturl = urlsplit(urljoin(url, src));
 			if args.verbose >= 3: print("JS %s" % (src));
-			fhash = hashlib.md5(urlunparse(scripturl).encode("UTF-8")).hexdigest();
+			fhash = hashlib.md5(urlunsplit(scripturl).encode("UTF-8")).hexdigest();
 			scriptsrc["src"] = prefix + "../rsrc/" + fhash + ".js";
-			urls.put(("js", urlunparse(scripturl)));
+			urls.put(("js", urlunsplit(scripturl)));
 		out.write(str(html));
 	elif utype == "css":
 		content = r.text;
@@ -206,7 +208,7 @@ while not urls.empty():
 			newurl = urlsplit(urljoin(url, match.group(1)));
 			if newurl.scheme == "data": return "url(\"" + match.group(1) + "\")";
 			if args.verbose >= 4: print("CSS linked resource: %s" % (match.group(1)));
-			urls.put(("img", urlunparse(newurl))); # Some fonts and such might end up in img
+			urls.put(("img", urlunsplit(newurl))); # Some fonts and such might end up in img
 			return "url(\"../img/" + basename(newurl.path) + "\")";
 		content = re.sub("url\([\'\"]?([^\'\"\)]+)[\'\"]?\)", url_rewrite, content);
 		out.write(content);

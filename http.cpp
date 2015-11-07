@@ -24,11 +24,11 @@ namespace http
 		return "/" + util::strjoin(items, '/');
 	}
 
-	std::string title(const std::string &content)
+	std::string title(const std::string &content, const std::string def)
 	{
 		std::regex titlere{"<title>(.*?)</title>"};
 		std::smatch match{};
-		if (! std::regex_search(content, match, titlere)) return "";
+		if (! std::regex_search(content, match, titlere)) return def;
 		return match[1];
 	}
 
@@ -51,40 +51,39 @@ namespace http
 		return body;
 	}
 
-	int server::handle(struct mg_connection *conn, enum mg_event ev)
+	void server::handle(struct mg_connection *conn, int ev, void *data)
 	{
 		switch (ev)
 		{
-		case MG_AUTH:
-			return MG_TRUE;
-		case MG_REQUEST:
-		{
-			const doc d = static_cast<server *>(conn->server_param)->callback(std::string{conn->uri}, conn->query_string ? std::string{conn->query_string} : std::string{});
-			mg_send_header(conn, "Content-type", d.type.c_str());
-			mg_send_data(conn, d.content.data(), d.content.size());
-			return MG_TRUE;
-		}
-		default:
-			return MG_FALSE;
+		case MG_EV_HTTP_REQUEST:
+			struct http_message *msg = static_cast<struct http_message *>(data);
+			const doc d = static_cast<server *>(conn->mgr->user_data)->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
+			mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-type: %s\r\nContent-length: %d\r\n\r\n", d.type.c_str(), d.content.size());
+			mg_send(conn, d.content.data(), d.content.size());
+			//mg_send_header(conn, "Content-type", d.type.c_str());
+			//mg_send_data(conn, d.content.data(), d.content.size());
 		}
 	}
 
-	server::server(int port, std::function<doc(std::string, std::string)> handler) : mgserver{nullptr}, callback{handler}
+	server::server(int port, std::function<doc(std::string, std::string)> handler) : mgr{}, callback{handler}
 	{
-		mgserver = mg_create_server(this, handle);
-		const char *errmsg;
-		errmsg = mg_set_option(mgserver, "listening_port", util::t2s(port).c_str());
-		if (errmsg) throw std::runtime_error{std::string{errmsg}};
+		mg_mgr_init(&mgr, this);
+		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);
+		mg_set_protocol_http_websocket(conn);
+		//mgserver = mg_create_server(this, handle);
+		//const char *errmsg;
+		//errmsg = mg_set_option(mgserver, "listening_port", util::t2s(port).c_str());
+		//if (errmsg) throw std::runtime_error{std::string{errmsg}};
 	}
 
 	void server::serve(int timeout)
 	{
-		while (true) mg_poll_server(mgserver, timeout);
+		while (true) mg_mgr_poll(&mgr, timeout);
 	}
 
 	server::~server()
 	{
-		mg_destroy_server(&mgserver);
+		mg_mgr_free(&mgr);
 	}
 }
 

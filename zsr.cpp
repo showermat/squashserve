@@ -120,7 +120,7 @@ namespace zsr
 	bool node_tree::isdir() const
 	{
 		struct stat s;
-		if (lstat(path().c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path()};
+		if (stat(path().c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path()};
 		if ((s.st_mode & S_IFMT) == S_IFDIR) return true;
 		return false;
 	}
@@ -212,7 +212,7 @@ namespace zsr
 		return true;
 	}
 
-	bool archive_base::checkdir(const std::string &path) const
+	bool archive_base::isdir(const std::string &path) const
 	{
 		node *n = getnode(path);
 		if (! n) return false;
@@ -253,7 +253,7 @@ namespace zsr
 	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent)
 	{
 		struct stat s;
-		if (lstat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
+		if (stat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
 		node_tree *cur = new node_tree{next_id_++, parent, path, *this};
 		if ((s.st_mode & S_IFMT) == S_IFDIR)
 		{
