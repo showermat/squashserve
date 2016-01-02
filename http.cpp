@@ -58,7 +58,7 @@ namespace http
 		case MG_EV_HTTP_REQUEST:
 			struct http_message *msg = static_cast<struct http_message *>(data);
 			const doc d = static_cast<server *>(conn->mgr->user_data)->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
-			mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-type: %s\r\nContent-length: %d\r\n\r\n", d.type.c_str(), d.content.size());
+			mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-type: %s\r\nContent-length: %lu\r\n\r\n", d.type.c_str(), d.content.size());
 			mg_send(conn, d.content.data(), d.content.size());
 			//mg_send_header(conn, "Content-type", d.type.c_str());
 			//mg_send_data(conn, d.content.data(), d.content.size());

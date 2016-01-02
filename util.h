@@ -13,7 +13,7 @@
 //#define debug_print(msg) std::cerr << msg << "\n"
 //#else
 //#define assert(test, msg) 
-//#define debug_preint(msg) 
+//#define debug_print(msg) 
 //#endif
 
 template <typename T> using optional = std::experimental::optional<T>;
@@ -64,9 +64,9 @@ namespace util
 		timer() : last{} { reset(); }
 	};
 
-	std::string basename(const std::string &path, char sep = '/');
+	std::string basename(std::string path, char sep = '/');
 
-	std::string dirname(const std::string &path, char sep = '/');
+	std::string dirname(std::string path, char sep = '/');
 
 	std::string exepath();
 

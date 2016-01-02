@@ -2,7 +2,7 @@
 
 ## Motivation
 
-ZSR attempts to provide an alternative to the [Open ZIM Project](http://www.openzim.org//wiki/OpenZIM) with slightly different aims.  The primary drawbacks of ZIM and Kiwix are that (a) ZIM files are optimized for access through the standalone application Kiwix, which essentially duplicates the functionality of a stripped-down web browser, and (b) converting ZIM files to and from other formats is difficult and lossy.  Kiwix is lacking in a lot of places -- for example, you can't have tabs open in multiple ZIM files simultaneously, and if you zoom a web page, you have to re-zoom every new tab you open.  Creating a ZIM file using zimwriterdb requires the user to install several Perl libraries and run a Postgresql server; extracting the original files with zimdump is simple enough, but the original directory structure is lost.  Additionally, all the internal links in the documents have to be rewritten to point to the `zim://` resources rather than their original targets, which is an iffy and imperfect process.
+ZSR attempts to provide an alternative to the [Open ZIM Project](http://www.openzim.org/wiki/OpenZIM) with slightly different aims.  The primary drawbacks of ZIM and Kiwix are that (a) ZIM files are optimized for access through the standalone application Kiwix, which essentially duplicates the functionality of a stripped-down web browser, and (b) converting ZIM files to and from other formats is difficult and lossy.  Kiwix is lacking in a lot of places -- for example, you can't have tabs open in multiple ZIM files simultaneously, and if you zoom a web page, you have to re-zoom every new tab you open.  Creating a ZIM file using zimwriterdb requires the user to install several Perl libraries and run a Postgresql server; extracting the original files with zimdump is simple enough, but the original directory structure is lost.  Additionally, all the internal links in the documents have to be rewritten to point to the `zim://` resources rather than their original targets, which is an iffy and imperfect process.
 
 ZSR is designed to provide browsing with existing web browsers rather than a standalone application and the ability to extract the original, unmodified HTML tree from the archives.  The project contains an archive format that is used for storing mirrored sites and a C++ application that runs a small local webserver, allowing the user to browse the archives with their web browser of choice.
 
@@ -69,11 +69,11 @@ The encoder for the file format is implemented in zsr.cpp.  I provide a small ut
 
 To decompress:
 
-    zsrutil x in.zsr outdir
+    zsrutil x in.zsr
 
 To decompress a single file:
 
-    zsrutil in.zsr outfile relative/path/to/file/within/archive
+    zsrutil x in.zsr relative/path/to/file/within/archive
 
 The encoder can also be used as a library in other C++ programs by including the header zsr.h.  The only class you should have to deal with is `zsr::archive`.  Use as follows:
 
@@ -86,7 +86,7 @@ The encoder can also be used as a library in other C++ programs by including the
     out.close();
 
     zsr::archive ar2{"/data/wikipedia.zsr"}; // Open the archive file...
-    ar2.extract("/data/wikipedia2"); // ...and extract it to a new location.
+    ar2.extract("wiki", "/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
     if (ar2.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive...
         std::vector<char> article = ar2.get("wiki/Douglas_Adams.html") // ...then retrieve its contents.
 

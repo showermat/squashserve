@@ -69,13 +69,15 @@ namespace util
 		return false;
 	}
 
-	std::string basename(const std::string &path, char sep)
+	std::string basename(std::string path, char sep)
 	{
+		while (path.back() == sep) path = path.substr(0, path.size() - 1);
 		return path.substr(path.rfind(sep) + 1);
 	}
 
-	std::string dirname(const std::string &path, char sep)
+	std::string dirname(std::string path, char sep)
 	{
+		while (path.back() == sep) path = path.substr(0, path.size() - 1);
 		return path.substr(0, path.rfind(sep));
 	}
 	
@@ -242,12 +244,13 @@ namespace util
 	{
 		std::stringstream ret{};
 		unsigned int i = 0;
+		std::stringstream buf{};
 		while (i != str.size())
 		{
 			if (str[i] == '%' && i + 2 < str.size())
 			{
 				int c;
-				std::stringstream buf{};
+				buf.str("");
 				buf << str.substr(i + 1, 2); // TODO Error checking
 				buf >> std::hex >> c;
 				ret << (char) c;

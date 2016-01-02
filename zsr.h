@@ -8,16 +8,20 @@
 #include <fstream>
 #include <stdexcept>
 #include <cstdint>
+#include <iostream>
 #include "util.h"
 
 namespace zsr
 {
 	const int compression = 6;
 	const int memlimit = 1 << 30; // 1 GB
+	const bool debug = false; // FIXME Suspicious.  Multiple-definition error if not declared const.  Probably needs to go in the CPP file, or be replaced with a better mechanism.
 
 	class archive;
 	class archive_tree;
 	class archive_file;
+
+	void log(const std::string &msg, std::ostream &out = std::cerr);
 
 	std::vector<char> compress(std::vector<char> input);
 
@@ -38,8 +42,8 @@ namespace zsr
 	class node
 	{
 	public:
-		typedef uint64_t index;
-		typedef uint64_t offset;
+		typedef uint64_t index; // Constrains the maximum number of files in an archive
+		typedef uint64_t offset; // Constrains the size of the archive
 	protected:
 		index id_;
 		node *parent_;
@@ -68,13 +72,12 @@ namespace zsr
 	class node_tree : public node
 	{
 	private:
-		std::string dirpath_;
 		archive_tree &container_;
 	public:
-		node_tree(index id, node *parent, std::string path, archive_tree &container) : node{id, parent, util::basename(path)}, dirpath_{util::dirname(path)}, container_{container} { } // FIXME I believe this makes dirpath_ an absolute path, which will make problems if we then try to extract it.  Path should be relative to the archive root!
+		node_tree(index id, node *parent, std::string path, archive_tree &container) : node{id, parent, util::basename(path)}, container_{container} {}
 		bool isdir() const;
 		std::vector<char> content();
-		std::string path() const { return dirpath_ + util::pathsep + name(); }
+		std::string path() const;
 	};
 
 	class node_file : public node
@@ -101,7 +104,7 @@ namespace zsr
 		archive_base(const archive_base &orig) = delete;
 		archive_base(archive_base &&orig) : next_id_{orig.next_id_}, root_{std::move(orig.root_)} { orig.root_ = nullptr; }
 		void write(std::ostream &out);
-		void extract(const std::string &dest, const std::string &subdir = "");
+		void extract(const std::string &member = "", const std::string &dest = ".");
 		bool check(const std::string &path) const;
 		bool isdir(const std::string &path) const;
 		void debug_treeprint() { root_->debug_treeprint(); }
@@ -114,6 +117,7 @@ namespace zsr
 		std::string basedir_;
 		node_tree *recursive_add(const std::string &path, node_tree *parent);
 	public:
+		std::string basedir() const { return basedir_; }
 		archive_tree(const std::string &root);
 		archive_tree(archive_tree &&orig) = default;
 	};
@@ -139,7 +143,7 @@ namespace zsr
 		bool check(const std::string &path) const { return impl_->check(path); }
 		bool isdir(const std::string &path) const { return impl_->isdir(path); }
 		void write(std::ostream &out) { impl_->write(out); }
-		void extract(const std::string &dest, const std::string &subdir = "") { impl_->extract(dest, subdir); }
+		void extract(const std::string &member = "", const std::string &dest = ".") { impl_->extract(member, dest); }
 		std::vector<char> get(const std::string &path) { return impl_->get(path); }
 	};
 }

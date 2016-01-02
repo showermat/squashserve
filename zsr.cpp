@@ -1,5 +1,6 @@
 #include <iostream>
 #include <streambuf>
+#include <ctime>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -9,6 +10,14 @@
 
 namespace zsr
 {
+	void log(const std::string &msg, std::ostream &out)
+	{
+		if (! debug) return;
+		std::time_t time = std::time(nullptr);
+		std::string timestr = std::ctime(&time);
+		out << timestr.substr(0, timestr.size() - 1) << ":  " << msg << "\n";
+	}
+
 	std::vector<char> compress(std::vector<char> input)
 	{
 		std::vector<char> ret{};
@@ -53,7 +62,7 @@ namespace zsr
 			}
 		}
 	}
-
+	
 	void node::add_child(node *n)
 	{
 		children_[n->name_] = std::unique_ptr<node>{n};
@@ -98,7 +107,7 @@ namespace zsr
 		std::string fullpath = util::pathjoin({path, name()});
 		if (isdir())
 		{
-			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath}; // TODO Ignore if dir already exists
+			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
 			for (std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->extract(fullpath);
 		}
 		else
@@ -132,6 +141,11 @@ namespace zsr
 		if (! in) throw std::runtime_error{"Couldn't open " + path() + " for reading"};
 		std::vector<char> ret{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}}; // FIXME Possibly slow?
 		return ret;
+	}
+
+	std::string node_tree::path() const
+	{
+		return (parent_ ? parent_->path() + util::pathsep + name() : container_.basedir());
 	}
 
 	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}
@@ -177,13 +191,16 @@ namespace zsr
 
 	void archive_base::write(std::ostream &out)
 	{
+		log("Base archive content writer starting");
 		std::string fileheader = magic_number + std::string(sizeof(node::offset), '\0');
 		out.write(fileheader.c_str(), fileheader.size());
 		root_->write_content(out);
+		log("Base archive content written; index writer starting");
 		node::offset index_start = out.tellp();
 		root_->write_index(out);
 		out.seekp(magic_number.size());
-		out.write(reinterpret_cast<char *>(&index_start), sizeof(node::offset));
+		out.write(reinterpret_cast<char *>(&index_start), sizeof(node::offset)); // FIXME Endianness problems?
+		log("Archive writing finished");
 	}
 
 	node *archive_base::getnode(const std::string &path) const
@@ -198,10 +215,12 @@ namespace zsr
 		return n;
 	}
 
-	void archive_base::extract(const std::string &dest, const std::string &subdir)
+	void archive_base::extract(const std::string &member, const std::string &dest)
 	{
 		if (! util::isdir(dest) && mkdir(dest.c_str(), 0777) < 0) throw std::runtime_error{"Couldn't access or create destination directory " + dest};
-		getnode(subdir)->extract(dest);
+		node *memptr = getnode(member);
+		if (! memptr) throw std::runtime_error{"Member " + member + " does not exist in this archive"};
+		memptr->extract(dest);
 	}
 
 	bool archive_base::check(const std::string &path) const
@@ -273,8 +292,9 @@ namespace zsr
 
 	archive_tree::archive_tree(const std::string &root) : archive_base{}, basedir_{root}
 	{
+		log("Tree archive construction starting");
 		root_ = std::unique_ptr<node>{recursive_add(root, nullptr)};
-		// TODO Verify that the root is a dir...
+		log("Recursive add finished");
 	}
 }
 

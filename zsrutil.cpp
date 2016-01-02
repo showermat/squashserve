@@ -3,7 +3,7 @@
 
 void help_exit()
 {
-	std::cerr << "Usage: zsrutil c|x src dest [member]\n"; // TODO Improve
+	std::cerr << "Usage:\n    zsrutil c src dest\n    zsrutil x src [member]"; // TODO Improve
 	exit(1);
 }
 
@@ -20,10 +20,10 @@ int main(int argc, char **argv)
 	}
 	else if (args[1] == "x")
 	{
-		if (args.size() < 4) help_exit();
+		if (args.size() < 3) help_exit();
 		zsr::archive ar{std::ifstream{args[2]}};
-		if (args.size() < 5) ar.extract(args[3]);
-		else ar.extract(args[3], args[4]);
+		if (args.size() < 4) ar.extract();
+		else ar.extract(args[3]);
 	}
 	return 0;
 }

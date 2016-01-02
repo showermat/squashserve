@@ -18,7 +18,7 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 	if (archive_->isdir(util::pathjoin({metadir, "index"})));
 	{
 		dbfname_ = "/tmp/zsridx_" + id();
-		archive_->extract(dbfname_, util::pathjoin({metadir, "index"}));
+		archive_->extract(util::pathjoin({metadir, "index"}), dbfname_);
 		index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})};
 	}
 }
