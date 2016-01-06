@@ -46,10 +46,10 @@ public:
 	const std::string &id() const { return id_; }
 	const zsr::archive_file &archive() const { return *archive_; }
 	bool check(const std::string &path) const;
-	http::doc get(std::string path) const;
-	std::vector<Result> search(const std::string &qstr, int nres, int prevlen) const;
+	http::doc get(std::string path);
+	std::vector<Result> search(const std::string &qstr, int nres, int prevlen);
 	std::string info(const std::string &key) const;
-	std::map<std::string, std::string> tokens(optional<std::string> member) const;
+	std::map<std::string, std::string> tokens(optional<std::string> member);
 	virtual ~Volume();
 };
 

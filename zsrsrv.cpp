@@ -87,20 +87,20 @@ http::doc error(const std::string &header, const std::string &body)
 	return ret;
 }
 
-http::doc home(const std::map<std::string, Volume> &vols)
+http::doc home(std::map<std::string, Volume> &vols)
 {
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "home.html"})};
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content);
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
 	buf << sects[0];
-	for (const std::pair<const std::string, Volume> &vol : vols) buf << token_replace(sects[1], vol.second.tokens({})); // TODO Sort volume list by title
+	for (std::pair<const std::string, Volume> &vol : vols) buf << token_replace(sects[1], vol.second.tokens({})); // TODO Sort volume list by title
 	buf << sects[2];
 	ret.content = buf.str();
 	return ret;
 }
 
-http::doc search(const Volume &vol, const std::string &query)
+http::doc search(Volume &vol, const std::string &query)
 {
 	std::map<std::string, std::string> tokens = vol.tokens({});
 	tokens["query"] = query;
@@ -121,13 +121,14 @@ http::doc search(const Volume &vol, const std::string &query)
 			buf << token_replace(sects[1], qtoks);
 		}
 	}
+	catch (Xapian::InvalidArgumentError &e) { return error("Search Failed", "This volume is not indexed, so it cannot be searched"); }
 	catch (Xapian::Error &e) { return error("Search Failed", e.get_msg()); }
 	buf << token_replace(sects[2], tokens);
 	ret.content = buf.str();
 	return ret;
 }
 
-http::doc view(const Volume &vol, const std::string &path)
+http::doc view(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "view.html"})};
@@ -135,7 +136,7 @@ http::doc view(const Volume &vol, const std::string &path)
 	return ret;
 }
 
-http::doc content(const Volume &vol, const std::string &path)
+http::doc content(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"content", vol.id(), vol.info("home")}));
 	try { return vol.get(path); }

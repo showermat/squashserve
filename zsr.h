@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <tuple>
 #include <memory>
 #include <fstream>
@@ -82,11 +83,12 @@ namespace zsr
 	{
 	private:
 		archive_file &container_;
-		lzma::rdbuf stream_; // TODO Make a pointer and set null for directories?
+		std::unique_ptr<lzma::rdbuf> stream_;
 	public:
 		node_file(archive_file &container, node_file *last);
 		bool isdir() const { return start_ == 0; }
-		std::streambuf *content() { stream_.reset(); return &stream_; }
+		std::streambuf *content();
+		void close() { stream_.reset(); }
 		std::string path() const;
 	};
 
@@ -99,6 +101,7 @@ namespace zsr
 		std::unique_ptr<node> root_;
 		archive_base() : root_{nullptr} { }
 		node *getnode(const std::string &path) const;
+		std::set<node *> open_;
 	public:
 		archive_base(const archive_base &orig) = delete;
 		archive_base(archive_base &&orig) : next_id_{orig.next_id_}, root_{std::move(orig.root_)} { orig.root_ = nullptr; }
@@ -107,7 +110,8 @@ namespace zsr
 		bool check(const std::string &path) const;
 		bool isdir(const std::string &path) const;
 		void debug_treeprint() { root_->debug_treeprint(); }
-		std::streambuf *get(const std::string &path) const;
+		std::streambuf *open(const std::string &path);
+		void reap();
 	};
 
 	class archive_tree : public archive_base
@@ -143,7 +147,8 @@ namespace zsr
 		bool isdir(const std::string &path) const { return impl_->isdir(path); }
 		void write(std::ostream &out) { impl_->write(out); }
 		void extract(const std::string &member = "", const std::string &dest = ".") { impl_->extract(member, dest); }
-		std::streambuf *get(const std::string &path) { return impl_->get(path); }
+		std::streambuf *open(const std::string &path) { return impl_->open(path); }
+		void reap() { impl_->reap(); }
 	};
 }
 

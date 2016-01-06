@@ -99,6 +99,7 @@ The encoder can also be used as a library in other C++ programs by including the
         oss << file; // ...extract it...
         std::string article = oss.str(); // ...and convert it to a string.
     }
+    ar2.reap(); // Finish what you started, human!
 
 ## Creating Volumes
 

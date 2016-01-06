@@ -99,7 +99,7 @@ namespace zsr
 		return (parent_ ? parent_->path() + util::pathsep + name() : container_.basedir());
 	}
 
-	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}, stream_{}
+	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}, stream_{nullptr}
 	{
 		// TODO Not checking for premature end of file
 		std::istream &in = container_.in();
@@ -119,7 +119,13 @@ namespace zsr
 			if (parent_ == nullptr) throw badzsr{"Couldn't resolve parent ID to pointer"};
 		}
 		if (parent_) parent_->add_child(this);
-		stream_.init(in, start_, len_);
+	}
+
+	std::streambuf *node_file::content()
+	{
+		stream_.reset(new lzma::rdbuf{});
+		stream_->init(container_.in(), start_, len_);
+		return &*stream_;
 	}
 
 	std::string node_file::path() const
@@ -180,12 +186,19 @@ namespace zsr
 		return true;
 	}
 
-	std::streambuf *archive_base::get(const std::string &path) const
+	std::streambuf *archive_base::open(const std::string &path)
 	{
 		node *n = getnode(path);
 		if (! n) throw std::runtime_error{"Tried to get content of nonexistent path " + path};
 		if (n->isdir()) throw std::runtime_error{"Tried to get content of directory " + path};
-		return n->content(); // FIXME need to close in constructor
+		open_.insert(n);
+		return n->content();
+	}
+	
+	void archive_base::reap()
+	{
+		for (node *n : open_) n->close();
+		open_.clear();
 	}
 
 	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}

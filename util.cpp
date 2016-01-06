@@ -251,15 +251,14 @@ namespace util
 
 	std::string urldecode(const std::string &str)
 	{
-		std::stringstream ret{};
+		std::ostringstream ret{};
 		unsigned int i = 0;
-		std::stringstream buf{};
 		while (i != str.size())
 		{
 			if (str[i] == '%' && i + 2 < str.size())
 			{
 				int c;
-				buf.str("");
+				std::stringstream buf{};
 				buf << str.substr(i + 1, 2); // TODO Error checking
 				buf >> std::hex >> c;
 				ret << (char) c;

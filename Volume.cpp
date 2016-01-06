@@ -6,8 +6,9 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4); // TODO Better way of getting file id
 	std::ostringstream infoss{};
-	infoss << archive_->get(util::pathjoin({metadir, "info.txt"}));
+	infoss << archive_->open(util::pathjoin({metadir, "info.txt"}));
 	std::string info = infoss.str();
+	archive_->reap();
 	for (const std::string &line : util::strsplit(info, '\n'))
 	{
 		if (line.size() == 0 || line[0] == '#') continue;
@@ -16,11 +17,13 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 		info_[line.substr(0, splitloc)] = line.substr(splitloc + 1);
 	}
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
-	if (archive_->isdir(util::pathjoin({metadir, "index"})));
+	if (archive_->isdir(util::pathjoin({metadir, "index"})))
 	{
 		dbfname_ = "/tmp/zsridx_" + id();
 		archive_->extract(util::pathjoin({metadir, "index"}), dbfname_);
-		index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})};
+		std::cerr << "Loaded index for " << id_ << "\n";
+		try { index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})}; }
+		catch (Xapian::DatabaseCorruptError &e) { } // If the index is no good, we'll make do without
 	}
 }
 
@@ -37,16 +40,17 @@ bool Volume::check(const std::string &path) const
 	return archive_->check(path);
 }
 
-http::doc Volume::get(std::string path) const
+http::doc Volume::get(std::string path)
 {
 	if (! check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
-	contentss << archive_->get(path);
+	contentss << archive_->open(path);
 	std::string content = contentss.str();
+	archive_->reap();
 	return http::doc{util::mimetype(path, content), content};
 }
 
-std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen) const
+std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen)
 {
 	Xapian::Enquire enq{index_};
 	Xapian::QueryParser parse{};
@@ -63,12 +67,13 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		std::string relpath = iter.get_document().get_data();
 		r.url = http::mkpath({"view", id(), relpath});
 		std::ostringstream raw{};
-		raw << archive_->get(relpath);
+		raw << archive_->open(relpath);
 		std::string content = raw.str();
 		r.title = http::title(content, util::basename(relpath));
 		r.preview = http::strings(content).substr(0, prevlen);
 		ret.push_back(r);
 	}
+	archive_->reap();
 	return ret;
 }
 
@@ -78,7 +83,7 @@ std::string Volume::info(const std::string &key) const
 	return info_.at(key);
 }
 
-std::map<std::string, std::string> Volume::tokens(optional<std::string> member) const
+std::map<std::string, std::string> Volume::tokens(optional<std::string> member)
 {
 	std::map<std::string, std::string> ret = info_;
 	if (check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
