@@ -5,8 +5,9 @@
 Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifstream{fname})},*/ archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, index_{}
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4); // TODO Better way of getting file id
-	std::vector<char> infovec = archive_->get(util::pathjoin({metadir, "info.txt"}));
-	std::string info{&infovec[0], infovec.size()};
+	std::ostringstream infoss{};
+	infoss << archive_->get(util::pathjoin({metadir, "info.txt"}));
+	std::string info = infoss.str();
 	for (const std::string &line : util::strsplit(info, '\n'))
 	{
 		if (line.size() == 0 || line[0] == '#') continue;
@@ -39,7 +40,9 @@ bool Volume::check(const std::string &path) const
 http::doc Volume::get(std::string path) const
 {
 	if (! check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
-	std::vector<char> content = archive_->get(path);
+	std::ostringstream contentss{};
+	contentss << archive_->get(path);
+	std::string content = contentss.str();
 	return http::doc{util::mimetype(path, content), content};
 }
 
@@ -59,8 +62,9 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		r.relevance = iter.get_percent();
 		std::string relpath = iter.get_document().get_data();
 		r.url = http::mkpath({"view", id(), relpath});
-		std::vector<char> raw = archive_->get(relpath);
-		std::string content{&raw[0], raw.size()};
+		std::ostringstream raw{};
+		raw << archive_->get(relpath);
+		std::string content = raw.str();
 		r.title = http::title(content, util::basename(relpath));
 		r.preview = http::strings(content).substr(0, prevlen);
 		ret.push_back(r);

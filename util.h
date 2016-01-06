@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <chrono>
+#include <ctime>
 #include <experimental/optional>
 
 //#ifdef DEBUG
@@ -70,6 +71,7 @@ namespace util
 
 	std::string exepath();
 
+	std::string timestr(const std::string &fmt = "%c", std::time_t time = std::time(nullptr));
 
 	bool fexists(const std::string &path);
 
@@ -85,7 +87,7 @@ namespace util
 
 	std::string ext2mime(const std::string &path);
 
-	std::string mimetype(const std::string &path, const std::vector<char> &data);
+	std::string mimetype(const std::string &path, const std::string &data);
 
 	std::string mimetype(const std::string &path);
 

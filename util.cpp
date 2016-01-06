@@ -1,5 +1,7 @@
 #include <functional>
 #include <regex>
+#include <sstream>
+#include <iomanip>
 #include <string.h>
 #include <glob.h>
 #include <ftw.h>
@@ -87,6 +89,13 @@ namespace util
 		int len = readlink("/proc/self/exe", &ret[0], ret.size());
 		ret.resize(len);
 		return ret;
+	}
+
+	std::string timestr(const std::string &fmt, std::time_t time)
+	{
+		std::stringstream ss{};
+		ss << std::put_time(std::localtime(&time), fmt.c_str());
+		return ss.str();
 	}
 
 	bool fexists(const std::string &path)
@@ -193,7 +202,7 @@ namespace util
 		return mime_types.at(ext);
 	}
 
-	std::string mimetype(const std::string &path, const std::vector<char> &data)
+	std::string mimetype(const std::string &path, const std::string &data)
 	{
 		std::string extmime = ext2mime(path);
 		if (extmime != "") return extmime;

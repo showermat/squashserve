@@ -70,10 +70,6 @@ namespace http
 		mg_mgr_init(&mgr, this);
 		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);
 		mg_set_protocol_http_websocket(conn);
-		//mgserver = mg_create_server(this, handle);
-		//const char *errmsg;
-		//errmsg = mg_set_option(mgserver, "listening_port", util::t2s(port).c_str());
-		//if (errmsg) throw std::runtime_error{std::string{errmsg}};
 	}
 
 	void server::serve(int timeout)

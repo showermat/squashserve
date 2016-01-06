@@ -12,7 +12,6 @@ namespace http
 		std::string content;
 		doc(): type{"text/plain"}, content{} { }
 		doc(const std::string &t, const std::string &c) : type{t}, content{c} { }
-		doc(const std::string &t, const std::vector<char> &c) : type{t}, content{&c[0], c.size()} { }
 		doc(const std::string path);
 	};
 
@@ -30,8 +29,6 @@ namespace http
 	
 	doc redirect(const std::string &url);
 	std::string mkpath(const std::vector<std::string> &items);
-	//std::string encoding(const doc &content);
-	//std::string decode(const std::string content);
 	std::string title(const std::string &content, const std::string def = "");
 	std::string strings(const std::string &content);
 }

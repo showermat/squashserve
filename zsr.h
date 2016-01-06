@@ -9,34 +9,28 @@
 #include <stdexcept>
 #include <cstdint>
 #include <iostream>
+#include <ctime>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <string.h>
 #include "util.h"
+#include "compress.h"
 
 namespace zsr
 {
-	const int compression = 6;
-	const int memlimit = 1 << 30; // 1 GB
-	const bool debug = false; // FIXME Suspicious.  Multiple-definition error if not declared const.  Probably needs to go in the CPP file, or be replaced with a better mechanism.
-
 	class archive;
 	class archive_tree;
 	class archive_file;
 
+	void logging(bool on);
+
 	void log(const std::string &msg, std::ostream &out = std::cerr);
-
-	std::vector<char> compress(std::vector<char> input);
-
-	std::vector<char> decompress(std::vector<char> input);
 
 	class badzsr : public std::runtime_error
 	{
 	public:
 		badzsr(std::string msg) : runtime_error{msg} { }
-	};
-
-	class compress_error : public std::runtime_error
-	{
-	public:
-		compress_error(std::string msg) : runtime_error{msg} { }
 	};
 
 	class node
@@ -57,14 +51,16 @@ namespace zsr
 		std::string name() const { return name_; }
 		node *parent() const { return parent_; }
 		offset index_size() const { return 2 * sizeof(index) + 2 * sizeof(offset) + 2 + name_.size(); }
+		//virtual offset size() const = 0;
 		void debug_treeprint(std::string prefix = "") const; // TODO Debug remove
 		virtual bool isdir() const = 0;
-		virtual std::vector<char> content() = 0;
+		virtual std::streambuf *content() = 0;
 		virtual std::string path() const = 0;
 		void add_child(node *n);
 		node *get_child(const std::string &name) const;
 		void write_content(std::ostream &out);
 		void write_index(std::ostream &out);
+		virtual void close() { }
 		void extract(const std::string &path);
 		size_t hash() const { return static_cast<size_t>(id_); }
 	};
@@ -73,10 +69,12 @@ namespace zsr
 	{
 	private:
 		archive_tree &container_;
+		std::ifstream stream_;
 	public:
-		node_tree(index id, node *parent, std::string path, archive_tree &container) : node{id, parent, util::basename(path)}, container_{container} {}
+		node_tree(index id, node *parent, std::string path, archive_tree &container) : node{id, parent, util::basename(path)}, container_{container}, stream_{} {}
 		bool isdir() const;
-		std::vector<char> content();
+		std::streambuf *content();
+		void close() { stream_.close(); }
 		std::string path() const;
 	};
 
@@ -84,10 +82,11 @@ namespace zsr
 	{
 	private:
 		archive_file &container_;
+		lzma::rdbuf stream_; // TODO Make a pointer and set null for directories?
 	public:
 		node_file(archive_file &container, node_file *last);
 		bool isdir() const { return start_ == 0; }
-		std::vector<char> content();
+		std::streambuf *content() { stream_.reset(); return &stream_; }
 		std::string path() const;
 	};
 
@@ -108,7 +107,7 @@ namespace zsr
 		bool check(const std::string &path) const;
 		bool isdir(const std::string &path) const;
 		void debug_treeprint() { root_->debug_treeprint(); }
-		std::vector<char> get(const std::string &path) const;
+		std::streambuf *get(const std::string &path) const;
 	};
 
 	class archive_tree : public archive_base
@@ -144,7 +143,7 @@ namespace zsr
 		bool isdir(const std::string &path) const { return impl_->isdir(path); }
 		void write(std::ostream &out) { impl_->write(out); }
 		void extract(const std::string &member = "", const std::string &dest = ".") { impl_->extract(member, dest); }
-		std::vector<char> get(const std::string &path) { return impl_->get(path); }
+		std::streambuf *get(const std::string &path) { return impl_->get(path); }
 	};
 }
 

@@ -1,68 +1,17 @@
-#include <iostream>
-#include <streambuf>
-#include <ctime>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <string.h>
-#include <lzma.h>
 #include "zsr.h"
 
 namespace zsr
 {
+	bool logging_ = false;
+
+	void logging(bool on) { logging_ = on; }
+
 	void log(const std::string &msg, std::ostream &out)
 	{
-		if (! debug) return;
-		std::time_t time = std::time(nullptr);
-		std::string timestr = std::ctime(&time);
-		out << timestr.substr(0, timestr.size() - 1) << ":  " << msg << "\n";
+		if (! logging_) return;
+		out << util::timestr() << ":  " << msg << "\n";
 	}
 
-	std::vector<char> compress(std::vector<char> input)
-	{
-		std::vector<char> ret{};
-		ret.resize(input.size() * 1.25 + 128);
-		size_t len = 0;
-		if (lzma_easy_buffer_encode(compression, LZMA_CHECK_CRC32, nullptr, reinterpret_cast<uint8_t *>(&input[0]), input.size(), reinterpret_cast<uint8_t *>(&ret[0]), &len, ret.size()) != LZMA_OK) throw std::runtime_error{"Compression failed"};
-		ret.resize(len);
-		//std::cerr << input.size() << " -> " << ret.size() << "\n";
-		return ret;
-	}
-
-	std::vector<char> decompress(std::vector<char> input)
-	{
-		int avail = 8192;
-		std::vector<char> ret{};
-		lzma_stream stream = LZMA_STREAM_INIT;
-		ret.resize(avail);
-		size_t len = 0;
-		if (lzma_stream_decoder(&stream, memlimit, LZMA_CONCATENATED) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
-		stream.next_in = reinterpret_cast<uint8_t *>(&input[0]);
-		stream.avail_in = input.size();
-		stream.next_out = reinterpret_cast<uint8_t *>(&ret[0]);
-		stream.avail_out = ret.size();
-		while (true)
-		{
-			lzma_ret retval = lzma_code(&stream, stream.avail_in == 0 ? LZMA_FINISH : LZMA_RUN);
-			if (retval == LZMA_STREAM_END)
-			{
-				len += avail - stream.avail_out;
-				if (stream.avail_in != 0) throw compress_error{"Unprocessed input remaining in stream"};
-				ret.resize(len);
-				lzma_end(&stream);
-				return ret;
-			}
-			if (retval != LZMA_OK) throw compress_error{"Decompression failed"};
-			if (stream.avail_out == 0)
-			{
-				len += avail - stream.avail_out;
-				ret.resize(ret.size() * 2);
-				stream.next_out = reinterpret_cast<uint8_t *>(&ret[0] + len);
-				stream.avail_out = avail = ret.size() - len;
-			}
-		}
-	}
-	
 	void node::add_child(node *n)
 	{
 		children_[n->name_] = std::unique_ptr<node>{n};
@@ -79,16 +28,20 @@ namespace zsr
 		if (isdir()) for (std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->write_content(out);
 		else
 		{
-			//std::cerr << path() << "\n";
+			std::istream stream{content()};
+			lzma::wrbuf compressor{stream};
 			start_ = out.tellp();
-			std::vector<char> zipbuf = compress(content());
-			len_ = zipbuf.size();
-			out.write(&zipbuf[0], zipbuf.size());
+			out << &compressor;
+			if (! out) throw std::runtime_error{"Bad output stream when writing archive content for file " + path()};
+			len_ = static_cast<offset>(out.tellp()) - start_;
+			log("Wrote content for node " + path() + ", start " + util::t2s(start_) + ", length " + util::t2s(len_));
+			close();
 		}
 	}
 
 	void node::write_index(std::ostream &out)
 	{
+		//log("Writing index for node " + path());
 		if (! isdir() && start_ == 0) throw std::runtime_error{"Content must be written before index"};
 		out.write(reinterpret_cast<const char *>(&id_), sizeof(index));
 		index parentid = parent_ == nullptr ? 0 : parent_->id();
@@ -112,11 +65,11 @@ namespace zsr
 		}
 		else
 		{
-			std::vector<char> data = content();
 			std::ofstream out{fullpath};
 			if (! out) throw std::runtime_error{"Could not create file " + fullpath};
-			out.write(&data[0], data.size());
+			out << content();
 			out.close();
+			close();
 		}
 	}
 
@@ -134,13 +87,11 @@ namespace zsr
 		return false;
 	}
 
-	std::vector<char> node_tree::content()
+	std::streambuf *node_tree::content()
 	{
-		if (isdir()) throw std::runtime_error{"Tried to get content of directory " + path()};
-		std::ifstream in{path()};
-		if (! in) throw std::runtime_error{"Couldn't open " + path() + " for reading"};
-		std::vector<char> ret{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}}; // FIXME Possibly slow?
-		return ret;
+		stream_.open(path());
+		if (! stream_) throw std::runtime_error{"Couldn't open " + path()};
+		return stream_.rdbuf();
 	}
 
 	std::string node_tree::path() const
@@ -148,7 +99,7 @@ namespace zsr
 		return (parent_ ? parent_->path() + util::pathsep + name() : container_.basedir());
 	}
 
-	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}
+	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}, stream_{}
 	{
 		// TODO Not checking for premature end of file
 		std::istream &in = container_.in();
@@ -168,16 +119,7 @@ namespace zsr
 			if (parent_ == nullptr) throw badzsr{"Couldn't resolve parent ID to pointer"};
 		}
 		if (parent_) parent_->add_child(this);
-	}
-
-	std::vector<char> node_file::content()
-	{
-		if (isdir()) throw std::runtime_error{"Tried to get content of directory " + path()};
-		std::istream &in = container_.in();
-		std::vector<char> zipbuf(len_);
-		in.seekg(start_);
-		in.read(reinterpret_cast<char *>(&zipbuf[0]), len_);
-		return decompress(zipbuf);
+		stream_.init(in, start_, len_);
 	}
 
 	std::string node_file::path() const
@@ -238,12 +180,12 @@ namespace zsr
 		return true;
 	}
 
-	std::vector<char> archive_base::get(const std::string &path) const
+	std::streambuf *archive_base::get(const std::string &path) const
 	{
 		node *n = getnode(path);
 		if (! n) throw std::runtime_error{"Tried to get content of nonexistent path " + path};
 		if (n->isdir()) throw std::runtime_error{"Tried to get content of directory " + path};
-		return n->content();
+		return n->content(); // FIXME need to close in constructor
 	}
 
 	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}

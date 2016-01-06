@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <xapian.h>
 #include "util.h"
 #include "zsr.h"
