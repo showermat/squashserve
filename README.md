@@ -16,6 +16,8 @@ The following files are included in this project:
 
   - `http.cpp` and `http.h`: Various abstractions for HTTP and HTML used by zsrsrv
 
+  - `compress.cpp` and `compress.h`: Wrappers around liblzma for stream compression and decompression
+
   - `zsr.cpp` and `zsr.h`: ZSR file format library
 
   - `zsrutil.cpp`: ZSR command-line utility
@@ -78,6 +80,9 @@ To decompress a single file:
 The encoder can also be used as a library in other C++ programs by including the header zsr.h.  The only class you should have to deal with is `zsr::archive`.  Use as follows:
 
     #include <fstream>
+    #include <streambuf>
+    #include <sstream>
+    #include <string>
     #include <zsr.h>
 
     zsr::archive ar{"/data/wikipedia"}; // Create a new archive from a directory tree...
@@ -88,7 +93,12 @@ The encoder can also be used as a library in other C++ programs by including the
     zsr::archive ar2{"/data/wikipedia.zsr"}; // Open the archive file...
     ar2.extract("wiki", "/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
     if (ar2.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive...
-        std::vector<char> article = ar2.get("wiki/Douglas_Adams.html") // ...then retrieve its contents.
+    {
+        std::streambuf *file = ar2.get("wiki/Douglas_Adams.html") // ...then get the stream of its contents...
+        std::ostringstream oss{};
+        oss << file; // ...extract it...
+        std::string article = oss.str(); // ...and convert it to a string.
+    }
 
 ## Creating Volumes
 

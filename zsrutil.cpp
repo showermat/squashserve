@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 		if (args.size() < 4) ar.extract();
 		else ar.extract(args[3]);
 	}
+	else help_exit();
 	return 0;
 }
 

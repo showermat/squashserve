@@ -25,13 +25,13 @@ namespace lzma
 	{
 	protected:
 		std::istream *file_;
-		std::streampos ptr_;
 		lzma_stream lzma_;
 		std::vector<char> buf_, inbuf_;
 		lzma_action action_;
-		virtual std::streamsize load() = 0;
+		virtual std::streamsize fill() = 0;
+		virtual std::streamsize load();
 	public:
-		buf_base() : file_{}, ptr_{}, lzma_{}, buf_{} { }
+		buf_base() : file_{}, lzma_{}, buf_{} { }
 		buf_base(const buf_base &orig) = delete;
 		buf_base(buf_base &&orig);
 		virtual void init(std::istream &file);
@@ -43,7 +43,7 @@ namespace lzma
 	class wrbuf : public buf_base
 	{
 	private:
-		std::streamsize load();
+		std::streamsize fill();
 	public:
 		wrbuf() : buf_base{} { };
 		wrbuf(std::istream &file) : buf_base{} { init(file); }
@@ -56,13 +56,13 @@ namespace lzma
 	class rdbuf : public buf_base
 	{
 	private:
-		std::streampos start_, size_;
-		std::streamsize load();
+		std::streampos ptr_, start_, size_;
+		std::streamsize fill();
 	public:
-		rdbuf() : buf_base{}, start_{}, size_{} { };
+		rdbuf() : buf_base{}, ptr_{}, start_{}, size_{} { };
 		rdbuf(std::istream &file, std::streampos start, std::streampos size);
 		rdbuf(const rdbuf &orig) = delete;
-		rdbuf(rdbuf &&orig) : buf_base{std::move(orig)}, start_{orig.start_}, size_{orig.size_} { }
+		rdbuf(rdbuf &&orig) : buf_base{std::move(orig)}, ptr_{orig.ptr_}, start_{orig.start_}, size_{orig.size_} { }
 		void init(std::istream &file, std::streampos start, std::streampos size);
 		void reset() { init(*file_, start_, size_); }
 	};

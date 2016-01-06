@@ -17,9 +17,7 @@ namespace lzma
 				stream.total_out = 0;
 				stream.next_out = reinterpret_cast<uint8_t *>(&outbuf[0]);
 				stream.avail_out = outbuf.size();
-				//std::cerr << stream.avail_in << ", " << stream.total_in << ", " << stream.avail_out << ", " << stream.total_out << "";
 				lzma_ret retval = lzma_code(&stream, insize == 0 ? LZMA_FINISH : LZMA_RUN);
-				//std::cerr << " => " << stream.avail_in << ", " << stream.total_in << ", " << stream.avail_out << ", " << stream.total_out << "\n";
 				if (retval == LZMA_STREAM_END)
 				{
 					if (stream.avail_in != 0) throw compress_error{"Unprocessed input remaining in stream"};
@@ -52,7 +50,6 @@ namespace lzma
 	void buf_base::init(std::istream &file)
 	{
 		file_ = &file;
-		ptr_ = 0;
 		buf_.resize(chunksize);
 		inbuf_.resize(chunksize);
 		action_ = LZMA_RUN;
@@ -61,25 +58,12 @@ namespace lzma
 		setg(end, end, end);
 	}
 
-	buf_base::buf_base(buf_base &&orig) : file_{orig.file_}, ptr_{orig.ptr_}, lzma_{orig.lzma_}, buf_{std::move(orig.buf_)}, inbuf_{std::move(orig.inbuf_)}, action_{orig.action_}
+	buf_base::buf_base(buf_base &&orig) : file_{orig.file_}, lzma_{orig.lzma_}, buf_{std::move(orig.buf_)}, inbuf_{std::move(orig.inbuf_)}, action_{orig.action_}
 	{
 		orig.lzma_.internal = nullptr;
 	}
 
-	std::streambuf::int_type buf_base::underflow()
-	{
-		std::vector<char> input(chunksize, 0);
-		if (gptr() >= egptr() && load() == 0) return traits_type::eof();
-		return traits_type::to_int_type(*gptr());
-	}
-
-	void wrbuf::init(std::istream &file)
-	{
-		buf_base::init(file);
-		if (lzma_easy_encoder(&lzma_, compression, LZMA_CHECK_CRC64) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
-	}
-
-	std::streamsize wrbuf::load() try
+	std::streamsize buf_base::load() try
 	{
 		lzma_.next_out = reinterpret_cast<uint8_t *>(&buf_[0]);
 		if (lzma_.total_out > 0)
@@ -102,10 +86,8 @@ namespace lzma
 		{
 			lzma_.total_in = 0;
 			lzma_.next_in = reinterpret_cast<uint8_t *>(&inbuf_[0]);
-			file_->read(&inbuf_[0], inbuf_.size());
-			std::streamsize insize = file_->gcount();
+			std::streamsize insize = fill();
 			if (insize == 0) action_ = LZMA_FINISH;
-			ptr_ += insize;
 			lzma_.avail_in = insize;
 			lzma_.avail_out = buf_.size();
 			lzma_ret retval = lzma_code(&lzma_, action_);
@@ -119,51 +101,47 @@ namespace lzma
 	}
 	catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; }
 	
+	std::streambuf::int_type buf_base::underflow()
+	{
+		std::vector<char> input(chunksize, 0);
+		if (gptr() >= egptr() && load() == 0) return traits_type::eof();
+		return traits_type::to_int_type(*gptr());
+	}
+
+	void wrbuf::init(std::istream &file)
+	{
+		buf_base::init(file);
+		if (lzma_easy_encoder(&lzma_, compression, LZMA_CHECK_CRC64) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
+	}
+
+	std::streamsize wrbuf::fill()
+	{
+		file_->read(&inbuf_[0], inbuf_.size());
+		std::streamsize insize = file_->gcount();
+		return insize;
+	}
+
 	void rdbuf::init(std::istream &file, std::streampos start, std::streampos size)
 	{
 		buf_base::init(file);
+		ptr_ = 0;
 		start_ = start;
 		size_ = size;
 		if (lzma_stream_decoder(&lzma_, memlimit, LZMA_CONCATENATED) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
+	}
+
+	std::streamsize rdbuf::fill()
+	{
+		file_->seekg(start_ + ptr_);
+		file_->read(&inbuf_[0], static_cast<std::streamsize>(inbuf_.size()) < size_ - ptr_ ? inbuf_.size() : size_ - ptr_);
+		std::streamsize insize = file_->gcount();
+		ptr_ += insize;
+		return insize;
 	}
 
 	rdbuf::rdbuf(std::istream &file, std::streampos start, std::streampos size) : buf_base{}
 	{
 		init(file, start, size);
 	}
-
-	std::streamsize rdbuf::load() try
-	{
-		lzma_.next_out = reinterpret_cast<uint8_t *>(&buf_[0]);
-		lzma_.avail_out = buf_.size();
-		if (lzma_.total_out == buf_.size())
-		{
-			lzma_.total_out = 0;
-			lzma_ret retval = lzma_code(&lzma_, action_);
-			if (retval == LZMA_STREAM_END);
-			else if (retval != LZMA_OK) throw compress_error{"Decompression failed with liblzma error " + util::t2s(retval)};
-			if (lzma_.total_out > 0)
-			{
-				char *start = &buf_[0], *end = start + lzma_.total_out;
-				setg(start, start, end);
-				return lzma_.total_out;
-			}
-		}
-		lzma_.total_in = lzma_.total_out = 0;
-		lzma_.next_in = reinterpret_cast<uint8_t *>(&inbuf_[0]);
-		file_->seekg(start_ + ptr_);
-		file_->read(&inbuf_[0], static_cast<std::streamsize>(inbuf_.size()) < size_ - ptr_ ? inbuf_.size() : size_ - ptr_);
-		std::streamsize insize = file_->gcount();
-		ptr_ += insize;
-		lzma_.avail_in = insize;
-		if (insize == 0) action_ = LZMA_FINISH;
-		lzma_ret retval = lzma_code(&lzma_, action_);
-		if (retval == LZMA_STREAM_END);
-		else if (retval != LZMA_OK) throw compress_error{"Decompression failed with liblzma error " + util::t2s(retval)};
-		char *start = &buf_[0], *end = start + lzma_.total_out;
-		setg(start, start, end);
-		return lzma_.total_out;
-	}
-	catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; }
 }
 
