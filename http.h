@@ -2,17 +2,27 @@
 #define HTTP_H
 #include <string>
 #include <functional>
+#include <unordered_map>
+#include <sstream>
 #include "mongoose.h"
 
 namespace http
 {
-	struct doc
+	class doc
 	{
-		std::string type;
-		std::string content;
-		doc(): type{"text/plain"}, content{} { }
-		doc(const std::string &t, const std::string &c) : type{t}, content{c} { }
-		doc(const std::string path);
+	private:
+		std::string type_;
+		std::string content_;
+		std::unordered_map<std::string, std::string> headers_;
+	public:
+		doc(): type_{"text/plain"}, content_{}, headers_{} { }
+		doc(const std::string &type, const std::string &content, const std::unordered_map<std::string, std::string> &headers = {}) : type_{type}, content_{content}, headers_{headers} { }
+		doc(const std::string path, const std::unordered_map<std::string, std::string> &headers = {});
+		void content(const std::string &value) { content_ = value; }
+		const std::string &content() const { return content_; }
+		size_t size() const { return content_.size(); }
+		void header(std::string key, std::string value) { headers_[key] = value; }
+		const std::unordered_map<std::string, std::string> &headers();
 	};
 
 	class server

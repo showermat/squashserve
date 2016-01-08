@@ -21,7 +21,6 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 	{
 		dbfname_ = "/tmp/zsridx_" + id();
 		archive_->extract(util::pathjoin({metadir, "index"}), dbfname_);
-		std::cerr << "Loaded index for " << id_ << "\n";
 		try { index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})}; }
 		catch (Xapian::DatabaseCorruptError &e) { } // If the index is no good, we'll make do without
 	}

@@ -6,12 +6,19 @@
 namespace http
 {
 	
-	doc::doc(const std::string path) : type{util::mimetype(path)}, content{""}
+	doc::doc(const std::string path, const std::unordered_map<std::string, std::string> &headers) : type_{util::mimetype(path)}, content_{""}, headers_{headers}
 	{
 		std::ifstream in{path};
 		if (! in) throw std::runtime_error{"Couldn't open " + path + " for reading"};
 		std::string buf{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}}; // FIXME Probably slow
-		content = std::move(buf);
+		content_ = std::move(buf);
+	}
+
+	const std::unordered_map<std::string, std::string> &doc::headers()
+	{
+		if (! headers_.count("Content-type")) headers_["Content-type"] = type_;
+		if (! headers_.count("Content-length")) headers_["Content-length"] = util::t2s(content_.size());
+		return headers_;
 	}
 
 	doc redirect(const std::string &url)
@@ -57,9 +64,13 @@ namespace http
 		{
 		case MG_EV_HTTP_REQUEST:
 			struct http_message *msg = static_cast<struct http_message *>(data);
-			const doc d = static_cast<server *>(conn->mgr->user_data)->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
-			mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-type: %s\r\nContent-length: %lu\r\n\r\n", d.type.c_str(), d.content.size());
-			mg_send(conn, d.content.data(), d.content.size());
+			doc d = static_cast<server *>(conn->mgr->user_data)->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
+			std::ostringstream head{};
+			head << "HTTP/1.1 200 OK\r\n";
+			for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
+			head << "\r\n";
+			mg_printf(conn, "%s", head.str().c_str());
+			mg_send(conn, d.content().data(), d.size());
 			//mg_send_header(conn, "Content-type", d.type.c_str());
 			//mg_send_data(conn, d.content.data(), d.content.size());
 		}
