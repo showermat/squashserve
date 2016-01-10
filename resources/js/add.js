@@ -1,5 +1,5 @@
 
-var primary_attr = {"title" : "Title", location : "HTML directory", home : "Home HTML", favicon: "Icon image"};
+var primary_attr = {"title" : "Title", "id" : "Volume ID", location : "HTML directory", home : "Home HTML", favicon: "Icon image"};
 var secondary_attr = ["description", "language", "created", "refer"];
 
 $(document).ready(function() {

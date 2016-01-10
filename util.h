@@ -31,6 +31,8 @@ namespace util
 
 	std::vector<std::string> argvec(int argc, char **argv);
 
+	std::string alnumonly(const std::string &str);
+
 	std::string asciilower(std::string str);
 
 	template <typename T> std::string t2s(const T &t)
@@ -68,6 +70,8 @@ namespace util
 	std::string basename(std::string path, char sep = '/');
 
 	std::string dirname(std::string path, char sep = '/');
+
+	void rm_recursive(const std::string &path);
 
 	std::string exepath();
 

@@ -1,10 +1,23 @@
-#include <regex>
-//#include <experimental/filesystem>
 #include "Volume.h"
 
-Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifstream{fname})},*/ archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, index_{}
+const std::string Volume::metadir{"_meta"};
+const std::string Volume::default_icon{"/rsrc/img/volume.svg"};
+
+Volume Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
 {
-	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4); // TODO Better way of getting file id
+	//std::cout << "src = " << srcdir << "\ndest = " << destdir << "\nid = " << id << "\n";
+	//for (const std::pair<const std::string, std::string> &pair : info) std::cout << "  " << pair.first << " = " << pair.second << "\n";
+	// Check that srcdir and destdir exist, id is alphanumeric plus underscore, and id.zsr does not yet exist in destdir
+	// Create _meta if it does not exist, create info.txt, copy the favicon there if it exists
+	// If the tree is not indexed yet, index it
+	// Compress the tree to the destination
+	// Load the volume
+	throw std::runtime_error{"This functionality is not implemented yet"};
+}
+
+Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifstream{fname})},*/ archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, index_{}
+{
+	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	std::ostringstream infoss{};
 	infoss << archive_->open(util::pathjoin({metadir, "info.txt"}));
 	std::string info = infoss.str();
@@ -21,7 +34,11 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 	{
 		dbfname_ = "/tmp/zsridx_" + id();
 		archive_->extract(util::pathjoin({metadir, "index"}), dbfname_);
-		try { index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})}; }
+		try
+		{
+			index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})};
+			indexed_ = true;
+		}
 		catch (Xapian::DatabaseCorruptError &e) { } // If the index is no good, we'll make do without
 	}
 }
@@ -30,8 +47,8 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 
 Volume::~Volume()
 {
-	// TODO Remove directory tree rooted at dbfname
-	//if (util::isdir(dbfname_)) std::experimental::filesystem::remove_all(std::experimental::filesystem::path{dbfname});
+	//if (util::isdir(dbfname_)) std::experimental::filesystem::remove_all(std::experimental::filesystem::path{dbfname_});
+	if (indexed_ && util::isdir(dbfname_)) util::rm_recursive(dbfname_);
 }
 
 bool Volume::check(const std::string &path) const
@@ -43,7 +60,7 @@ http::doc Volume::get(std::string path)
 {
 	if (! check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
-	contentss << archive_->open(path);
+	contentss << archive_->open(path); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
 	archive_->reap();
 	return http::doc{util::mimetype(path, content), content};
@@ -51,6 +68,7 @@ http::doc Volume::get(std::string path)
 
 std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen)
 {
+	if (! indexed()) throw error{"Search Failed", "This volume is not indexed, so it cannot be searched"};
 	Xapian::Enquire enq{index_};
 	Xapian::QueryParser parse{};
 	parse.set_database(index_);
@@ -78,15 +96,15 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 
 std::string Volume::info(const std::string &key) const
 {
-	// TODO Check presence?
+	if (! info_.count(key)) throw std::runtime_error{"Requested nonexistent info \"" + key + "\" from volume " + id_};
 	return info_.at(key);
 }
 
-std::map<std::string, std::string> Volume::tokens(optional<std::string> member)
+std::unordered_map<std::string, std::string> Volume::tokens(optional<std::string> member)
 {
-	std::map<std::string, std::string> ret = info_;
+	std::unordered_map<std::string, std::string> ret = info_;
 	if (check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
-	else ret["icon"] = "/rsrc/img/volume.svg"; // TODO Don't hardcode
+	else ret["icon"] = default_icon;
 	if (member)
 	{
 		ret["view"] = http::mkpath({"view", id(), *member});

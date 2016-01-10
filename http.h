@@ -4,6 +4,10 @@
 #include <functional>
 #include <unordered_map>
 #include <sstream>
+#include <fstream>
+#include <regex>
+#include <stdexcept>
+#include "util.h"
 #include "mongoose.h"
 
 namespace http

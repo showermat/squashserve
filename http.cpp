@@ -1,6 +1,3 @@
-#include <fstream>
-#include <regex>
-#include "util.h"
 #include "http.h"
 
 namespace http
@@ -80,6 +77,7 @@ namespace http
 	{
 		mg_mgr_init(&mgr, this);
 		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);
+		if (! conn) throw std::runtime_error{"Unable to create socket connection"};
 		mg_set_protocol_http_websocket(conn);
 	}
 

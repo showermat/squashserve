@@ -101,7 +101,6 @@ namespace zsr
 
 	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}, stream_{nullptr}
 	{
-		// TODO Not checking for premature end of file
 		std::istream &in = container_.in();
 		index parentid;
 		in.read(reinterpret_cast<char *>(&id_), sizeof(index));
@@ -112,6 +111,7 @@ namespace zsr
 		in.read(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
 		name_.resize(namelen);
 		in.read(&name_[0], namelen);
+		if (! in) throw badzsr{"Premature end of file while creating node"};
 		if (parentid == 0) parent_ = nullptr;
 		else
 		{
@@ -204,7 +204,6 @@ namespace zsr
 	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}
 	{
 		if (! in_) throw badzsr{"Couldn't open archive input stream"};
-		// TODO Not checking for premature end of file
 		in_.seekg(0, std::ios_base::end);
 		std::ifstream::pos_type fsize = in_.tellg();
 		in_.seekg(0);
@@ -213,6 +212,7 @@ namespace zsr
 		if (magic != magic_number) throw badzsr{"File identifier incorrect"};
 		node::offset idxstart{};
 		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(node::offset));
+		if (! in) throw badzsr{"Premature end of file in header"};
 		in_.seekg(idxstart);
 		root_ = std::unique_ptr<node>{new node_file{*this, nullptr}};
 		node_file *last = dynamic_cast<node_file *>(&*root_);

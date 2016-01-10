@@ -9,11 +9,14 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <magic.h>
+#include <string.h>
 #include "util.h"
 #include "mime.h"
 
 namespace util
 {
+	const int ftw_nopenfd = 256;
+
 	std::vector<std::string> strsplit(const std::string &str, char delim)
 	{
 		std::vector<std::string> ret{};
@@ -57,6 +60,13 @@ namespace util
 		return ret;
 	}
 
+	std::string alnumonly(const std::string &str)
+	{
+		std::ostringstream ss{};
+		for (const char &c : str) if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_') ss << c; // FIXME Ignoring Unicode
+		return ss.str();
+	}
+
 	std::string asciilower(std::string str)
 	{
 		int diff = 'A' - 'a';
@@ -81,6 +91,20 @@ namespace util
 	{
 		while (path.back() == sep) path = path.substr(0, path.size() - 1);
 		return path.substr(0, path.rfind(sep));
+	}
+
+	int ftw_pred_rm(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+	{
+		if (typeflag == FTW_F || typeflag == FTW_SL || typeflag == FTW_SLN) return unlink(fpath) ? errno : 0;
+		if (typeflag == FTW_DP) return rmdir(fpath) ? errno : 0;
+		if (typeflag == FTW_DNR || typeflag == FTW_NS) return EACCES;
+		return ENOSYS;
+	}
+
+	void rm_recursive(const std::string &path)
+	{
+		int ret = nftw(path.c_str(), &ftw_pred_rm, ftw_nopenfd, FTW_MOUNT | FTW_PHYS | FTW_DEPTH);
+		if (ret) throw std::runtime_error{std::string{strerror(ret)}};
 	}
 	
 	std::string exepath()
@@ -134,7 +158,7 @@ namespace util
 	static std::vector<std::string> files{};
 	static const std::regex *ftwtest;
 
-	int ftw_pred(const char *path, const struct stat *info, int type)
+	int ftw_pred_ls(const char *path, const struct stat *info, int type)
 	{
 		if (type == FTW_F && (! ftwtest || std::regex_search(path, *ftwtest))) files.push_back(path);
 		return 0;
@@ -148,7 +172,7 @@ namespace util
 		else { ftwtest_base = std::regex{test}; ftwtest = &ftwtest_base; }
 		glob_t globbuf;
 		if (glob(base.c_str(), GLOB_NOSORT | GLOB_BRACE | GLOB_NOCHECK, nullptr, &globbuf)) throw std::runtime_error{"Glob failed on pattern " + base};
-		for (unsigned int i = 0; i < globbuf.gl_pathc; i++) ftw(globbuf.gl_pathv[i], &ftw_pred, 1024);
+		for (unsigned int i = 0; i < globbuf.gl_pathc; i++) ftw(globbuf.gl_pathv[i], &ftw_pred_ls, ftw_nopenfd);
 		globfree(&globbuf);
 		return files;
 	}

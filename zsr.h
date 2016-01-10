@@ -2,7 +2,7 @@
 #define ZSR_H
 #include <string>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <set>
 #include <tuple>
 #include <memory>
@@ -44,7 +44,7 @@ namespace zsr
 		node *parent_;
 		std::string name_;
 		offset start_, len_;
-		std::map<std::string, std::unique_ptr<node>> children_;
+		std::unordered_map<std::string, std::unique_ptr<node>> children_;
 		node(index id, node *parent, const std::string &name) : id_{id}, parent_{parent}, name_{name}, start_{0}, len_{0}, children_{} { }
 	public:
 		node(const node &orig) = delete;
