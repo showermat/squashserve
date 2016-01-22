@@ -15,7 +15,7 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
-Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifstream{fname})},*/ archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, index_{}
+Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, index_{}, titles_{}
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	std::ostringstream infoss{};
@@ -41,9 +41,20 @@ Volume::Volume(const std::string &fname) : id_{}, /*archive_{std::move(std::ifst
 		}
 		catch (Xapian::DatabaseCorruptError &e) { } // If the index is no good, we'll make do without
 	}
+	if (indexed_)
+	{
+		titles_ = std::unique_ptr<radix_tree<std::string, std::set<Xapian::docid>>>{new radix_tree<std::string, std::set<Xapian::docid>>{}};
+		std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
+		for (Xapian::ValueIterator iter = index_.valuestream_begin(1); iter != index_.valuestream_end(1); iter++)
+		{
+			std::string title_lc = util::asciilower(*iter);
+			for (std::string::size_type i = 0; i < title_lc.size(); i++) if (i == 0 || ! alnum(title_lc[i - 1]))
+			{
+				(*titles_)[title_lc.substr(i)].insert(iter.get_docid());
+			}
+		}
+	}
 }
-
-//Volume::Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, dbfname_{orig.dbfname_}, index_{std::move(orig.index_)} { }
 
 Volume::~Volume()
 {
@@ -91,6 +102,20 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		ret.push_back(r);
 	}
 	archive_->reap();
+	return ret;
+}
+
+std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
+{
+	std::unordered_map<std::string, std::string> ret;
+	if (! indexed_) return ret;
+	std::vector<radix_tree<std::string, std::set<Xapian::docid>>::iterator> res;
+	titles_->prefix_match(util::asciilower(qstr), res);
+	for (const radix_tree<std::string, std::set<Xapian::docid>>::iterator &iter : res) for (Xapian::docid docid : iter->second)
+	{
+		Xapian::Document doc = index_.get_document(docid);
+		ret[doc.get_value(1)] = doc.get_data();
+	}
 	return ret;
 }
 

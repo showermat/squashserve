@@ -4,14 +4,16 @@
 <meta charset="UTF-8">
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/typeahead.bundle.js"></script>
+<script src="/rsrc/js/complete.js"></script>
 <script src="/rsrc/js/search.js"></script>
 </head>
 <body>
 <main class="normal">
 <h1>Search Results for “%QUERY” in %TITLE</h1>
-<form class="search" data-volid="%ID">
-<input class="search-input" type="search" placeholder="Search again">
-<button type="submit" >Go</button>
+<form id="search" data-volid="%ID">
+<input id="search-input" type="search" placeholder="Search again" autocomplete="off" spellcheck="false">
+<button type="submit">Go</button>
 </form>
 <table>
 %

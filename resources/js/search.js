@@ -1,8 +1,9 @@
 
 $(document).ready(function() {
-	$(".search").val("");
-	$(".search").on('submit', function() {
-		var query = $(this).children(".search-input").val();
+	$("#search-input").val("");
+	autocomplete($("#search-input"), $("#search").data("volid"));
+	$("#search").on('submit', function() {
+		var query = $("#search-input").val();
 		window.location = "/search/" + $(this).data("volid") + "/" + encodeURIComponent(query);
 		//$(this).children(".search-input").val("");
 		return false;

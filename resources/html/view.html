@@ -5,6 +5,8 @@
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <link rel="icon" href="%ICON">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/typeahead.bundle.js"></script>
+<script src="/rsrc/js/complete.js"></script>
 <script src="/rsrc/js/view.js"></script>
 </head>
 <body data-volid="%ID" style="margin: 0px;">
@@ -16,7 +18,7 @@
 	<!--<a href="%PREFS" class="toolbar-button" target="_top"><img src="/rsrc/icon/prefs.svg" alt="Preferences"></a>-->
 </div><div id="toolbar-right">
 	<form id="search">
-	<input id="search-input" type="search" placeholder="Search">
+	<input id="search-input" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
 	<button type="submit">Go</button>
 	</form>
 </div></div></div></div>

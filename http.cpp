@@ -3,7 +3,7 @@
 namespace http
 {
 	
-	doc::doc(const std::string path, const std::unordered_map<std::string, std::string> &headers) : type_{util::mimetype(path)}, content_{""}, headers_{headers}
+	doc::doc(const std::string &path, const std::unordered_map<std::string, std::string> &headers) : type_{util::mimetype(path)}, content_{""}, headers_{headers}
 	{
 		std::ifstream in{path};
 		if (! in) throw std::runtime_error{"Couldn't open " + path + " for reading"};

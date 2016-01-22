@@ -7,6 +7,7 @@
 #include <sstream>
 #include <future>
 #include <stdexcept>
+#include "lib/json.hpp" // Thanks to github/nlohmann
 #include "util.h"
 #include "prefs.h"
 #include "zsr.h"
@@ -135,6 +136,20 @@ http::doc search(Volume &vol, const std::string &query)
 	buf << token_replace(sects[2], tokens);
 	ret.content(buf.str());
 	return ret;
+}
+
+http::doc complete(Volume &vol, const std::string &query)
+{
+	const int limit = 100;
+	std::unordered_map<std::string, std::string> res = vol.complete(query);
+	std::vector<std::string> names{};
+	names.reserve(res.size());
+	for (const std::pair<const std::string, std::string> &pair : res) names.push_back(pair.first);
+	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
+	if (names.size() > limit) names.resize(limit);
+	nlohmann::json ret{};
+	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", res[name]}});
+	return http::doc{"text/plain", ret.dump()};
 }
 
 http::doc view(Volume &vol, const std::string &path)
@@ -268,15 +283,15 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 	try
 	{
 		if (path.size() == 0) return home(volumes);
-		if (path[0] == "search" || path[0] == "view" || path[0] == "content")
+		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (volumes.count(path[1]) == 0) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
 			if (path[0] == "search") return search(volumes.at(path[1]), util::strjoin(path, '/', 2));
 			else if (path[0] == "view") return view(volumes.at(path[1]), util::strjoin(path, '/', 2) + (querystr.size() ? ("?" + querystr) : ""));
+			else if (path[0] == "complete") return complete(volumes.at(path[1]), util::strjoin(path, '/', 2));
 			else return content(volumes.at(path[1]), util::strjoin(path, '/', 2));
 		}
-		else if (path[0] == "favicon.ico") return http::doc{util::pathjoin({exedir, rsrcdname, "img", "favicon.png"})};
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
 		else if (path[0] == "add") return http::doc{util::pathjoin({exedir, rsrcdname, "html", "add.html"})};

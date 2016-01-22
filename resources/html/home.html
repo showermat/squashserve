@@ -5,6 +5,8 @@
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/typeahead.bundle.js"></script>
+<script src="/rsrc/js/complete.js"></script>
 <script src="/rsrc/js/home.js"></script>
 </head>
 <body>
@@ -26,7 +28,7 @@
 </td>
 <td class="volume-search vcenter">
 	<form class="search" data-volid="%ID">
-	<input class="search-input" type="search" placeholder="Search">
+	<input class="search-input typeahead" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
 	<button type="submit" >Go</button>
 	</form>
 </td>

@@ -23,6 +23,7 @@ $(document).ready(function() {
 			return true;
 		});
 	});
+	autocomplete($("#search-input"), volid);
 	$("#search").on('submit', function() {
 		var query = $("#search-input").val();
 		window.location = "/search/" + volid + "/" + encodeURIComponent(query);
