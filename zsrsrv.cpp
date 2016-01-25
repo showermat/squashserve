@@ -140,7 +140,7 @@ http::doc search(Volume &vol, const std::string &query)
 
 http::doc complete(Volume &vol, const std::string &query)
 {
-	const int limit = 100;
+	const int limit = 50;
 	std::unordered_map<std::string, std::string> res = vol.complete(query);
 	std::vector<std::string> names{};
 	names.reserve(res.size());
@@ -148,8 +148,21 @@ http::doc complete(Volume &vol, const std::string &query)
 	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
 	if (names.size() > limit) names.resize(limit);
 	nlohmann::json ret{};
-	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", res[name]}});
+	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + res[name]}});
 	return http::doc{"text/plain", ret.dump()};
+}
+
+http::doc titles(Volume &vol, const std::string &query)
+{
+	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "titles.html"})};
+	std::stringstream buf{};
+	std::vector<std::string> sects = docsplit(ret.content());
+	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
+	buf << token_replace(sects[0], vol.tokens({}));
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + pair.second}}); // TODO Sort
+	buf << token_replace(sects[2], vol.tokens({}));
+	ret.content(buf.str());
+	return ret;
 }
 
 http::doc view(Volume &vol, const std::string &path)
@@ -283,13 +296,14 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 	try
 	{
 		if (path.size() == 0) return home(volumes);
-		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete")
+		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (volumes.count(path[1]) == 0) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
 			if (path[0] == "search") return search(volumes.at(path[1]), util::strjoin(path, '/', 2));
 			else if (path[0] == "view") return view(volumes.at(path[1]), util::strjoin(path, '/', 2) + (querystr.size() ? ("?" + querystr) : ""));
 			else if (path[0] == "complete") return complete(volumes.at(path[1]), util::strjoin(path, '/', 2));
+			else if (path[0] == "titles") return titles(volumes.at(path[1]), util::strjoin(path, '/', 2));
 			else return content(volumes.at(path[1]), util::strjoin(path, '/', 2));
 		}
 		else if (path[0] == "pref") return pref();

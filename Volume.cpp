@@ -130,7 +130,7 @@ std::unordered_map<std::string, std::string> Volume::tokens(optional<std::string
 	std::unordered_map<std::string, std::string> ret = info_;
 	if (check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
 	else ret["icon"] = default_icon;
-	if (member)
+	if (member) // Add title?
 	{
 		ret["view"] = http::mkpath({"view", id(), *member});
 		ret["content"] = http::mkpath({"content", id(), *member});

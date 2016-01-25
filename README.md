@@ -99,7 +99,7 @@ The encoder can also be used as a library in other C++ programs by including the
         oss << file; // ...extract it...
         std::string article = oss.str(); // ...and convert it to a string.
     }
-    ar2.reap(); // Finish what you started, human!
+    ar2.reap(); // Clean up file descriptors opened by get().
 
 ## Creating Volumes
 
@@ -135,7 +135,7 @@ With no verbosity arguments, Wikidump will just display a continuously updating 
 
 ### Linkcheck
 
-Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` attribute is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
+Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` element is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
 
 ## Issues
 

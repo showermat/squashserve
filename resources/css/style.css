@@ -77,8 +77,6 @@ img.favicon
 
 a.item-title
 {
-	display: block;
-	margin-top: 4px;
 	color: black;
 	font-weight: bold;
 	/*text-decoration: none;*/
@@ -128,12 +126,19 @@ span.twitter-typeahead
 	display: inline !important;
 }
 
-p.tt-suggestion
+div.tt-menu
+{
+	max-height: 400px;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+p.tt-suggestion, p.tt-footer
 {
 	margin: 0px;
 }
 
-p.tt-suggestion a
+p.tt-suggestion a, p.tt-footer a
 {
 	display: block;
 	width: 100%;
@@ -145,7 +150,13 @@ p.tt-suggestion a
 	text-decoration: none;
 }
 
-p.tt-suggestion a:hover
+p.tt-footer a
+{
+	font-style: italic;
+	font-weight: bold;
+}
+
+p.tt-suggestion a:hover, p.tt-footer a:hover
 {
 	background: rgba(192, 192, 192, 0.8);
 }
