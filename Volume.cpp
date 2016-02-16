@@ -18,41 +18,20 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, index_{}, titles_{}
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
-	std::ostringstream infoss{};
-	infoss << archive_->open(util::pathjoin({metadir, "info.txt"}));
-	std::string info = infoss.str();
-	archive_->reap();
-	for (const std::string &line : util::strsplit(info, '\n'))
-	{
-		if (line.size() == 0 || line[0] == '#') continue;
-		unsigned int splitloc = line.find(":");
-		if (splitloc == line.npos) continue;
-		info_[line.substr(0, splitloc)] = line.substr(splitloc + 1);
-	}
+	info_ = archive_->gmeta();
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
-	if (archive_->isdir(util::pathjoin({metadir, "index"})))
+	// TODO Check whether there are metadata and set indexed_ appropriately -OR- remove indexed_
+	titles_ = std::unique_ptr<radix_tree<std::string, std::set<zsr::node_base::index>>>{new radix_tree<std::string, std::set<zsr::node_base::index>>{}};
+	std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
+	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir())
 	{
-		dbfname_ = "/tmp/zsridx_" + id();
-		archive_->extract(util::pathjoin({metadir, "index"}), dbfname_);
-		try
+		std::string title = util::asciilower(n.meta("title"));
+		if (title.size() == 0) continue;
+		for (std::string::size_type i = 0; i < title.size(); i++) if (i == 0 || ! alnum(title[i - 1]))
 		{
-			index_ = Xapian::Database{util::pathjoin({dbfname_, "index"})};
-			indexed_ = true;
+			(*titles_)[title.substr(i)].insert(n.index());
 		}
-		catch (Xapian::DatabaseCorruptError &e) { } // If the index is no good, we'll make do without
-	}
-	if (indexed_)
-	{
-		titles_ = std::unique_ptr<radix_tree<std::string, std::set<Xapian::docid>>>{new radix_tree<std::string, std::set<Xapian::docid>>{}};
-		std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
-		for (Xapian::ValueIterator iter = index_.valuestream_begin(1); iter != index_.valuestream_end(1); iter++)
-		{
-			std::string title_lc = util::asciilower(*iter);
-			for (std::string::size_type i = 0; i < title_lc.size(); i++) if (i == 0 || ! alnum(title_lc[i - 1]))
-			{
-				(*titles_)[title_lc.substr(i)].insert(iter.get_docid());
-			}
-		}
+		
 	}
 }
 
@@ -108,13 +87,12 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
 {
 	std::unordered_map<std::string, std::string> ret;
-	if (! indexed_) return ret;
-	std::vector<radix_tree<std::string, std::set<Xapian::docid>>::iterator> res;
+	std::vector<radix_tree<std::string, std::set<zsr::node_base::index>>::iterator> res;
 	titles_->prefix_match(util::asciilower(qstr), res);
-	for (const radix_tree<std::string, std::set<Xapian::docid>>::iterator &iter : res) for (Xapian::docid docid : iter->second)
+	for (const radix_tree<std::string, std::set<zsr::node_base::index>>::iterator &iter : res) for (zsr::node_base::index idx : iter->second)
 	{
-		Xapian::Document doc = index_.get_document(docid);
-		ret[doc.get_value(1)] = doc.get_data();
+		zsr::node n = archive_->index(idx);
+		ret[n.meta("title")] = n.path();
 	}
 	return ret;
 }

@@ -7,8 +7,6 @@
 #include <stdexcept>
 #include <set>
 #include <regex>
-#include <iostream> // TODO Debug remove
-//#include <experimental/filesystem>
 #include <xapian.h>
 #include "lib/radix_tree.hpp" // Thanks to github/ytakano
 #include "util.h"
@@ -40,13 +38,12 @@ public:
 private:
 	std::string lang_{"english"};
 	std::string id_;
-	//zsr::archive_file archive_;
 	std::unique_ptr<zsr::archive_file> archive_;
 	std::unordered_map<std::string, std::string> info_;
 	std::string dbfname_;
 	bool indexed_;
 	Xapian::Database index_;
-	std::unique_ptr<radix_tree<std::string, std::set<Xapian::docid>>> titles_;
+	std::unique_ptr<radix_tree<std::string, std::set<zsr::node_base::index>>> titles_;
 public:
 	static Volume newvol(const std::string fname) { return Volume{fname}; }
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);

@@ -12,38 +12,42 @@ namespace zsr
 		out << util::timestr() << ":  " << msg << "\n";
 	}
 
-	void node::add_child(node *n)
+	node_base::offset node_base::index_size() const
 	{
-		children_[n->name_] = std::unique_ptr<node>{n};
+		offset ret = 2 * sizeof(index) + 2 * sizeof(offset) + 2 + name_.size() + 1;
+		for (const std::string &s : mdata_) ret += 2 + std::min(static_cast<int>(s.size()), (1 << 16) - 1);
+		return ret;
 	}
 
-	node *node::get_child(const std::string &name) const
+	void node_base::add_child(node_base *n)
+	{
+		children_[n->name_] = std::unique_ptr<node_base>{n};
+	}
+
+	node_base *node_base::get_child(const std::string &name) const
 	{
 		if (! children_.count(name)) return nullptr;
 		return &*children_.at(name);
 	}
 
-	void node::write_content(std::ostream &out)
+	void node_base::write_content(std::ostream &out)
 	{
-		if (isdir()) for (std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->write_content(out);
-		else
-		{
-			std::istream stream{content()};
-			lzma::wrbuf compressor{stream};
-			start_ = out.tellp();
-			out << &compressor;
-			if (! out) throw std::runtime_error{"Bad output stream when writing archive content for file " + path()};
-			len_ = static_cast<offset>(out.tellp()) - start_;
-			log("Wrote content for node " + path() + ", start " + util::t2s(start_) + ", length " + util::t2s(len_));
-			close();
-		}
+		if (isdir()) return;
+		std::istream stream{content()};
+		lzma::wrbuf compressor{stream};
+		start_ = out.tellp();
+		out << &compressor;
+		if (! out) throw std::runtime_error{"Bad output stream when writing archive content for file " + path()};
+		len_ = static_cast<offset>(out.tellp()) - start_;
+		log("Wrote content for node " + path() + ", start " + util::t2s(start_) + ", length " + util::t2s(len_));
+		close();
 	}
 
-	void node::write_index(std::ostream &out)
+	void node_base::write_index(std::ostream &out)
 	{
 		//log("Writing index for node " + path());
 		if (! isdir() && start_ == 0) throw std::runtime_error{"Content must be written before index"};
-		out.write(reinterpret_cast<const char *>(&id_), sizeof(index));
+		//out.write(reinterpret_cast<const char *>(&id_), sizeof(index));
 		index parentid = parent_ == nullptr ? 0 : parent_->id();
 		out.write(reinterpret_cast<const char *>(&parentid), sizeof(index));
 		out.write(reinterpret_cast<const char *>(&start_), sizeof(offset));
@@ -51,17 +55,22 @@ namespace zsr
 		uint16_t namelen = name_.size();
 		out.write(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
 		out.write(reinterpret_cast<const char *>(&name_[0]), name_.size());
-		if (isdir()) for (std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->write_index(out);
+		if (! isdir()) for (const std::string &s : mdata_)
+		{
+			uint16_t datalen = s.size();
+			out.write(reinterpret_cast<const char *>(&datalen), sizeof(uint16_t));
+			out.write(reinterpret_cast<const char *>(&s[0]), s.size());
+		}
 		start_ = 0;
 	}
 
-	void node::extract(const std::string &path)
+	void node_base::extract(const std::string &path)
 	{
 		std::string fullpath = util::pathjoin({path, name()});
 		if (isdir())
 		{
 			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
-			for (std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->extract(fullpath);
+			for (std::pair<const std::string, std::unique_ptr<node_base>> &child : children_) child.second->extract(fullpath);
 		}
 		else
 		{
@@ -73,11 +82,13 @@ namespace zsr
 		}
 	}
 
-	void node::debug_treeprint(std::string prefix) const
+	void node_base::debug_treeprint(std::string prefix) const
 	{
 		std::cout << prefix << name_ << "\n";
-		for (const std::pair<const std::string, std::unique_ptr<node>> &child : children_) child.second->debug_treeprint(prefix + "    ");
+		for (const std::pair<const std::string, std::unique_ptr<node_base>> &child : children_) child.second->debug_treeprint(prefix + "    ");
 	}
+
+	node_tree::node_tree(archive_tree &container, node_base *parent, std::string path) : node_base{container.size(), parent, util::basename(path), (unsigned int) container.nodemeta().size()}, container_{container}, stream_{} { }
 
 	bool node_tree::isdir() const
 	{
@@ -99,11 +110,10 @@ namespace zsr
 		return (parent_ ? parent_->path() + util::pathsep + name() : container_.basedir());
 	}
 
-	node_file::node_file(archive_file &container, node_file *last) : node{0, nullptr, ""}, container_{container}, stream_{nullptr}
+	node_file::node_file(archive_file &container, node_file *last) : node_base{container.size(), nullptr, "", (unsigned int) container.nodemeta().size() }, container_{container}, stream_{nullptr}
 	{
 		std::istream &in = container_.in();
 		index parentid;
-		in.read(reinterpret_cast<char *>(&id_), sizeof(index));
 		in.read(reinterpret_cast<char *>(&parentid), sizeof(index));
 		in.read(reinterpret_cast<char *>(&start_), sizeof(offset));
 		in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
@@ -111,14 +121,22 @@ namespace zsr
 		in.read(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
 		name_.resize(namelen);
 		in.read(&name_[0], namelen);
-		if (! in) throw badzsr{"Premature end of file while creating node"};
-		if (parentid == 0) parent_ = nullptr;
+		if (start_ > 0) for (unsigned int i = 0; i < mdata_.size(); i++)
+		{
+			uint16_t datalen;
+			in.read(reinterpret_cast<char *>(&datalen), sizeof(uint16_t));
+			std::string s{};
+			s.resize(datalen);
+			in.read(reinterpret_cast<char *>(&s[0]), datalen);
+			mdata_[i] = s;
+		}
+		if (! in) throw badzsr{"Premature end of file while creating node_base"};
+		if (id_ == 0) parent_ = nullptr;
 		else
 		{
-			for (node_file *n = last; n != nullptr; n = dynamic_cast<node_file *>(n->parent_)) if (n->id() == parentid) parent_ = n;
-			if (parent_ == nullptr) throw badzsr{"Couldn't resolve parent ID to pointer"};
+			parent_ = container_.idx(parentid);
+			parent_->add_child(this);
 		}
-		if (parent_) parent_->add_child(this);
 	}
 
 	std::streambuf *node_file::content()
@@ -131,8 +149,23 @@ namespace zsr
 	std::string node_file::path() const
 	{
 		std::string ret{name()};
-		for (node *n = this->parent(); n != nullptr && n->parent() != nullptr; n = n->parent()) ret = n->name() + "/" + ret;
+		for (node_base *n = this->parent(); n != nullptr && n->parent() != nullptr; n = n->parent()) ret = n->name() + "/" + ret;
 		return ret;
+	}
+
+	const node_base *node::getnode() const
+	{
+		return ar->index_[idx];
+	}
+
+	std::string node::meta(const std::string &key) const
+	{
+		return getnode()->meta(ar->metaidx(key));
+	}
+
+	node::operator bool() const
+	{
+		return idx < ar->size();
 	}
 
 	const std::string archive_base::magic_number{"!ZSR"};
@@ -140,20 +173,39 @@ namespace zsr
 	void archive_base::write(std::ostream &out)
 	{
 		log("Base archive content writer starting");
-		std::string fileheader = magic_number + std::string(sizeof(node::offset), '\0');
+		std::string fileheader = magic_number + std::string(sizeof(node_base::offset), '\0');
 		out.write(fileheader.c_str(), fileheader.size());
-		root_->write_content(out);
+		uint8_t msize = archive_meta_.size();
+		out.write(reinterpret_cast<char *>(&msize), sizeof(uint8_t));
+		for (const std::pair<const std::string, std::string> &pair : archive_meta_)
+		{
+			uint16_t size = pair.first.size();
+			out.write(reinterpret_cast<const char *>(&size), sizeof(uint16_t));
+			out.write(pair.first.c_str(), size);
+			size = pair.second.size();
+			out.write(reinterpret_cast<const char *>(&size), sizeof(uint16_t));
+			out.write(pair.second.c_str(), size);
+		}
+		msize = node_meta_.size();
+		out.write(reinterpret_cast<char *>(&msize), sizeof(uint8_t));
+		for (const std::string &mkey : node_meta_)
+		{
+			uint16_t ksize = mkey.size();
+			out.write(reinterpret_cast<const char *>(&ksize), sizeof(uint16_t));
+			out.write(mkey.c_str(), mkey.size());
+		}
+		for (node_base *n : index_) n->write_content(out);
 		log("Base archive content written; index writer starting");
-		node::offset index_start = out.tellp();
-		root_->write_index(out);
+		node_base::offset index_start = out.tellp();
+		for (node_base *n : index_) n->write_index(out);
 		out.seekp(magic_number.size());
-		out.write(reinterpret_cast<char *>(&index_start), sizeof(node::offset)); // FIXME Endianness problems?
+		out.write(reinterpret_cast<char *>(&index_start), sizeof(node_base::offset)); // FIXME Endianness problems?
 		log("Archive writing finished");
 	}
 
-	node *archive_base::getnode(const std::string &path) const
+	node_base *archive_base::getnode(const std::string &path) const
 	{
-		node *n = &*root_;
+		node_base *n = &*root_;
 		if (! n) return nullptr;
 		for (std::string &item : util::strsplit(path, util::pathsep))
 		{
@@ -163,17 +215,56 @@ namespace zsr
 		return n;
 	}
 
+	unsigned int archive_base::metaidx(const std::string &key) const
+	{
+		std::vector<std::string>::const_iterator iter = std::find(node_meta_.cbegin(), node_meta_.cend(), key);
+		if (iter == node_meta_.cend()) throw std::runtime_error{"Tried to retrieve nonexistent metadata key \"" + key + "\""};
+		return iter - node_meta_.cbegin();
+	}
+
 	void archive_base::extract(const std::string &member, const std::string &dest)
 	{
 		if (! util::isdir(dest) && mkdir(dest.c_str(), 0777) < 0) throw std::runtime_error{"Couldn't access or create destination directory " + dest};
-		node *memptr = getnode(member);
+		node_base *memptr = getnode(member);
 		if (! memptr) throw std::runtime_error{"Member " + member + " does not exist in this archive"};
 		memptr->extract(dest);
 	}
 
+	void archive_base::addmeta(const std::string &key)
+	{
+		if (node_meta_.size() >= 256) throw std::runtime_error{"Tried to add too many metadata keys"}; // TODO Don't hardcode
+		std::vector<std::string>::iterator iter = std::find(node_meta_.begin(), node_meta_.end(), key);
+		if (iter != node_meta_.end()) throw std::runtime_error{"Tried to add duplicate metadata key \"" + key + "\""};
+		node_meta_.push_back(key);
+		for (node_base *n : index_) n->addmeta();
+	}
+
+	void archive_base::delmeta(const std::string &key)
+	{
+		unsigned int idx = metaidx(key);
+		node_meta_.erase(node_meta_.begin() + idx);
+		for (node_base *n : index_) n->delmeta(idx);
+	}
+
+	std::string archive_base::meta(const std::string &path, const std::string &key) const
+	{
+		node_base *n = getnode(path);
+		if (! n) throw std::runtime_error{"Tried to access metadata of nonexistent path " + path};
+		if (n->isdir()) throw std::runtime_error{"Tried to access metadata of directory " + path};
+		return n->meta(metaidx(key));
+	}
+
+	void archive_base::meta(const std::string &path, const std::string &key, const std::string &val)
+	{
+		node_base *n = getnode(path);
+		if (! n) throw std::runtime_error{"Tried to access metadata of nonexistent path " + path};
+		if (n->isdir()) throw std::runtime_error{"Tried to access metadata of directory " + path};
+		return n->meta(metaidx(key), val);
+	}
+
 	bool archive_base::check(const std::string &path) const
 	{
-		node *n = getnode(path);
+		node_base *n = getnode(path);
 		if (! n) return false;
 		if (n->isdir()) return false;
 		return true;
@@ -181,14 +272,14 @@ namespace zsr
 
 	bool archive_base::isdir(const std::string &path) const
 	{
-		node *n = getnode(path);
+		node_base *n = getnode(path);
 		if (! n) return false;
 		return true;
 	}
 
 	std::streambuf *archive_base::open(const std::string &path)
 	{
-		node *n = getnode(path);
+		node_base *n = getnode(path);
 		if (! n) throw std::runtime_error{"Tried to get content of nonexistent path " + path};
 		if (n->isdir()) throw std::runtime_error{"Tried to get content of directory " + path};
 		open_.insert(n);
@@ -197,7 +288,7 @@ namespace zsr
 	
 	void archive_base::reap()
 	{
-		for (node *n : open_) n->close();
+		for (node_base *n : open_) n->close();
 		open_.clear();
 	}
 
@@ -210,26 +301,67 @@ namespace zsr
 		std::string magic(magic_number.size(), '\0');
 		in_.read(reinterpret_cast<char *>(&magic[0]), magic_number.size());
 		if (magic != magic_number) throw badzsr{"File identifier incorrect"};
-		node::offset idxstart{};
-		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(node::offset));
+		node_base::offset idxstart{};
+		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(node_base::offset));
 		if (! in) throw badzsr{"Premature end of file in header"};
+		uint8_t nmeta;
+		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
+		for (unsigned int i = 0; i < nmeta; i++)
+		{
+			uint16_t ksize, vsize;
+			std::string k{}, v{};
+			in_.read(reinterpret_cast<char *>(&ksize), sizeof(uint16_t));
+			k.resize(ksize);
+			in_.read(reinterpret_cast<char *>(&k[0]), ksize);
+			in_.read(reinterpret_cast<char *>(&vsize), sizeof(uint16_t));
+			v.resize(vsize);
+			in_.read(reinterpret_cast<char *>(&v[0]), vsize);
+			archive_meta_[k] = v;
+		}
+		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
+		for (unsigned int i = 0; i < nmeta; i++)
+		{
+			uint16_t msize;
+			std::string mval{};
+			in_.read(reinterpret_cast<char *>(&msize), sizeof(uint16_t));
+			mval.resize(msize);
+			in_.read(reinterpret_cast<char *>(&mval[0]), msize);
+			node_meta_.push_back(mval);
+		}
 		in_.seekg(idxstart);
-		root_ = std::unique_ptr<node>{new node_file{*this, nullptr}};
+		root_ = std::unique_ptr<node_base>{new node_file{*this, nullptr}};
 		node_file *last = dynamic_cast<node_file *>(&*root_);
+		index_.push_back(last);
 		while (in_.tellg() < fsize)
 		{
-			if (in_.tellg() < 0) throw badzsr{"Invalid position in input stream"};
 			node_file *n = new node_file{*this, last};
+			index_.push_back(n);
 			last = n;
 		}
 	}
 
-	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent)
+	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen)
 	{
 		struct stat s;
 		if (stat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
-		node_tree *cur = new node_tree{next_id_++, parent, path, *this};
-		if ((s.st_mode & S_IFMT) == S_IFDIR)
+		node_tree *cur = new node_tree{*this, parent, path};
+		index_.push_back(cur);
+		if ((s.st_mode & S_IFMT) != S_IFDIR)
+		{
+			std::unordered_map<std::string, std::string> meta = metagen(path);
+			for (const std::pair<const std::string, std::string> &pair : meta)
+			{
+				std::vector<std::string>::iterator iter = std::find(node_meta_.begin(), node_meta_.end(), pair.first);
+				unsigned int idx = iter - node_meta_.begin();
+				if (iter == node_meta_.end())
+				{
+					addmeta(pair.first);
+					idx = node_meta_.size() - 1;
+				}
+				cur->meta(idx, pair.second);
+			}
+		}
+		else
 		{
 			DIR *dir = opendir(path.c_str());
 			if (! dir) return cur; // TODO How to handle inaccessible directories?
@@ -238,17 +370,18 @@ namespace zsr
 			{
 				std::string fname{file->d_name};
 				if (fname == "." || fname == "..") continue;
-				cur->add_child(recursive_add(path + util::pathsep + fname, cur));
+				cur->add_child(recursive_add(path + util::pathsep + fname, cur, metagen));
 			}
 			closedir(dir);
 		}
 		return cur;
 	}
 
-	archive_tree::archive_tree(const std::string &root) : archive_base{}, basedir_{root}
+	archive_tree::archive_tree(const std::string &root, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen) : archive_base{}, basedir_{root}
 	{
+		archive_meta_ = gmeta;
 		log("Tree archive construction starting");
-		root_ = std::unique_ptr<node>{recursive_add(root, nullptr)};
+		root_ = std::unique_ptr<node_base>{recursive_add(root, nullptr, metagen)};
 		log("Recursive add finished");
 	}
 }

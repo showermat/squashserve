@@ -148,7 +148,7 @@ http::doc complete(Volume &vol, const std::string &query)
 	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
 	if (names.size() > limit) names.resize(limit);
 	nlohmann::json ret{};
-	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + res[name]}});
+	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + "/" + res[name]}});
 	return http::doc{"text/plain", ret.dump()};
 }
 
