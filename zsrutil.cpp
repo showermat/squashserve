@@ -1,9 +1,10 @@
 #include <iostream>
+#include <iomanip>
 #include "zsr.h"
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    zsrutil c src dest\n    zsrutil x src [member]"; // TODO Improve
+	std::cerr << "Usage:\n    zsrutil c src dest\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]"; // TODO Improve
 	exit(1);
 }
 
@@ -24,6 +25,30 @@ int main(int argc, char **argv)
 		zsr::archive ar{std::ifstream{args[2]}};
 		if (args.size() < 4) ar.extract();
 		else ar.extract(args[3]);
+	}
+	else if (args[1] == "i")
+	{
+		if (args.size() < 3) help_exit();
+		zsr::archive ar{std::ifstream{args[2]}};
+		unsigned int maxwidth = 0;
+		if (args.size() > 3)
+		{
+			zsr::node n = ar.get(args[3]);
+			for (const std::string &key : ar.nodemeta()) if (key.size() > maxwidth) maxwidth = key.size();
+			for (const std::string &key : ar.nodemeta()) std::cout << std::setw(maxwidth) << key << ":  " << n.meta(key) << "\n";
+			return 0;
+		}
+		std::cout << "Archive metadata:\n";
+		for (const std::pair<const std::string, std::string> &pair : ar.gmeta()) if (pair.first.size() > maxwidth) maxwidth = pair.first.size();
+		for (const std::pair<const std::string, std::string> &pair : ar.gmeta()) std::cout << "    " << std::setw(maxwidth) << pair.first << ":  " << pair.second << "\n";
+		std::cout << "Node metadata:\n";
+		for (const std::string &key : ar.nodemeta()) std::cout << "    " << key << "\n";
+	}
+	else if (args[1] == "l")
+	{
+		if (args.size() < 3) help_exit();
+		zsr::archive ar{std::ifstream{args[2]}};
+		for (const std::pair<const std::string, zsr::index> &child : ar.get(args.size() > 3 ? args[3] : "").children()) std::cout << child.first << (ar.index(child.second).isdir() ? "/" : "") << "\n";
 	}
 	else help_exit();
 	return 0;

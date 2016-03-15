@@ -20,7 +20,7 @@ namespace http
 
 	doc redirect(const std::string &url)
 	{
-		return doc{"text/html", "<html><head><meta http-equiv=\"refresh\" content=\"0;url=" + url + "\"></head></html>"};
+		return doc{"text/html", "<html><head><meta charset=\"utf8\"><meta http-equiv=\"refresh\" content=\"0;url=" + url + "\"></head></html>"};
 	}
 
 	std::string mkpath(const std::vector<std::string> &items)

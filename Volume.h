@@ -6,8 +6,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <set>
+#include <random>
 #include <regex>
-#include <xapian.h>
 #include "lib/radix_tree.hpp" // Thanks to github/ytakano
 #include "util.h"
 #include "zsr.h"
@@ -38,22 +38,21 @@ public:
 private:
 	std::string lang_{"english"};
 	std::string id_;
-	std::unique_ptr<zsr::archive_file> archive_;
+	std::unique_ptr<zsr::archive> archive_;
 	std::unordered_map<std::string, std::string> info_;
 	std::string dbfname_;
 	bool indexed_;
-	Xapian::Database index_;
-	std::unique_ptr<radix_tree<std::string, std::set<zsr::node_base::index>>> titles_;
+	std::unique_ptr<radix_tree<std::string, std::set<zsr::index>>> titles_;
 public:
 	static Volume newvol(const std::string fname) { return Volume{fname}; }
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname);
 	Volume(const Volume &orig) = delete;
-	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, dbfname_{orig.dbfname_}, indexed_{orig.indexed_}, index_{orig.index_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
+	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, dbfname_{orig.dbfname_}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
 	const std::string &id() const { return id_; }
-	const zsr::archive_file &archive() const { return *archive_; }
-	bool check(const std::string &path) const;
+	const zsr::archive &archive() const { return *archive_; }
 	http::doc get(std::string path);
+	std::string shuffle() const;
 	bool indexed() { return indexed_; }
 	std::vector<Result> search(const std::string &qstr, int nres, int prevlen);
 	std::unordered_map<std::string, std::string> complete(const std::string &qstr);

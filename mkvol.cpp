@@ -5,7 +5,7 @@
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    mkvol src dest"; // TODO Improve
+	std::cerr << "Usage:\n    mkvol srcdir dest.zsr\n"; // TODO Improve
 	exit(1);
 }
 

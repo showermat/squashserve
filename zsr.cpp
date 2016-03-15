@@ -12,7 +12,14 @@ namespace zsr
 		out << util::timestr() << ":  " << msg << "\n";
 	}
 
-	node_base::offset node_base::index_size() const
+	node_base *node_base::follow(int depth)
+	{
+		if (! redirect_) return this;
+		if (depth > maxdepth) throw std::runtime_error{"Links exceed maximum depth"};
+		return redirect_->follow(depth + 1);
+	}
+
+	offset node_base::index_size() const
 	{
 		offset ret = 2 * sizeof(index) + 2 * sizeof(offset) + 2 + name_.size() + 1;
 		for (const std::string &s : mdata_) ret += 2 + std::min(static_cast<int>(s.size()), (1 << 16) - 1);
@@ -113,8 +120,7 @@ namespace zsr
 	node_file::node_file(archive_file &container, node_file *last) : node_base{container.size(), nullptr, "", (unsigned int) container.nodemeta().size() }, container_{container}, stream_{nullptr}
 	{
 		std::istream &in = container_.in();
-		index parentid;
-		in.read(reinterpret_cast<char *>(&parentid), sizeof(index));
+		in.read(reinterpret_cast<char *>(&parent_), sizeof(index));
 		in.read(reinterpret_cast<char *>(&start_), sizeof(offset));
 		in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
 		uint16_t namelen;
@@ -131,12 +137,25 @@ namespace zsr
 			mdata_[i] = s;
 		}
 		if (! in) throw badzsr{"Premature end of file while creating node_base"};
+	}
+
+	void node_file::resolve()
+	{
 		if (id_ == 0) parent_ = nullptr;
 		else
 		{
-			parent_ = container_.idx(parentid);
+			index parentid = reinterpret_cast<index>(parent_);
+			if (parentid > container_.size()) throw std::runtime_error{"Couldn't resolve parent ID " + util::t2s(parentid) + " to pointer"};
+			parent_ = container_.index_.at(parentid); // FIXME Requires friend-classing
 			parent_->add_child(this);
 		}
+		if (start_ == 0 && len_ != 0) // Link
+		{
+			index destid = reinterpret_cast<index>(len_);
+			if (destid > container_.size()) throw std::runtime_error{"Couldn't resolve parent ID " + util::t2s(destid) + " to pointer"};
+			redirect_ = container_.index_.at(destid);
+		}
+		else redirect_ = nullptr;
 	}
 
 	std::streambuf *node_file::content()
@@ -148,13 +167,15 @@ namespace zsr
 
 	std::string node_file::path() const
 	{
-		std::string ret{name()};
-		for (node_base *n = this->parent(); n != nullptr && n->parent() != nullptr; n = n->parent()) ret = n->name() + "/" + ret;
-		return ret;
+		if (parent() == nullptr) return "";
+		std::string ppath = parent()->path();
+		if (ppath != "") ppath += "/";
+		return ppath + name();
 	}
 
-	const node_base *node::getnode() const
+	node_base *node::getnode() const
 	{
+		if (idx > ar->size()) throw std::runtime_error("Tried to access invalid node");
 		return ar->index_[idx];
 	}
 
@@ -163,6 +184,27 @@ namespace zsr
 		return getnode()->meta(ar->metaidx(key));
 	}
 
+	void node::meta(const std::string &key, const std::string &val)
+	{
+		getnode()->meta(ar->metaidx(key), val);
+	}
+
+	std::unordered_map<std::string, index> node::children() const
+	{
+		if (! isdir()) throw std::runtime_error{"Can't list contents of non-directory"};
+		std::unordered_map<std::string, index> ret{};
+		for (const std::pair<const std::string, std::unique_ptr<node_base>> &child : getnode()->children()) ret[child.first] = child.second->id();
+		return ret;
+	}
+
+	std::streambuf *node::open()
+	{
+		if (isdir()) throw std::runtime_error{"Tried to get content of directory " + path()};
+		node_base *n = getnode();
+		ar->open_.insert(n);
+		return n->content();
+	}
+	
 	node::operator bool() const
 	{
 		return idx < ar->size();
@@ -173,7 +215,7 @@ namespace zsr
 	void archive_base::write(std::ostream &out)
 	{
 		log("Base archive content writer starting");
-		std::string fileheader = magic_number + std::string(sizeof(node_base::offset), '\0');
+		std::string fileheader = magic_number + std::string(sizeof(offset), '\0');
 		out.write(fileheader.c_str(), fileheader.size());
 		uint8_t msize = archive_meta_.size();
 		out.write(reinterpret_cast<char *>(&msize), sizeof(uint8_t));
@@ -196,21 +238,29 @@ namespace zsr
 		}
 		for (node_base *n : index_) n->write_content(out);
 		log("Base archive content written; index writer starting");
-		node_base::offset index_start = out.tellp();
+		offset index_start = out.tellp();
 		for (node_base *n : index_) n->write_index(out);
 		out.seekp(magic_number.size());
-		out.write(reinterpret_cast<char *>(&index_start), sizeof(node_base::offset)); // FIXME Endianness problems?
+		out.write(reinterpret_cast<char *>(&index_start), sizeof(offset)); // FIXME Endianness problems?
 		log("Archive writing finished");
 	}
 
-	node_base *archive_base::getnode(const std::string &path) const
+	node_base *archive_base::getnode(const std::string &path, bool except) const
 	{
 		node_base *n = &*root_;
-		if (! n) return nullptr;
+		if (! n)
+		{
+			if (except) throw std::runtime_error{"Tried to get node from empty archive"};
+			return nullptr;
+		}
 		for (std::string &item : util::strsplit(path, util::pathsep))
 		{
 			n = n->get_child(item);
-			if (! n) return nullptr;
+			if (! n)
+			{
+				if (except) throw std::runtime_error{"Tried to access nonexistent path " + path};
+				return nullptr;
+			}
 		}
 		return n;
 	}
@@ -246,22 +296,6 @@ namespace zsr
 		for (node_base *n : index_) n->delmeta(idx);
 	}
 
-	std::string archive_base::meta(const std::string &path, const std::string &key) const
-	{
-		node_base *n = getnode(path);
-		if (! n) throw std::runtime_error{"Tried to access metadata of nonexistent path " + path};
-		if (n->isdir()) throw std::runtime_error{"Tried to access metadata of directory " + path};
-		return n->meta(metaidx(key));
-	}
-
-	void archive_base::meta(const std::string &path, const std::string &key, const std::string &val)
-	{
-		node_base *n = getnode(path);
-		if (! n) throw std::runtime_error{"Tried to access metadata of nonexistent path " + path};
-		if (n->isdir()) throw std::runtime_error{"Tried to access metadata of directory " + path};
-		return n->meta(metaidx(key), val);
-	}
-
 	bool archive_base::check(const std::string &path) const
 	{
 		node_base *n = getnode(path);
@@ -270,22 +304,6 @@ namespace zsr
 		return true;
 	}
 
-	bool archive_base::isdir(const std::string &path) const
-	{
-		node_base *n = getnode(path);
-		if (! n) return false;
-		return true;
-	}
-
-	std::streambuf *archive_base::open(const std::string &path)
-	{
-		node_base *n = getnode(path);
-		if (! n) throw std::runtime_error{"Tried to get content of nonexistent path " + path};
-		if (n->isdir()) throw std::runtime_error{"Tried to get content of directory " + path};
-		open_.insert(n);
-		return n->content();
-	}
-	
 	void archive_base::reap()
 	{
 		for (node_base *n : open_) n->close();
@@ -301,8 +319,8 @@ namespace zsr
 		std::string magic(magic_number.size(), '\0');
 		in_.read(reinterpret_cast<char *>(&magic[0]), magic_number.size());
 		if (magic != magic_number) throw badzsr{"File identifier incorrect"};
-		node_base::offset idxstart{};
-		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(node_base::offset));
+		offset idxstart{};
+		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(offset));
 		if (! in) throw badzsr{"Premature end of file in header"};
 		uint8_t nmeta;
 		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
@@ -338,6 +356,7 @@ namespace zsr
 			index_.push_back(n);
 			last = n;
 		}
+		for (node_base *n : index_) dynamic_cast<node_file *>(n)->resolve();
 	}
 
 	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen)

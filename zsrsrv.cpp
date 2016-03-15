@@ -16,10 +16,7 @@
 /* TODO:
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called
  * Implement automatic ZSR file creator -- make sure it indexes before compressing
- *
- * Keep an index of all text-type titles in memory to enable the following (may be infeasible):
- * 	Skipping directly to exact (or close) matches of a search term
- * 	Jump to random page
+ * Skip directly to exact (or close) matches of a search term
  *
  * FIXME:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
@@ -78,7 +75,6 @@ std::string token_replace(const std::string &in, const std::unordered_map<std::s
 		std::string tok = util::asciilower(iter->str().substr(1));
 		ret << str.substr(lastend, iter->position() - lastend);
 		if (tokens.count(tok)) ret << tokens.at(tok);
-		else ret << iter->str();
 		lastend = iter->position() + iter->length();
 	}
 	ret << str.substr(lastend);
@@ -111,7 +107,6 @@ http::doc home(std::unordered_map<std::string, Volume> &vols)
 
 http::doc search(Volume &vol, const std::string &query)
 {
-	if (! vol.indexed()) return error("Search Failed", "This volume is not indexed, so it cannot be searched");
 	std::unordered_map<std::string, std::string> tokens = vol.tokens({});
 	tokens["query"] = query;
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "search.html"})};
@@ -132,7 +127,6 @@ http::doc search(Volume &vol, const std::string &query)
 		}
 	}
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
-	catch (Xapian::Error &e) { return error("Search Failed", e.get_msg()); }
 	buf << token_replace(sects[2], tokens);
 	ret.content(buf.str());
 	return ret;
@@ -148,6 +142,7 @@ http::doc complete(Volume &vol, const std::string &query)
 	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
 	if (names.size() > limit) names.resize(limit);
 	nlohmann::json ret{};
+	ret.push_back(std::unordered_map<std::string, std::string>{{"title", "<b>See all</b>"}, {"url", "/titles/" + vol.id() + "/" + query}});
 	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + "/" + res[name]}});
 	return http::doc{"text/plain", ret.dump()};
 }
@@ -158,11 +153,18 @@ http::doc titles(Volume &vol, const std::string &query)
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
-	buf << token_replace(sects[0], vol.tokens({}));
-	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + pair.second}}); // TODO Sort
-	buf << token_replace(sects[2], vol.tokens({}));
+	std::unordered_map<std::string, std::string> titletokens = vol.tokens({});
+	titletokens["query"] = query;
+	buf << token_replace(sects[0], titletokens);
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // TODO Sort
+	buf << token_replace(sects[2], titletokens);
 	ret.content(buf.str());
 	return ret;
+}
+
+http::doc shuffle(Volume &vol)
+{
+	return http::redirect(http::mkpath({"view", vol.id(), vol.shuffle()}));
 }
 
 http::doc view(Volume &vol, const std::string &path)
@@ -220,9 +222,9 @@ std::unordered_map<std::string, Volume> buildlist()
 			std::cout << v.id() << "\n";
 			ret.insert(std::make_pair(v.id(), std::move(v)));
 		}
-		catch (zsr::badzsr &e)
+		catch (std::exception &e)
 		{
-			std::cout << "FILE_NAME_HERE" << ": " << e.what() << "\n"; // TODO
+			std::cout << "FILE_NAME_HERE" << ": " << e.what() << "\n"; // FIXME
 		}
 	}
 	std::cout << "Done loading volumes\n";
@@ -296,7 +298,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 	try
 	{
 		if (path.size() == 0) return home(volumes);
-		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles")
+		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles" || path[0] == "shuffle")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (volumes.count(path[1]) == 0) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
@@ -304,6 +306,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 			else if (path[0] == "view") return view(volumes.at(path[1]), util::strjoin(path, '/', 2) + (querystr.size() ? ("?" + querystr) : ""));
 			else if (path[0] == "complete") return complete(volumes.at(path[1]), util::strjoin(path, '/', 2));
 			else if (path[0] == "titles") return titles(volumes.at(path[1]), util::strjoin(path, '/', 2));
+			else if (path[0] == "shuffle") return shuffle(volumes.at(path[1]));
 			else return content(volumes.at(path[1]), util::strjoin(path, '/', 2));
 		}
 		else if (path[0] == "pref") return pref();

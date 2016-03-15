@@ -2,6 +2,7 @@
 
 const std::string Volume::metadir{"_meta"};
 const std::string Volume::default_icon{"/rsrc/img/volume.svg"};
+std::default_random_engine dre{std::random_device{}()};
 
 Volume Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
 {
@@ -15,22 +16,19 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
-Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive_file{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, index_{}, titles_{}
+Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{}
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	info_ = archive_->gmeta();
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
 	// TODO Check whether there are metadata and set indexed_ appropriately -OR- remove indexed_
-	titles_ = std::unique_ptr<radix_tree<std::string, std::set<zsr::node_base::index>>>{new radix_tree<std::string, std::set<zsr::node_base::index>>{}};
+	titles_ = std::unique_ptr<radix_tree<std::string, std::set<zsr::index>>>{new radix_tree<std::string, std::set<zsr::index>>{}};
 	std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
 	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir())
 	{
 		std::string title = util::asciilower(n.meta("title"));
 		if (title.size() == 0) continue;
-		for (std::string::size_type i = 0; i < title.size(); i++) if (i == 0 || ! alnum(title[i - 1]))
-		{
-			(*titles_)[title.substr(i)].insert(n.index());
-		}
+		for (std::string::size_type i = 0; i < title.size(); i++) if (i == 0 || ! alnum(title[i - 1])) (*titles_)[title.substr(i)].insert(n.id()); // TODO Adapt this for general Unicode
 		
 	}
 }
@@ -41,24 +39,29 @@ Volume::~Volume()
 	if (indexed_ && util::isdir(dbfname_)) util::rm_recursive(dbfname_);
 }
 
-bool Volume::check(const std::string &path) const
-{
-	return archive_->check(path);
-}
-
 http::doc Volume::get(std::string path)
 {
-	if (! check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
+	if (! archive_->check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
-	contentss << archive_->open(path); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
+	contentss << archive_->get(path).open(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
 	archive_->reap();
 	return http::doc{util::mimetype(path, content), content};
 }
 
+std::string Volume::shuffle() const
+{
+	std::vector<zsr::index> files{};
+	files.reserve(archive_->size());
+	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
+	std::uniform_int_distribution<int> dist{0, static_cast<int>(files.size() - 1)};
+	return archive_->index(files[dist(dre)]).path();
+}
+
 std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen)
 {
-	if (! indexed()) throw error{"Search Failed", "This volume is not indexed, so it cannot be searched"};
+	throw error{"Search Failed", "Content search is currently not implemented"};
+	/*if (! indexed()) throw error{"Search Failed", "This volume is not indexed, so it cannot be searched"};
 	Xapian::Enquire enq{index_};
 	Xapian::QueryParser parse{};
 	parse.set_database(index_);
@@ -81,15 +84,15 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		ret.push_back(r);
 	}
 	archive_->reap();
-	return ret;
+	return ret;*/
 }
 
 std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
 {
 	std::unordered_map<std::string, std::string> ret;
-	std::vector<radix_tree<std::string, std::set<zsr::node_base::index>>::iterator> res;
+	std::vector<radix_tree<std::string, std::set<zsr::index>>::iterator> res;
 	titles_->prefix_match(util::asciilower(qstr), res);
-	for (const radix_tree<std::string, std::set<zsr::node_base::index>>::iterator &iter : res) for (zsr::node_base::index idx : iter->second)
+	for (const radix_tree<std::string, std::set<zsr::index>>::iterator &iter : res) for (zsr::index idx : iter->second)
 	{
 		zsr::node n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
@@ -106,21 +109,14 @@ std::string Volume::info(const std::string &key) const
 std::unordered_map<std::string, std::string> Volume::tokens(optional<std::string> member)
 {
 	std::unordered_map<std::string, std::string> ret = info_;
-	if (check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
+	if (archive_->check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
 	else ret["icon"] = default_icon;
-	if (member) // Add title?
+	if (member && archive_->check(*member))
 	{
-		ret["view"] = http::mkpath({"view", id(), *member});
-		ret["content"] = http::mkpath({"content", id(), *member});
-	}
-	else
-	{
-		ret["view"] = http::mkpath({"view", id()});
-		ret["content"] = http::mkpath({"content", id()});
+		ret["member"] = *member;
+		ret["title"] = archive_->get(*member).meta("title");
 	}
 	ret["search"] = "";
-	ret["prefs"] = http::mkpath({"pref", id()});
-	ret["home"] = http::mkpath({"view", id(), info("home")});
 	ret["id"] = id();
 	ret["live"] = "";
 	if (info_.count("origin") && member)
