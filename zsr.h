@@ -66,11 +66,11 @@ namespace zsr
 		std::string name() const { return name_; }
 		node_base *parent() const { return parent_; }
 		offset index_size() const;
-		//virtual offset size() const = 0;
 		void debug_treeprint(std::string prefix = "") const; // TODO Debug remove
 		virtual bool isdir() const = 0;
 		virtual std::streambuf *content() = 0;
 		virtual std::string path() const = 0;
+		virtual size_t size() const = 0;
 		const std::unordered_map<std::string, std::unique_ptr<node_base>> &children() const { return children_; }
 		void add_child(node_base *n);
 		void addmeta() { mdata_.push_back(""); }
@@ -97,6 +97,7 @@ namespace zsr
 		std::streambuf *content();
 		void close() { stream_.close(); }
 		std::string path() const;
+		virtual size_t size() const;
 	};
 
 	class node_file : public node_base
@@ -104,6 +105,7 @@ namespace zsr
 	private:
 		archive_file &container_;
 		std::unique_ptr<lzma::rdbuf> stream_;
+		size_t fullsize_;
 	public:
 		node_file(archive_file &container, node_file *last);
 		void resolve();
@@ -111,6 +113,7 @@ namespace zsr
 		std::streambuf *content();
 		void close() { stream_.reset(); }
 		std::string path() const;
+		virtual size_t size() const { return fullsize_; }
 	};
 
 	class node
@@ -128,6 +131,7 @@ namespace zsr
 		std::string meta(const std::string &key) const;
 		void meta(const std::string &key, const std::string &val);
 		std::unordered_map<std::string, index> children() const;
+		size_t size() const { return getnode()->size(); }
 		std::streambuf *open();
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
@@ -150,7 +154,7 @@ namespace zsr
 		archive_base() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
 		node_base *getnode(const std::string &path, bool except = false) const;
 		unsigned int metaidx(const std::string &key) const;
-		friend class node;
+		friend class node; // TODO Ugh
 		friend class node_file;
 	public:
 		archive_base(const archive_base &orig) = delete;
@@ -167,35 +171,42 @@ namespace zsr
 		node get(const std::string &path) { return node{this, getnode(path, true)->id()}; }
 		node index(index idx) { return node{this, idx}; }
 		void reap();
+		virtual std::istream &userdata() = 0;
 	};
 
 	class archive_tree : public archive_base
 	{
 	private:
 		std::string basedir_;
+		std::istream& userd_;
 		node_tree *recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen);
 	public:
 		std::string basedir() const { return basedir_; }
-		archive_tree(const std::string &root, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen);
+		archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen);
 		archive_tree(archive_tree &&orig) = default;
+		std::istream &userdata() { return userd_; }
 	};
 
 	class archive_file : public archive_base
 	{
 	private:
 		std::ifstream in_;
+		std::unique_ptr<util::rangebuf> userdbuf_;
+		std::istream userd_;
 	public:
 		archive_file(std::ifstream &&in);
-		archive_file(archive_file &&orig) : archive_base{std::move(orig)}, in_{std::move(orig.in_)} { orig.in_ = std::ifstream{}; }
+		archive_file(archive_file &&orig) : archive_base{std::move(orig)}, in_{std::move(orig.in_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; }
 		std::ifstream &in() { return in_; }
+		std::istream &userdata() { return userd_; }
 	};
 
 	class archive
 	{
 	private:
+		static std::ifstream default_istream_;
 		std::unique_ptr<archive_base> impl_;
 	public:
-		archive(const std::string &root, const std::unordered_map<std::string, std::string> &gmeta = {}, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen = [](const std::string &s) { return std::unordered_map<std::string, std::string>{}; }) : impl_{new archive_tree{root, gmeta, metagen}} { }
+		archive(const std::string &root, std::istream &userdata = default_istream_, const std::unordered_map<std::string, std::string> &gmeta = {}, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen = [](const std::string &s) { return std::unordered_map<std::string, std::string>{}; }) : impl_{new archive_tree{root, userdata, gmeta, metagen}} { }
 		archive(std::ifstream &&in) : impl_{new archive_file{std::move(in)}} { }
 		archive(archive &&orig) : impl_{std::move(orig.impl_)} { }
 		bool check(const std::string &path) const { return impl_->check(path); }
@@ -208,6 +219,7 @@ namespace zsr
 		void extract(const std::string &member = "", const std::string &dest = ".") { impl_->extract(member, dest); }
 		node get(const std::string &path) { return impl_->get(path); }
 		node index(index idx = 0) { return impl_->index(idx); }
+		std::istream &userdata() { return impl_->userdata(); }
 		void reap() { impl_->reap(); }
 	};
 }

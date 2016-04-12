@@ -36,7 +36,7 @@ public:
 	const static std::string metadir;
 	const static std::string default_icon;
 private:
-	std::string lang_{"english"};
+	//std::string lang_{"english"};
 	std::string id_;
 	std::unique_ptr<zsr::archive> archive_;
 	std::unordered_map<std::string, std::string> info_;

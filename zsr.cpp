@@ -6,6 +6,8 @@ namespace zsr
 
 	void logging(bool on) { logging_ = on; }
 
+	std::ifstream archive::default_istream_{};
+
 	void log(const std::string &msg, std::ostream &out)
 	{
 		if (! logging_) return;
@@ -59,6 +61,8 @@ namespace zsr
 		out.write(reinterpret_cast<const char *>(&parentid), sizeof(index));
 		out.write(reinterpret_cast<const char *>(&start_), sizeof(offset));
 		out.write(reinterpret_cast<const char *>(&len_), sizeof(offset));
+		size_t fullsize = size();
+		out.write(reinterpret_cast<const char *>(&fullsize), sizeof(size_t));
 		uint16_t namelen = name_.size();
 		out.write(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
 		out.write(reinterpret_cast<const char *>(&name_[0]), name_.size());
@@ -116,13 +120,21 @@ namespace zsr
 	{
 		return (parent_ ? parent_->path() + util::pathsep + name() : container_.basedir());
 	}
+	
+	size_t node_tree::size() const
+	{
+		struct stat statbuf;
+		if (stat(path().c_str(), &statbuf) < 0) throw std::runtime_error{"Couldn't stat file " + path()};
+		return statbuf.st_size;
+	}
 
-	node_file::node_file(archive_file &container, node_file *last) : node_base{container.size(), nullptr, "", (unsigned int) container.nodemeta().size() }, container_{container}, stream_{nullptr}
+	node_file::node_file(archive_file &container, node_file *last) : node_base{container.size(), nullptr, "", (unsigned int) container.nodemeta().size()}, container_{container}, stream_{nullptr}
 	{
 		std::istream &in = container_.in();
 		in.read(reinterpret_cast<char *>(&parent_), sizeof(index));
 		in.read(reinterpret_cast<char *>(&start_), sizeof(offset));
 		in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
+		in.read(reinterpret_cast<char *>(&fullsize_), sizeof(size_t));
 		uint16_t namelen;
 		in.read(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
 		name_.resize(namelen);
@@ -161,7 +173,7 @@ namespace zsr
 	std::streambuf *node_file::content()
 	{
 		stream_.reset(new lzma::rdbuf{});
-		stream_->init(container_.in(), start_, len_);
+		stream_->init(container_.in(), start_, len_, fullsize_);
 		return &*stream_;
 	}
 
@@ -236,6 +248,9 @@ namespace zsr
 			out.write(reinterpret_cast<const char *>(&ksize), sizeof(uint16_t));
 			out.write(mkey.c_str(), mkey.size());
 		}
+		std::streampos userdlen = util::streamsize(userdata());
+		out.write(reinterpret_cast<char *>(&userdlen), sizeof(std::streampos));
+		if (userdata()) out << userdata().rdbuf();
 		for (node_base *n : index_) n->write_content(out);
 		log("Base archive content written; index writer starting");
 		offset index_start = out.tellp();
@@ -310,7 +325,7 @@ namespace zsr
 		open_.clear();
 	}
 
-	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}
+	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}, userdbuf_{}, userd_{&*userdbuf_}
 	{
 		if (! in_) throw badzsr{"Couldn't open archive input stream"};
 		in_.seekg(0, std::ios_base::end);
@@ -324,7 +339,7 @@ namespace zsr
 		if (! in) throw badzsr{"Premature end of file in header"};
 		uint8_t nmeta;
 		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
-		for (unsigned int i = 0; i < nmeta; i++)
+		for (uint8_t i = 0; i < nmeta; i++)
 		{
 			uint16_t ksize, vsize;
 			std::string k{}, v{};
@@ -337,7 +352,7 @@ namespace zsr
 			archive_meta_[k] = v;
 		}
 		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
-		for (unsigned int i = 0; i < nmeta; i++)
+		for (uint8_t i = 0; i < nmeta; i++)
 		{
 			uint16_t msize;
 			std::string mval{};
@@ -346,6 +361,10 @@ namespace zsr
 			in_.read(reinterpret_cast<char *>(&mval[0]), msize);
 			node_meta_.push_back(mval);
 		}
+		std::streampos userdlen{};
+		in_.read(reinterpret_cast<char *>(&userdlen), sizeof(std::streampos));
+		userdbuf_.reset(new util::rangebuf{in_, in_.tellg(), userdlen});
+		userd_.rdbuf(&*userdbuf_);
 		in_.seekg(idxstart);
 		root_ = std::unique_ptr<node_base>{new node_file{*this, nullptr}};
 		node_file *last = dynamic_cast<node_file *>(&*root_);
@@ -396,7 +415,7 @@ namespace zsr
 		return cur;
 	}
 
-	archive_tree::archive_tree(const std::string &root, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen) : archive_base{}, basedir_{root}
+	archive_tree::archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen) : archive_base{}, basedir_{root}, userd_{userdata}
 	{
 		archive_meta_ = gmeta;
 		log("Tree archive construction starting");

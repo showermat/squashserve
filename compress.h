@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 #include <lzma.h>
 #include "util.h"
 
@@ -28,10 +29,11 @@ namespace lzma
 		lzma_stream lzma_;
 		std::vector<char> buf_, inbuf_;
 		lzma_action action_;
+		pos_type pos_;
 		virtual std::streamsize fill() = 0;
 		virtual std::streamsize load();
 	public:
-		buf_base() : file_{}, lzma_{}, buf_{} { }
+		buf_base() : file_{}, lzma_{}, buf_{}, inbuf_{} { }
 		buf_base(const buf_base &orig) = delete;
 		buf_base(buf_base &&orig);
 		virtual void init(std::istream &file);
@@ -56,15 +58,17 @@ namespace lzma
 	class rdbuf : public buf_base
 	{
 	private:
-		std::streampos ptr_, start_, size_;
+		std::streampos ptr_, start_, size_, decomp_;
 		std::streamsize fill();
 	public:
 		rdbuf() : buf_base{}, ptr_{}, start_{}, size_{} { };
-		rdbuf(std::istream &file, std::streampos start, std::streampos size);
+		rdbuf(std::istream &file, std::streampos start, std::streampos size, std::streampos decomp);
 		rdbuf(const rdbuf &orig) = delete;
 		rdbuf(rdbuf &&orig) : buf_base{std::move(orig)}, ptr_{orig.ptr_}, start_{orig.start_}, size_{orig.size_} { }
-		void init(std::istream &file, std::streampos start, std::streampos size);
-		void reset() { init(*file_, start_, size_); }
+		pos_type seekpos(pos_type target, std::ios_base::openmode which);
+		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
+		void init(std::istream &file, std::streampos start, std::streampos size, std::streampos decomp);
+		void reset() { init(*file_, start_, size_, decomp_); }
 	};
 }
 

@@ -293,4 +293,55 @@ namespace util
 		}
 		return ret.str();
 	}
+
+	rangebuf::rangebuf(std::istream &src, std::streampos start, std::streampos size): src_{src}, buf_(blocksize), start_{start}, size_{size}, pos_{0}
+	{
+		setg(&buf_[0], &buf_[0], &buf_[0]);
+	}
+
+	std::streamsize rangebuf::fill()
+	{
+		src_.seekg(start_ + pos_);
+		size_t readsize = std::min((std::streamoff) buf_.size(), size_ - pos_);
+		src_.read(&buf_[0], readsize);
+		setg(&buf_[0], &buf_[0], &buf_[0] + src_.gcount());
+		return src_.gcount();
+	}
+
+	std::streambuf::int_type rangebuf::underflow()
+	{
+		pos_ += egptr() - eback();
+		if (fill() == 0) return traits_type::eof();
+		return traits_type::to_int_type(*gptr());
+	}
+
+	std::streambuf::pos_type rangebuf::seekpos(pos_type target, std::ios_base::openmode which)
+	{
+		if (target < 0) target = 0;
+		if (target > size_) target = size_;
+		if (target >= pos_ && target < pos_ + egptr() - eback()) setg(eback(), eback() + target - pos_, egptr());
+		else
+		{
+			pos_ = target;
+			fill();
+		}
+		return pos_ + gptr() - eback();
+	}
+
+	std::streambuf::pos_type rangebuf::seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which)
+	{
+		if (dir == std::ios_base::beg) return seekpos(off, which);
+		if (dir == std::ios_base::end) return seekpos(size_ + off, which);
+		return seekpos(pos_ + gptr() - eback(), which);
+	}
+
+	std::streampos streamsize(std::istream &stream)
+	{
+		if (! stream) return 0;
+		std::streampos reset = stream.tellg();
+		stream.seekg(0, std::ios_base::end);
+		std::streampos ret = stream.tellg() + static_cast<std::streampos>(1);
+		stream.seekg(reset);
+		return ret;
+	}
 }

@@ -7,7 +7,10 @@
 #include <stdexcept>
 #include <chrono>
 #include <ctime>
+#include <streambuf>
+#include <algorithm>
 #include <experimental/optional>
+#include <iostream> // TODO Debug remove
 
 //#ifdef DEBUG
 //#define assert(test, msg) if (! (test)) throw std::runtime_error{msg}
@@ -98,6 +101,25 @@ namespace util
 	std::string urlencode(const std::string &str);
 
 	std::string urldecode(const std::string &str);
+
+	class rangebuf : public std::streambuf
+	{
+	private:
+		static const size_t blocksize = 32 * 1024;
+		std::istream &src_;
+		std::vector<char> buf_;
+		std::streampos start_, size_, pos_;
+		std::streamsize fill();
+	public:
+		rangebuf() = delete; //: file_{}, start_{0}, size{0};
+		rangebuf(std::istream &src, std::streampos start, std::streampos size);
+		rangebuf(const rangebuf &orig) = delete;
+		int_type underflow();
+		pos_type seekpos(pos_type target, std::ios_base::openmode which);
+		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
+	};
+
+	std::streampos streamsize(std::istream &stream);
 }
 
 #endif

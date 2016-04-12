@@ -47,7 +47,8 @@ int main(int argc, char **argv)
 {
 	std::vector<std::string> args = util::argvec(argc, argv);
 	if (args.size() < 3) help_exit();
-	zsr::archive ar{args[1], gmeta(args[1]), meta};
+	std::ifstream dummy{};
+	zsr::archive ar{args[1], dummy, gmeta(args[1]), meta};
 	std::ofstream out{args[2]};
 	ar.write(out);
 	return 0;
