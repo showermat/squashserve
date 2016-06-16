@@ -16,21 +16,12 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
-Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{}
+Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
 {
 	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	info_ = archive_->gmeta();
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
-	// TODO Check whether there are metadata and set indexed_ appropriately -OR- remove indexed_
-	titles_ = std::unique_ptr<radix_tree<std::string, std::set<zsr::index>>>{new radix_tree<std::string, std::set<zsr::index>>{}};
-	std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
-	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir())
-	{
-		std::string title = util::asciilower(n.meta("title"));
-		if (title.size() == 0) continue;
-		for (std::string::size_type i = 0; i < title.size(); i++) if (i == 0 || ! alnum(title[i - 1])) (*titles_)[title.substr(i)].insert(n.id()); // TODO Adapt this for general Unicode
-		
-	}
+	// TODO Check whether there are metadata and set indexed_ appropriately
 }
 
 Volume::~Volume()
@@ -51,7 +42,7 @@ http::doc Volume::get(std::string path)
 
 std::string Volume::shuffle() const
 {
-	std::vector<zsr::index> files{};
+	std::vector<zsr::filecount> files{};
 	files.reserve(archive_->size());
 	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
 	std::uniform_int_distribution<int> dist{0, static_cast<int>(files.size() - 1)};
@@ -67,7 +58,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 	parse.set_database(index_);
 	parse.set_stemmer(Xapian::Stem{lang_});
 	parse.set_stemming_strategy(Xapian::QueryParser::STEM_SOME);
-	enq.set_query(parse.parse_query(query));
+	enq.set_query(parse.parse_query(util::asciilower(query)));
 	Xapian::MSet matches = enq.get_mset(0, nres);
 	std::vector<Result> ret{};
 	for (Xapian::MSetIterator iter = matches.begin(); iter != matches.end(); iter++)
@@ -90,9 +81,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
 {
 	std::unordered_map<std::string, std::string> ret;
-	std::vector<radix_tree<std::string, std::set<zsr::index>>::iterator> res;
-	titles_->prefix_match(util::asciilower(qstr), res);
-	for (const radix_tree<std::string, std::set<zsr::index>>::iterator &iter : res) for (zsr::index idx : iter->second)
+	for (const zsr::filecount &idx : titles_.search(util::asciilower(qstr)))
 	{
 		zsr::node n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
@@ -106,24 +95,24 @@ std::string Volume::info(const std::string &key) const
 	return info_.at(key);
 }
 
-std::unordered_map<std::string, std::string> Volume::tokens(optional<std::string> member)
+std::unordered_map<std::string, std::string> Volume::tokens(std::string member)
 {
 	std::unordered_map<std::string, std::string> ret = info_;
 	if (archive_->check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
 	else ret["icon"] = default_icon;
-	if (member && archive_->check(*member))
+	if (member != "")
 	{
-		ret["member"] = *member;
-		ret["title"] = archive_->get(*member).meta("title");
+		ret["member"] = member;
+		if (archive_->check(member)) ret["title"] = archive_->get(member).meta("title");
 	}
 	ret["search"] = "";
 	ret["id"] = id();
 	ret["live"] = "";
-	if (info_.count("origin") && member)
+	if (info_.count("origin") && member != "")
 	{
 		std::vector<std::string> params = util::strsplit(info_.at("origin"), ';');
-		if (params.size() == 3) ret["live"] = params[0] + "/" +  std::regex_replace(*member, std::regex{params[1]}, params[2]);
-		else if (params.size() >= 1) ret["live"] = params[0] + "/" + *member;
+		if (params.size() == 3) ret["live"] = params[0] + "/" +  std::regex_replace(member, std::regex{params[1]}, params[2]);
+		else if (params.size() >= 1) ret["live"] = params[0] + "/" + member;
 	}
 	return ret;
 }

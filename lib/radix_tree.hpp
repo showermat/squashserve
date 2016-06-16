@@ -75,7 +75,7 @@ public:
 
     T& operator[] (const K &lhs);
 
-private:
+//private:
     size_type m_size;
     radix_tree_node<K, T>* m_root;
 

@@ -1,7 +1,9 @@
 #include <regex>
 #include <functional>
 #include <iostream>
+#include "util.h"
 #include "zsr.h"
+#include "search.h"
 
 void help_exit()
 {
@@ -9,22 +11,27 @@ void help_exit()
 	exit(1);
 }
 
-std::string html_title(const std::string &content, const std::string &def, const std::regex &process = std::regex{}) // TODO remove HTML entities
+std::string html_title(const std::string &content, const std::string &def, const std::regex &process = std::regex{}) // TODO Allow regex processing of title with last argument
 {
 	std::regex titlere{"<title>(.*?)</title>"};
 	std::smatch match{};
 	if (! std::regex_search(content, match, titlere)) return def;
-	std::string ret = match[1];
+	std::string ret = util::from_htmlent(match[1]);
 	if (! std::regex_search(ret, match, process)) return ret;
 	return match[1];
 }
 
-std::unordered_map<std::string, std::string> meta(const std::string &path)
+rsearch::disktree_writer searchwriter{};
+
+std::unordered_map<std::string, std::string> meta(const zsr::node &n)
 {
+	std::string path = n.path();
 	if (util::mimetype(path) != "text/html") return {};
 	std::ostringstream content{};
 	content << std::ifstream{path}.rdbuf();
-	return {{"title", html_title(content.str(), util::basename(path))}};
+	std::string title = html_title(content.str(), util::basename(path));
+	searchwriter.add(n, title);
+	return {{"title", title}};
 }
 
 std::unordered_map<std::string, std::string> gmeta(const std::string &path)
@@ -47,10 +54,11 @@ int main(int argc, char **argv)
 {
 	std::vector<std::string> args = util::argvec(argc, argv);
 	if (args.size() < 3) help_exit();
-	std::ifstream dummy{};
-	zsr::archive ar{args[1], dummy, gmeta(args[1]), meta};
+	zsr::archive ar{args[1], gmeta(args[1]), meta};
 	std::ofstream out{args[2]};
 	ar.write(out);
+	searchwriter.write(out);
+	loga("Done writing archive");
 	return 0;
 }
 

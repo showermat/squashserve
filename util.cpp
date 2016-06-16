@@ -1,17 +1,6 @@
-#include <functional>
-#include <regex>
-#include <sstream>
-#include <iomanip>
-#include <string.h>
-#include <glob.h>
-#include <ftw.h>
-#include <errno.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <magic.h>
-#include <string.h>
 #include "util.h"
 #include "mime.h"
+#include "htmlent.h"
 
 namespace util
 {
@@ -343,5 +332,42 @@ namespace util
 		std::streampos ret = stream.tellg() + static_cast<std::streampos>(1);
 		stream.seekg(reset);
 		return ret;
+	}
+
+	std::string from_htmlent(const std::string &str) // TODO Support numeric Unicode entities as well
+	{
+		std::ostringstream ret{}, curent{};
+		bool entproc = false;
+		std::string::const_iterator iter = str.cbegin();
+		while (iter != str.cend())
+		{
+			if (entproc && *iter == ';')
+			{
+				if (htmlent.count(curent.str())) ret << htmlent.at(curent.str());
+				else ret << '&' << curent.str() << ';';
+				entproc = false;
+				curent.str("");
+				curent.clear();
+			}
+			else if (entproc && *iter == '&')
+			{
+				ret << '&' << curent.str();
+				curent.str("");
+				curent.clear();
+			}
+			else if (entproc && (*iter < 65 || *iter > 122 || (*iter < 97 && *iter > 90)))
+			{
+				ret << '&' << curent.str() << *iter;
+				entproc = false;
+				curent.str("");
+				curent.clear();
+			}
+			else if (entproc) curent << *iter;
+			else if (*iter == '&') entproc = true;
+			else ret << *iter;
+			iter++;
+		}
+		if (entproc) ret << '&' << curent.str();
+		return ret.str();
 	}
 }

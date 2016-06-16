@@ -64,7 +64,7 @@ namespace lzma
 		orig.lzma_.internal = nullptr;
 	}
 
-	std::streamsize buf_base::load() try
+	std::streamsize buf_base::load()
 	{
 		lzma_.next_out = reinterpret_cast<uint8_t *>(&buf_[0]);
 		if (lzma_.total_out > 0)
@@ -73,7 +73,7 @@ namespace lzma
 			lzma_.total_out = 0;
 			lzma_ret retval = lzma_code(&lzma_, action_);
 			if (retval != LZMA_OK && retval != LZMA_STREAM_END) throw compress_error{"Compression failed with liblzma error " + util::t2s(retval)};
-			if (lzma_.total_out > 0) goto loaded; // Valid use?
+			if (lzma_.total_out > 0) goto loaded; // Valid use case?
 		}
 		lzma_.next_out = reinterpret_cast<uint8_t *>(&buf_[0]);
 		lzma_.total_out = 0;
@@ -95,7 +95,7 @@ namespace lzma
 		setg(start, start, end);
 		return lzma_.total_out;
 	}
-	catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; }
+	//catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; }
 	
 	std::streambuf::int_type buf_base::underflow()
 	{
@@ -115,8 +115,7 @@ namespace lzma
 	std::streamsize wrbuf::fill()
 	{
 		file_->read(&inbuf_[0], inbuf_.size());
-		std::streamsize insize = file_->gcount();
-		return insize;
+		return file_->gcount();
 	}
 	
 	std::streambuf::pos_type rdbuf::seekpos(pos_type target, std::ios_base::openmode which)

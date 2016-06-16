@@ -99,7 +99,7 @@ http::doc home(std::unordered_map<std::string, Volume> &vols)
 	volnames.reserve(vols.size());
 	for (const std::pair<const std::string, Volume> &vol : vols) volnames.push_back(vol.first);
 	std::sort(volnames.begin(), volnames.end());
-	for (const std::string &volname : volnames) buf << token_replace(sects[1], vols.at(volname).tokens({})); // TODO Consider hiding the search field if the volume is unindexed
+	for (const std::string &volname : volnames) buf << token_replace(sects[1], vols.at(volname).tokens()); // TODO Consider hiding the search field if the volume is unindexed
 	buf << sects[2];
 	ret.content(buf.str());
 	return ret;
@@ -107,7 +107,7 @@ http::doc home(std::unordered_map<std::string, Volume> &vols)
 
 http::doc search(Volume &vol, const std::string &query)
 {
-	std::unordered_map<std::string, std::string> tokens = vol.tokens({});
+	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "search.html"})};
 	std::vector<std::string> sects = docsplit(ret.content());
@@ -153,7 +153,7 @@ http::doc titles(Volume &vol, const std::string &query)
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
-	std::unordered_map<std::string, std::string> titletokens = vol.tokens({});
+	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
 	buf << token_replace(sects[0], titletokens);
 	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // TODO Sort
@@ -271,12 +271,12 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 	{
 		exit(0);
 	}
-	else if (verb == "debug")
+	/*else if (verb == "debug")
 	{
 		std::stringstream buf{};
 		for (const std::pair<const std::string, std::string> &arg : args) buf << arg.first << " = " << arg.second << "\n";
 		return http::doc{"text/plain", buf.str()};
-	}
+	}*/
 	else return error("Bad Request", "Unknown action “" + verb + "”");
 }
 

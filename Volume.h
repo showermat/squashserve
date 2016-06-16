@@ -8,9 +8,9 @@
 #include <set>
 #include <random>
 #include <regex>
-#include "lib/radix_tree.hpp" // Thanks to github/ytakano
 #include "util.h"
 #include "zsr.h"
+#include "search.h"
 #include "http.h"
 
 struct Result
@@ -42,7 +42,7 @@ private:
 	std::unordered_map<std::string, std::string> info_;
 	std::string dbfname_;
 	bool indexed_;
-	std::unique_ptr<radix_tree<std::string, std::set<zsr::index>>> titles_;
+	rsearch::disktree titles_;
 public:
 	static Volume newvol(const std::string fname) { return Volume{fname}; }
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
@@ -57,7 +57,7 @@ public:
 	std::vector<Result> search(const std::string &qstr, int nres, int prevlen);
 	std::unordered_map<std::string, std::string> complete(const std::string &qstr);
 	std::string info(const std::string &key) const;
-	std::unordered_map<std::string, std::string> tokens(optional<std::string> member);
+	std::unordered_map<std::string, std::string> tokens(std::string member = "");
 	virtual ~Volume();
 };
 

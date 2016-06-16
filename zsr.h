@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <set>
+#include <unordered_set>
 #include <tuple>
 #include <memory>
 #include <fstream>
@@ -20,6 +20,16 @@
 #include "util.h"
 #include "compress.h"
 
+#define VERBOSE
+
+#ifdef VERBOSE
+#define loga(msg) std::cout << "\r\033[K" << util::timestr() << ": " << msg << std::endl
+#define logb(msg) std::cout << "\r\033[K" << msg << std::flush
+#else
+#define loga(msg)
+#define logb(msg)
+#endif
+
 /* TODO
  * Support symlinks
  * Then, in Wikipedia, when an article redirects, just make it a symlink
@@ -27,18 +37,14 @@
 
 namespace zsr
 {
-	typedef uint64_t index; // Constrains the maximum number of files in an archive
+	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
 	typedef uint64_t offset; // Constrains the size of the archive
 
 	class archive_base;
 	class archive_tree;
 	class archive_file;
 
-	const int maxdepth = 256;
-
-	void logging(bool on);
-
-	void log(const std::string &msg, std::ostream &out = std::cerr);
+	const int maxdepth = 255;
 
 	class badzsr : public std::runtime_error
 	{
@@ -48,21 +54,24 @@ namespace zsr
 
 	class node_base
 	{
+	public:
+		class sethash { public: size_t operator ()(const std::unique_ptr<node_base> &x) const { return std::hash<std::string>{}(x->name_); } };
 	protected:
-		index id_;
+		filecount id_;
 		node_base *parent_;
 		std::string name_;
 		offset start_, len_;
 		node_base *redirect_;
 		std::unordered_map<std::string, std::unique_ptr<node_base>> children_;
+		//std::unordered_set<std::unique_ptr<node_base>, sethash> children_;
 		std::vector<std::string> mdata_;
-		node_base(index id, node_base *parent, const std::string &name, unsigned int nmeta) : id_{id}, parent_{parent}, name_{name}, start_{0}, len_{0}, redirect_{nullptr}, children_{}, mdata_(nmeta, "") { }
+		node_base(filecount id, node_base *parent, const std::string &name, unsigned int nmeta) : id_{id}, parent_{parent}, name_{name}, start_{0}, len_{0}, redirect_{nullptr}, children_{}, mdata_(nmeta, "") { }
 		node_base *follow(int depth = 0); // Need to follow for isdir, content, children, add_child, addmeta, delmeta, meta, setmeta, get_child, close, extract (create a link)
 		// Need to set redirect_ when creating an archive from disk
 		// When writing archive, skip metadata for links; be sure to adjust index_size appropriately
 	public:
 		node_base(const node_base &orig) = delete;
-		index id() const { return id_; }
+		filecount id() const { return id_; }
 		std::string name() const { return name_; }
 		node_base *parent() const { return parent_; }
 		offset index_size() const;
@@ -72,6 +81,7 @@ namespace zsr
 		virtual std::string path() const = 0;
 		virtual size_t size() const = 0;
 		const std::unordered_map<std::string, std::unique_ptr<node_base>> &children() const { return children_; }
+		//const std::unordered_set<std::unique_ptr<node_base>, sethash> &children() const { return children_; }
 		void add_child(node_base *n);
 		void addmeta() { mdata_.push_back(""); }
 		void delmeta(int idx) { mdata_.erase(mdata_.begin() + idx); }
@@ -84,18 +94,29 @@ namespace zsr
 		virtual void close() { }
 		void extract(const std::string &path);
 		//size_t hash() const { return static_cast<size_t>(id_); }
+		bool operator ==(const node_base &other) const { return name_ == other.name_; }
+	};
+
+	class test_node : public node_base
+	{
+	public:
+		test_node(const std::string &name) : node_base{0, nullptr, name, 0} { }
+		bool isdir() const { return false; }
+		std::streambuf *content() { return nullptr; }
+		std::string path() const { return ""; }
+		size_t size() const { return 0; }
 	};
 
 	class node_tree : public node_base
 	{
 	private:
 		archive_tree &container_;
-		std::ifstream stream_;
+		std::unique_ptr<std::ifstream> stream_;
 	public:
 		node_tree(archive_tree &container, node_base *parent, std::string path);
 		bool isdir() const;
 		std::streambuf *content();
-		void close() { stream_.close(); }
+		void close() { stream_->close(); stream_.release(); }
 		std::string path() const;
 		virtual size_t size() const;
 	};
@@ -120,17 +141,17 @@ namespace zsr
 	{
 	private:
 		archive_base *ar;
-		index idx;
+		filecount idx;
 		node_base *getnode() const;
 	public:
-		node (archive_base *a, index i) : ar{a}, idx{i} { }
-		index id() const { return idx; }
+		node (archive_base *a, filecount i) : ar{a}, idx{i} { }
+		filecount id() const { return idx; }
 		std::string name() const { return getnode()->name(); }
 		std::string path() const { return getnode()->path(); }
 		bool isdir() const { return getnode()->isdir(); }
 		std::string meta(const std::string &key) const;
 		void meta(const std::string &key, const std::string &val);
-		std::unordered_map<std::string, index> children() const;
+		std::unordered_map<std::string, filecount> children() const;
 		size_t size() const { return getnode()->size(); }
 		std::streambuf *open();
 		void operator ++(int i) { idx++; }
@@ -150,7 +171,7 @@ namespace zsr
 		std::vector<node_base *> index_;
 		std::unordered_map<std::string, std::string> archive_meta_;
 		std::vector<std::string> node_meta_;
-		std::set<node_base *> open_;
+		std::unordered_set<node_base *> open_;
 		archive_base() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
 		node_base *getnode(const std::string &path, bool except = false) const;
 		unsigned int metaidx(const std::string &key) const;
@@ -169,22 +190,25 @@ namespace zsr
 		bool check(const std::string &path) const;
 		void debug_treeprint() { root_->debug_treeprint(); }
 		node get(const std::string &path) { return node{this, getnode(path, true)->id()}; }
-		node index(index idx) { return node{this, idx}; }
+		node index(filecount idx) { return node{this, idx}; }
+		void close(const std::string &path);
 		void reap();
 		virtual std::istream &userdata() = 0;
+		virtual ~archive_base() { }
 	};
 
 	class archive_tree : public archive_base
 	{
 	private:
 		std::string basedir_;
-		std::istream& userd_;
-		node_tree *recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen);
+		std::istream &userd_;
+		node_tree *recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const node &)> metagen);
 	public:
 		std::string basedir() const { return basedir_; }
-		archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen);
+		archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const node &)> metagen);
 		archive_tree(archive_tree &&orig) = default;
 		std::istream &userdata() { return userd_; }
+		virtual ~archive_tree() { reap(); }
 	};
 
 	class archive_file : public archive_base
@@ -198,6 +222,7 @@ namespace zsr
 		archive_file(archive_file &&orig) : archive_base{std::move(orig)}, in_{std::move(orig.in_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; }
 		std::ifstream &in() { return in_; }
 		std::istream &userdata() { return userd_; }
+		virtual ~archive_file() { reap(); }
 	};
 
 	class archive
@@ -206,7 +231,7 @@ namespace zsr
 		static std::ifstream default_istream_;
 		std::unique_ptr<archive_base> impl_;
 	public:
-		archive(const std::string &root, std::istream &userdata = default_istream_, const std::unordered_map<std::string, std::string> &gmeta = {}, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen = [](const std::string &s) { return std::unordered_map<std::string, std::string>{}; }) : impl_{new archive_tree{root, userdata, gmeta, metagen}} { }
+		archive(const std::string &root, const std::unordered_map<std::string, std::string> &gmeta = {}, std::function<std::unordered_map<std::string, std::string>(const node &)> metagen = [](const node &n) { return std::unordered_map<std::string, std::string>{}; }) : impl_{new archive_tree{root, default_istream_, gmeta, metagen}} { }
 		archive(std::ifstream &&in) : impl_{new archive_file{std::move(in)}} { }
 		archive(archive &&orig) : impl_{std::move(orig.impl_)} { }
 		bool check(const std::string &path) const { return impl_->check(path); }
@@ -218,11 +243,13 @@ namespace zsr
 		void write(std::ostream &out) { impl_->write(out); }
 		void extract(const std::string &member = "", const std::string &dest = ".") { impl_->extract(member, dest); }
 		node get(const std::string &path) { return impl_->get(path); }
-		node index(index idx = 0) { return impl_->index(idx); }
+		node index(filecount idx = 0) { return impl_->index(idx); }
 		std::istream &userdata() { return impl_->userdata(); }
+		void close(const std::string &path) { impl_->close(path); }
 		void reap() { impl_->reap(); }
 	};
 }
+
 
 #endif
 

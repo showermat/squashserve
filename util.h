@@ -9,34 +9,37 @@
 #include <ctime>
 #include <streambuf>
 #include <algorithm>
-#include <experimental/optional>
+#include <functional>
+#include <regex>
+#include <sstream>
+#include <iomanip>
+#include <string.h>
+#include <glob.h>
+#include <ftw.h>
+#include <errno.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <magic.h>
+#include <string.h>
 #include <iostream> // TODO Debug remove
-
-//#ifdef DEBUG
-//#define assert(test, msg) if (! (test)) throw std::runtime_error{msg}
-//#define debug_print(msg) std::cerr << msg << "\n"
-//#else
-//#define assert(test, msg) 
-//#define debug_print(msg) 
-//#endif
-
-template <typename T> using optional = std::experimental::optional<T>;
 
 namespace util
 {
+	// String manipulation
+
 	const char pathsep = '/';
 
-	std::vector<std::string> strsplit(const std::string &str, char delim);
-
 	std::string strjoin(const std::vector<std::string> &list, char delim, unsigned int start = 0, unsigned int end = 0);
-
-	std::string pathjoin(const std::vector<std::string> &list);
 
 	std::vector<std::string> argvec(int argc, char **argv);
 
 	std::string alnumonly(const std::string &str);
 
 	std::string asciilower(std::string str);
+
+	int fast_atoi(const char *s);
+
+	int fast_atoi(const std::string &s);
 
 	template <typename T> std::string t2s(const T &t)
 	{
@@ -54,6 +57,47 @@ namespace util
 		return ret;
 	}
 
+
+	// Filesystem
+
+	std::vector<std::string> strsplit(const std::string &str, char delim);
+
+	std::string pathjoin(const std::vector<std::string> &list);
+
+	std::string basename(std::string path, char sep = '/');
+
+	std::string dirname(std::string path, char sep = '/');
+
+	void rm_recursive(const std::string &path);
+
+	std::string exepath();
+
+	bool fexists(const std::string &path);
+
+	bool isdir(const std::string &path);
+
+	std::set<std::string> ls(const std::string &dir, const std::string &test = "");
+
+	std::vector<std::string> recursive_ls(const std::string &base, const std::string &test = "");
+
+
+	// Internet
+
+	std::string ext2mime(const std::string &path);
+
+	std::string mimetype(const std::string &path, const std::string &data);
+
+	std::string mimetype(const std::string &path);
+
+	std::string urlencode(const std::string &str);
+
+	std::string urldecode(const std::string &str);
+
+	std::string from_htmlent(const std::string &str);
+
+
+	// Time
+
 	class timer
 	{
 	private:
@@ -70,37 +114,10 @@ namespace util
 		timer() : last{} { reset(); }
 	};
 
-	std::string basename(std::string path, char sep = '/');
-
-	std::string dirname(std::string path, char sep = '/');
-
-	void rm_recursive(const std::string &path);
-
-	std::string exepath();
-
 	std::string timestr(const std::string &fmt = "%c", std::time_t time = std::time(nullptr));
 
-	bool fexists(const std::string &path);
 
-	bool isdir(const std::string &path);
-
-	std::set<std::string> ls(const std::string &dir, const std::string &test = "");
-
-	std::vector<std::string> recursive_ls(const std::string &base, const std::string &test = "");
-
-	int fast_atoi(const char *s);
-
-	int fast_atoi(const std::string &s);
-
-	std::string ext2mime(const std::string &path);
-
-	std::string mimetype(const std::string &path, const std::string &data);
-
-	std::string mimetype(const std::string &path);
-
-	std::string urlencode(const std::string &str);
-
-	std::string urldecode(const std::string &str);
+	// Streams
 
 	class rangebuf : public std::streambuf
 	{

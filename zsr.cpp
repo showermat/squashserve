@@ -2,17 +2,7 @@
 
 namespace zsr
 {
-	bool logging_ = false;
-
-	void logging(bool on) { logging_ = on; }
-
 	std::ifstream archive::default_istream_{};
-
-	void log(const std::string &msg, std::ostream &out)
-	{
-		if (! logging_) return;
-		out << util::timestr() << ":  " << msg << "\n";
-	}
 
 	node_base *node_base::follow(int depth)
 	{
@@ -23,7 +13,7 @@ namespace zsr
 
 	offset node_base::index_size() const
 	{
-		offset ret = 2 * sizeof(index) + 2 * sizeof(offset) + 2 + name_.size() + 1;
+		offset ret = 2 * sizeof(filecount) + 2 * sizeof(offset) + 2 + name_.size() + 1;
 		for (const std::string &s : mdata_) ret += 2 + std::min(static_cast<int>(s.size()), (1 << 16) - 1);
 		return ret;
 	}
@@ -31,12 +21,16 @@ namespace zsr
 	void node_base::add_child(node_base *n)
 	{
 		children_[n->name_] = std::unique_ptr<node_base>{n};
+		//children_.insert(std::unique_ptr<node_base>{n});
 	}
 
 	node_base *node_base::get_child(const std::string &name) const
 	{
 		if (! children_.count(name)) return nullptr;
 		return &*children_.at(name);
+		//std::unique_ptr<node_base> testobj{new test_node{name}}; // Ew.
+		//if (! children_.count(testobj)) return nullptr;
+		//return &**children_.find(testobj);
 	}
 
 	void node_base::write_content(std::ostream &out)
@@ -48,20 +42,20 @@ namespace zsr
 		out << &compressor;
 		if (! out) throw std::runtime_error{"Bad output stream when writing archive content for file " + path()};
 		len_ = static_cast<offset>(out.tellp()) - start_;
-		log("Wrote content for node " + path() + ", start " + util::t2s(start_) + ", length " + util::t2s(len_));
+		//log("Wrote content for node " << path() << ", start " << start_ << ", length " << len_);
 		close();
 	}
 
 	void node_base::write_index(std::ostream &out)
 	{
-		//log("Writing index for node " + path());
+		//log("Writing index for node " << path());
 		if (! isdir() && start_ == 0) throw std::runtime_error{"Content must be written before index"};
-		//out.write(reinterpret_cast<const char *>(&id_), sizeof(index));
-		index parentid = parent_ == nullptr ? 0 : parent_->id();
-		out.write(reinterpret_cast<const char *>(&parentid), sizeof(index));
+		//out.write(reinterpret_cast<const char *>(&id_), sizeof(filecount));
+		filecount parentid = parent_ == nullptr ? 0 : parent_->id();
+		out.write(reinterpret_cast<const char *>(&parentid), sizeof(filecount));
 		out.write(reinterpret_cast<const char *>(&start_), sizeof(offset));
 		out.write(reinterpret_cast<const char *>(&len_), sizeof(offset));
-		size_t fullsize = size();
+		size_t fullsize = size(); // FIXME This is not portable; use an explicitly sized type
 		out.write(reinterpret_cast<const char *>(&fullsize), sizeof(size_t));
 		uint16_t namelen = name_.size();
 		out.write(reinterpret_cast<char *>(&namelen), sizeof(uint16_t));
@@ -81,7 +75,7 @@ namespace zsr
 		if (isdir())
 		{
 			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
-			for (std::pair<const std::string, std::unique_ptr<node_base>> &child : children_) child.second->extract(fullpath);
+			for (const std::pair<const std::string, std::unique_ptr<node_base>> &child : children_) child.second->extract(fullpath);
 		}
 		else
 		{
@@ -111,9 +105,10 @@ namespace zsr
 
 	std::streambuf *node_tree::content()
 	{
-		stream_.open(path());
-		if (! stream_) throw std::runtime_error{"Couldn't open " + path()};
-		return stream_.rdbuf();
+		stream_.reset(new std::ifstream{});
+		stream_->open(path());
+		if (! *stream_) throw std::runtime_error{"Couldn't open " + path()};
+		return stream_->rdbuf();
 	}
 
 	std::string node_tree::path() const
@@ -131,7 +126,7 @@ namespace zsr
 	node_file::node_file(archive_file &container, node_file *last) : node_base{container.size(), nullptr, "", (unsigned int) container.nodemeta().size()}, container_{container}, stream_{nullptr}
 	{
 		std::istream &in = container_.in();
-		in.read(reinterpret_cast<char *>(&parent_), sizeof(index));
+		in.read(reinterpret_cast<char *>(&parent_), sizeof(filecount));
 		in.read(reinterpret_cast<char *>(&start_), sizeof(offset));
 		in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
 		in.read(reinterpret_cast<char *>(&fullsize_), sizeof(size_t));
@@ -156,14 +151,14 @@ namespace zsr
 		if (id_ == 0) parent_ = nullptr;
 		else
 		{
-			index parentid = reinterpret_cast<index>(parent_);
+			filecount parentid = reinterpret_cast<filecount>(parent_);
 			if (parentid > container_.size()) throw std::runtime_error{"Couldn't resolve parent ID " + util::t2s(parentid) + " to pointer"};
 			parent_ = container_.index_.at(parentid); // FIXME Requires friend-classing
 			parent_->add_child(this);
 		}
 		if (start_ == 0 && len_ != 0) // Link
 		{
-			index destid = reinterpret_cast<index>(len_);
+			filecount destid = reinterpret_cast<filecount>(len_);
 			if (destid > container_.size()) throw std::runtime_error{"Couldn't resolve parent ID " + util::t2s(destid) + " to pointer"};
 			redirect_ = container_.index_.at(destid);
 		}
@@ -172,6 +167,7 @@ namespace zsr
 
 	std::streambuf *node_file::content()
 	{
+		if (stream_) return &*stream_;
 		stream_.reset(new lzma::rdbuf{});
 		stream_->init(container_.in(), start_, len_, fullsize_);
 		return &*stream_;
@@ -201,11 +197,11 @@ namespace zsr
 		getnode()->meta(ar->metaidx(key), val);
 	}
 
-	std::unordered_map<std::string, index> node::children() const
+	std::unordered_map<std::string, filecount> node::children() const
 	{
 		if (! isdir()) throw std::runtime_error{"Can't list contents of non-directory"};
-		std::unordered_map<std::string, index> ret{};
-		for (const std::pair<const std::string, std::unique_ptr<node_base>> &child : getnode()->children()) ret[child.first] = child.second->id();
+		std::unordered_map<std::string, filecount> ret{};
+		for (const std::pair<const std::string, std::unique_ptr<node_base>> &child : getnode()->children()) ret[child.second->name()] = child.second->id();
 		return ret;
 	}
 
@@ -226,7 +222,6 @@ namespace zsr
 
 	void archive_base::write(std::ostream &out)
 	{
-		log("Base archive content writer starting");
 		std::string fileheader = magic_number + std::string(sizeof(offset), '\0');
 		out.write(fileheader.c_str(), fileheader.size());
 		uint8_t msize = archive_meta_.size();
@@ -248,16 +243,28 @@ namespace zsr
 			out.write(reinterpret_cast<const char *>(&ksize), sizeof(uint16_t));
 			out.write(mkey.c_str(), mkey.size());
 		}
-		std::streampos userdlen = util::streamsize(userdata());
-		out.write(reinterpret_cast<char *>(&userdlen), sizeof(std::streampos));
-		if (userdata()) out << userdata().rdbuf();
-		for (node_base *n : index_) n->write_content(out);
-		log("Base archive content written; index writer starting");
+		loga("Writing archive content");
+		int nwritten = 0;
+		for (node_base *n : index_)
+		{
+			logb(++nwritten << " " << n->path());
+			n->write_content(out);
+		}
 		offset index_start = out.tellp();
-		for (node_base *n : index_) n->write_index(out);
+		filecount nfile = index_.size();
+		out.write(reinterpret_cast<char *>(&nfile), sizeof(filecount));
+		loga("Writing file index");
+		nwritten = 0;
+		for (node_base *n : index_)
+		{
+			logb(++nwritten << " " << n->path());
+			n->write_index(out);
+		}
 		out.seekp(magic_number.size());
 		out.write(reinterpret_cast<char *>(&index_start), sizeof(offset)); // FIXME Endianness problems?
-		log("Archive writing finished");
+		out.seekp(0, std::ios_base::end);
+		//if (userdata()) out << userdata().rdbuf(); // FIXME Removed from constructor for now
+		//log("Archive writing finished");
 	}
 
 	node_base *archive_base::getnode(const std::string &path, bool except) const
@@ -319,6 +326,16 @@ namespace zsr
 		return true;
 	}
 
+	void archive_base::close(const std::string &path)
+	{
+		for (std::unordered_set<node_base *>::iterator iter = open_.begin(); iter != open_.end(); ) if ((*iter)->path() == path)
+		{
+			(*iter)->close();
+			iter = open_.erase(iter);
+		}
+		else iter++;
+	}
+
 	void archive_base::reap()
 	{
 		for (node_base *n : open_) n->close();
@@ -328,8 +345,8 @@ namespace zsr
 	archive_file::archive_file(std::ifstream &&in) : in_{std::move(in)}, userdbuf_{}, userd_{&*userdbuf_}
 	{
 		if (! in_) throw badzsr{"Couldn't open archive input stream"};
-		in_.seekg(0, std::ios_base::end);
-		std::ifstream::pos_type fsize = in_.tellg();
+		//in_.seekg(0, std::ios_base::end);
+		//std::ifstream::pos_type fsize = in_.tellg();
 		in_.seekg(0);
 		std::string magic(magic_number.size(), '\0');
 		in_.read(reinterpret_cast<char *>(&magic[0]), magic_number.size());
@@ -361,32 +378,35 @@ namespace zsr
 			in_.read(reinterpret_cast<char *>(&mval[0]), msize);
 			node_meta_.push_back(mval);
 		}
-		std::streampos userdlen{};
-		in_.read(reinterpret_cast<char *>(&userdlen), sizeof(std::streampos));
-		userdbuf_.reset(new util::rangebuf{in_, in_.tellg(), userdlen});
-		userd_.rdbuf(&*userdbuf_);
 		in_.seekg(idxstart);
+		filecount nfile{};
+		in_.read(reinterpret_cast<char *>(&nfile), sizeof(filecount));
 		root_ = std::unique_ptr<node_base>{new node_file{*this, nullptr}};
 		node_file *last = dynamic_cast<node_file *>(&*root_);
 		index_.push_back(last);
-		while (in_.tellg() < fsize)
+		while (index_.size() < nfile)
 		{
 			node_file *n = new node_file{*this, last};
 			index_.push_back(n);
 			last = n;
 		}
 		for (node_base *n : index_) dynamic_cast<node_file *>(n)->resolve();
+		std::streampos userdstart = in_.tellg();
+		in_.seekg(0, std::ios_base::end);
+		userdbuf_.reset(new util::rangebuf{in_, userdstart, in_.tellg() - userdstart});
+		userd_.rdbuf(&*userdbuf_);
 	}
 
-	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen)
+	node_tree *archive_tree::recursive_add(const std::string &path, node_tree *parent, std::function<std::unordered_map<std::string, std::string>(const node &)> metagen)
 	{
 		struct stat s;
 		if (stat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
 		node_tree *cur = new node_tree{*this, parent, path};
 		index_.push_back(cur);
+		logb(index_.size() << " " << path);
 		if ((s.st_mode & S_IFMT) != S_IFDIR)
 		{
-			std::unordered_map<std::string, std::string> meta = metagen(path);
+			std::unordered_map<std::string, std::string> meta = metagen(node(this, index_.size() - 1));
 			for (const std::pair<const std::string, std::string> &pair : meta)
 			{
 				std::vector<std::string>::iterator iter = std::find(node_meta_.begin(), node_meta_.end(), pair.first);
@@ -415,12 +435,12 @@ namespace zsr
 		return cur;
 	}
 
-	archive_tree::archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const std::string &)> metagen) : archive_base{}, basedir_{root}, userd_{userdata}
+	archive_tree::archive_tree(const std::string &root, std::istream &userdata, const std::unordered_map<std::string, std::string> &gmeta, std::function<std::unordered_map<std::string, std::string>(const node &)> metagen) : archive_base{}, basedir_{root}, userd_{userdata}
 	{
 		archive_meta_ = gmeta;
-		log("Tree archive construction starting");
+		loga("Loading source tree");
 		root_ = std::unique_ptr<node_base>{recursive_add(root, nullptr, metagen)};
-		log("Recursive add finished");
+		loga(index_.size() << " files loaded");
 	}
 }
 

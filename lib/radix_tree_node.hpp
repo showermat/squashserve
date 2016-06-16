@@ -11,7 +11,7 @@ class radix_tree_node {
     typedef std::pair<const K, T> value_type;
     typedef typename std::map<K, radix_tree_node<K, T>* >::iterator it_child;
 
-private:
+		public: //private:
     radix_tree_node() : m_children(), m_parent(NULL), m_value(NULL), m_depth(0), m_is_leaf(false), m_key() { }
     radix_tree_node(const value_type &val);
     radix_tree_node(const radix_tree_node&); // delete
