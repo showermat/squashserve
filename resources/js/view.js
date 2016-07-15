@@ -12,6 +12,7 @@ $(document).ready(function() {
 		page.find("head").append('<style>body { position: relative; top: 32px; }</style>'); //('<link rel="stylesheet" href="/rsrc/client.css">');
 		document.title = page.find("title").text();
 		$(window).trigger('hashchange');
+		$("#page")[0].contentWindow.focus();
 		page.find("a").on('click', function(e) {
 			$(this).attr("href", absurl($(this).attr("href")));
 			$(this).attr("target", "_top");
