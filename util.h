@@ -68,9 +68,13 @@ namespace util
 
 	std::string dirname(std::string path, char sep = '/');
 
+	void rm(const std::string &path);
+
 	void rm_recursive(const std::string &path);
 
 	std::string exepath();
+
+	std::size_t fsize(const std::string &path);
 
 	bool fexists(const std::string &path);
 

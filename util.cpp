@@ -82,6 +82,11 @@ namespace util
 		return path.substr(0, path.rfind(sep));
 	}
 
+	void rm(const std::string &path)
+	{
+		if (unlink(path.c_str())) throw std::runtime_error{"Could not remove " + path + ": " + std::string{strerror(errno)}};
+	}
+
 	int ftw_pred_rm(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 	{
 		if (typeflag == FTW_F || typeflag == FTW_SL || typeflag == FTW_SLN) return unlink(fpath) ? errno : 0;
@@ -102,6 +107,13 @@ namespace util
 		int len = readlink("/proc/self/exe", &ret[0], ret.size());
 		ret.resize(len);
 		return ret;
+	}
+
+	std::size_t fsize(const std::string &path)
+	{
+		struct stat statbuf;
+		if (stat(path.c_str(), &statbuf) < 0) throw std::runtime_error{"Couldn't stat file " + path};
+		return static_cast<std::size_t>(statbuf.st_size);
 	}
 
 	std::string timestr(const std::string &fmt, std::time_t time)

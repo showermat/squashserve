@@ -212,19 +212,19 @@ std::unordered_map<std::string, Volume> buildlist()
 	const std::string basedir = userp.get<std::string>("basedir");
 	try { contents = util::ls(basedir, "\\.zsr$"); }
 	catch (std::runtime_error &e) { return ret; }
-	std::vector<std::future<Volume>> loadthreads{};
-	for (const std::string &fname : contents) loadthreads.push_back(std::async(std::launch::async, Volume::newvol, util::pathjoin({basedir, fname})));
-	for (std::future<Volume> &f : loadthreads)
+	std::map<std::string, std::future<Volume>> loadthreads{};
+	for (const std::string &fname : contents) loadthreads[fname] = std::async(std::launch::async, Volume::newvol, util::pathjoin({basedir, fname}));
+	for (std::pair<const std::string, std::future<Volume>> &f : loadthreads)
 	{
 		try
 		{
-			Volume v = f.get();
+			Volume v = f.second.get();
 			std::cout << v.id() << "\n";
 			ret.insert(std::make_pair(v.id(), std::move(v)));
 		}
 		catch (std::exception &e)
 		{
-			std::cout << "FILE_NAME_HERE" << ": " << e.what() << "\n"; // FIXME
+			std::cout << f.first << ": " << e.what() << "\n";
 		}
 	}
 	std::cout << "Done loading volumes\n";

@@ -52,7 +52,7 @@ namespace rsearch
 		recursive_treewrite(out, stree_.m_root, static_cast<zsr::offset>(out.tellp()));
 	}
 
-	void disktree_writer::add(const zsr::node &n, const std::string &title)
+	void disktree_writer::add(const zsr::writer::filenode &n, const std::string &title)
 	{
 		std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
 		std::function<bool(char)> space = [](char c) { return c == ' ' || c == '\t' || c == '\n'; };
@@ -61,13 +61,12 @@ namespace rsearch
 		for (std::string::size_type i = 0; i < lctitle.size(); i++)
 			if (i == 0 || ((! alnum(lctitle[i - 1]) && alnum(lctitle[i])) || (space(lctitle[i - 1]) && ! space(lctitle[i]))))
 				stree_[lctitle.substr(i)].insert(n.id()); // TODO Adapt this for general Unicode
-	
 	}
 
-	void disktree_writer::build(zsr::archive &ar)
-	{
-		for (zsr::node n = ar.index(); n; n++) if (! n.isdir()) add(n, n.meta("title"));
-	}
+	//void disktree_writer::build(zsr::archive &ar)
+	//{
+		//for (zsr::iterator n = ar.index(); n; n++) if (! n.isdir()) add(n, n.meta("title"));
+	//}
 
 	std::unordered_map<std::string, zsr::offset> disktree::children()
 	{

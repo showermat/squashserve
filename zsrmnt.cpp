@@ -84,7 +84,7 @@ int fs_getattr(const char *path, struct stat *stat)
 	if (std::string{path} == "/") {  }
 	try
 	{
-		zsr::node n{ar->get(std::string{path})};
+		zsr::iterator n = ar->get(std::string{path});
 		stat->st_mode = (n.isdir() ? S_IFDIR : S_IFREG) | 00750;
 		if (! n.isdir()) stat->st_size = n.size();
 	}

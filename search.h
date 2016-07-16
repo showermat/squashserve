@@ -17,8 +17,8 @@ namespace rsearch
 		radix_tree<std::string, std::set<zsr::filecount>> stree_;
 	public:
 		disktree_writer() : stree_{} { }
-		void add(const zsr::node &n, const std::string &title);
-		void build(zsr::archive &ar);
+		void add(const zsr::writer::filenode &n, const std::string &title);
+		//void build(zsr::archive &ar);
 		void write(std::ostream &out);
 	};
 

@@ -4,7 +4,7 @@
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    zsrutil c src dest\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]"; // TODO Improve
+	std::cerr << "Usage:\n    zsrutil c src dest.zsr\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]"; // TODO Improve
 	exit(1);
 }
 
@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 	if (args[1] == "c")
 	{
 		if (args.size() < 4) help_exit();
-		zsr::archive ar{args[2]};
+		zsr::writer ar{args[2]};
 		std::ofstream out{args[3]};
 		ar.write(out);
 	}
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 		unsigned int maxwidth = 0;
 		if (args.size() > 3)
 		{
-			zsr::node n = ar.get(args[3]);
+			zsr::iterator n = ar.get(args[3]);
 			for (const std::string &key : ar.nodemeta()) if (key.size() > maxwidth) maxwidth = key.size();
 			for (const std::string &key : ar.nodemeta()) std::cout << std::setw(maxwidth) << key << ":  " << n.meta(key) << "\n";
 			return 0;

@@ -44,7 +44,7 @@ std::string Volume::shuffle() const
 {
 	std::vector<zsr::filecount> files{};
 	files.reserve(archive_->size());
-	for (zsr::node n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
+	for (zsr::iterator n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
 	std::uniform_int_distribution<int> dist{0, static_cast<int>(files.size() - 1)};
 	return archive_->index(files[dist(dre)]).path();
 }
@@ -83,7 +83,7 @@ std::unordered_map<std::string, std::string> Volume::complete(const std::string 
 	std::unordered_map<std::string, std::string> ret;
 	for (const zsr::filecount &idx : titles_.search(util::asciilower(qstr)))
 	{
-		zsr::node n = archive_->index(idx);
+		zsr::iterator n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
 	}
 	return ret;

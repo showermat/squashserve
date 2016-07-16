@@ -1,6 +1,7 @@
 #include <regex>
 #include <functional>
 #include <iostream>
+#include <vector>
 #include "util.h"
 #include "zsr.h"
 #include "search.h"
@@ -23,15 +24,15 @@ std::string html_title(const std::string &content, const std::string &def, const
 
 rsearch::disktree_writer searchwriter{};
 
-std::unordered_map<std::string, std::string> meta(const zsr::node &n)
+std::vector<std::string> meta(const zsr::writer::filenode &n)
 {
 	std::string path = n.path();
-	if (util::mimetype(path) != "text/html") return {};
+	if (util::mimetype(path) != "text/html") return {""};
 	std::ostringstream content{};
 	content << std::ifstream{path}.rdbuf();
 	std::string title = html_title(content.str(), util::basename(path));
 	searchwriter.add(n, title);
-	return {{"title", title}};
+	return {title};
 }
 
 std::unordered_map<std::string, std::string> gmeta(const std::string &path)
@@ -54,11 +55,19 @@ int main(int argc, char **argv)
 {
 	std::vector<std::string> args = util::argvec(argc, argv);
 	if (args.size() < 3) help_exit();
-	zsr::archive ar{args[1], gmeta(args[1]), meta};
 	std::ofstream out{args[2]};
-	ar.write(out);
-	searchwriter.write(out);
-	loga("Done writing archive");
+	zsr::writer archwriter{args[1]};
+	archwriter.volume_meta(gmeta(args[1]));
+	archwriter.node_meta({"title"}, meta);
+	archwriter.write_header();
+	archwriter.write_body();
+	std::string searchtmpf{"search.zsr.tmp"};
+	std::ofstream searchout{searchtmpf};
+	searchwriter.write(searchout);
+	std::ifstream searchin{searchtmpf};
+	archwriter.userdata(searchin);
+	archwriter.combine(out);
+	util::rm(searchtmpf);
 	return 0;
 }
 
