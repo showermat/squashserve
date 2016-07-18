@@ -31,7 +31,7 @@ std::vector<std::string> meta(const zsr::writer::filenode &n)
 	std::ostringstream content{};
 	content << std::ifstream{path}.rdbuf();
 	std::string title = html_title(content.str(), util::basename(path));
-	searchwriter.add(n, title);
+	searchwriter.add(title, n.id());
 	return {title};
 }
 
@@ -64,6 +64,7 @@ int main(int argc, char **argv)
 	std::string searchtmpf{"search.zsr.tmp"};
 	std::ofstream searchout{searchtmpf};
 	searchwriter.write(searchout);
+	searchout.close();
 	std::ifstream searchin{searchtmpf};
 	archwriter.userdata(searchin);
 	archwriter.combine(out);

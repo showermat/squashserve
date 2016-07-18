@@ -4,13 +4,28 @@ namespace rsearch
 {
 	const zsr::offset ptrfill{0};
 
-	void treeprint(radix_tree_node<std::string, std::set<zsr::filecount>> *n, std::string prefix = "") // Debug
+	void debug_treeprint(radix_tree_node<std::string, std::set<zsr::filecount>> *n, std::string prefix = "") // Debug
 	{
 		if (! n) return;
 		std::cout << prefix << n->m_key << " -> ";
 		if (n->m_children.count("") && n->m_children[""]->m_value) for (const zsr::filecount &i : n->m_children[""]->m_value->second) std::cout << i << " ";
 		std::cout << "\n";
-		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children) if (child.first != "") treeprint(child.second, prefix + "  ");
+		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children) if (child.first != "") debug_treeprint(child.second, prefix + "  ");
+	}
+
+	void disktree::debug_print(zsr::offset off, std::string prefix) // Debug
+	{
+		if (! in_) throw std::runtime_error{"Bad stream"};
+		in_.seekg(off);
+		const std::unordered_map<std::string, zsr::offset> curchild = children();
+		const std::set<zsr::filecount> myval = values();
+		for (const zsr::filecount &val : myval) std::cout << val << " ";
+		std::cout << "\n";
+		for (const std::pair<const std::string, zsr::offset> &child : curchild)
+		{
+			std::cout << prefix << child.first << " -> ";
+			debug_print(child.second, prefix + "  ");
+		}
 	}
 
 	void recursive_treewrite(std::ostream &out, radix_tree_node<std::string, std::set<zsr::filecount>> *n, zsr::offset treestart)
@@ -33,7 +48,8 @@ namespace rsearch
 			out.write(reinterpret_cast<const char *>(&ptrfill), sizeof(zsr::offset));
 		}
 		out.write(reinterpret_cast<const char *>(&nval), sizeof(treesize));
-		if (n->m_children.count("") && n->m_children[""]->m_value) for (const zsr::filecount &i : n->m_children[""]->m_value->second) out.write(reinterpret_cast<const char *>(&i), sizeof(zsr::filecount));
+		if (n->m_children.count("") && n->m_children[""]->m_value)
+			for (const zsr::filecount &i : n->m_children[""]->m_value->second) out.write(reinterpret_cast<const char *>(&i), sizeof(zsr::filecount));
 		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
@@ -52,7 +68,7 @@ namespace rsearch
 		recursive_treewrite(out, stree_.m_root, static_cast<zsr::offset>(out.tellp()));
 	}
 
-	void disktree_writer::add(const zsr::writer::filenode &n, const std::string &title)
+	void disktree_writer::add(const std::string &title, zsr::filecount id)
 	{
 		std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
 		std::function<bool(char)> space = [](char c) { return c == ' ' || c == '\t' || c == '\n'; };
@@ -60,7 +76,7 @@ namespace rsearch
 		std::string lctitle = util::asciilower(title); // TODO Generalize to Unicode
 		for (std::string::size_type i = 0; i < lctitle.size(); i++)
 			if (i == 0 || ((! alnum(lctitle[i - 1]) && alnum(lctitle[i])) || (space(lctitle[i - 1]) && ! space(lctitle[i]))))
-				stree_[lctitle.substr(i)].insert(n.id()); // TODO Adapt this for general Unicode
+				stree_[lctitle.substr(i)].insert(id); // TODO Adapt this for general Unicode
 	}
 
 	//void disktree_writer::build(zsr::archive &ar)
@@ -105,13 +121,15 @@ namespace rsearch
 	{
 		std::set<zsr::filecount> ret{};
 		in_.seekg(nodepos);
+		if (! in_) throw std::runtime_error{"Tried to seek outside of file"};
 		const std::unordered_map<std::string, zsr::offset> curchild = children();
 		const std::set<zsr::filecount> myval = values();
 		ret.insert(myval.cbegin(), myval.cend());
 		for (const std::pair<const std::string, zsr::offset> &child : curchild)
 		{
+			if (child.second == nodepos) throw std::runtime_error{"Loop detected in search tree"};
+			//std::cerr << "  Child " << child.second << "\n";
 			const std::set<zsr::filecount> curval = subtree_closure(child.second);
-			//std::cerr << "  Child " << child.second << " with " << curval.size() << " values\n";
 			ret.insert(curval.cbegin(), curval.cend());
 		}
 		return ret;

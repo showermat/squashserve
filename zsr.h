@@ -91,75 +91,70 @@ namespace zsr
 		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
 		//class sethash { public: size_t operator ()(const std::unique_ptr<node> &x) const { return std::hash<std::string>{}(x->name_); } };
 	private:
-		filecount id_;
 		ntype type_;
-		node *parent_;
-		std::string name_;
+		filecount parent_, redirect_;
+		offset name_;
 		offset start_, len_;
-		node *redirect_;
-		std::unordered_map<std::string, std::unique_ptr<node>> children_;
-		//std::unordered_set<std::unique_ptr<node_base>, sethash> children_;
-		std::vector<std::string> mdata_;
+		std::unordered_map<std::string, filecount> children_;
+		std::vector<offset> mdata_;
 		archive &container_;
 		std::unique_ptr<lzma::rdbuf> stream_;
 		size_t fullsize_;
-		node *follow(int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, get_child, close, extract (create a link)
+		const node &getnode(filecount idx) const;
+		node &getnode(filecount idx) { return const_cast<node &>(static_cast<const node &>(*this).getnode(idx)); }
+		const node &follow(int depth = 0) const;
+		// Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 		// Need to set redirect_ when creating an archive from disk
-		// When writing archive, skip metadata for links; be sure to adjust index_size appropriately
-		node(archive &container, node *last);
+		node &follow(int depth = 0) { return const_cast<node &>(static_cast<const node &>(*this).follow(depth)); }
 		friend class archive; // TODO
 	public:
+		node(archive &container);
 		node(const node &orig) = delete;
-		filecount id() const { return id_; }
-		std::string name() const { return name_; }
-		node *parent() const { return parent_; }
-		offset index_size() const;
-		void debug_treeprint(std::string prefix = "") const; // TODO Debug remove
+		node(node &&orig) : type_{orig.type_}, parent_{orig.parent_}, redirect_{orig.redirect_}, name_{orig.name_}, start_{orig.start_}, len_{orig.len_}, children_{std::move(orig.children_)}, mdata_{std::move(orig.mdata_)}, container_{orig.container_}, stream_{std::move(orig.stream_)}, fullsize_{orig.fullsize_} { }
+		filecount id() const;
+		std::string name();
+		const node *parent() const;
+		node *parent() { return const_cast<node *>(static_cast<const node &>(*this).parent()); }
+		void debug_treeprint(std::string prefix = ""); // TODO Debug remove
 		bool isdir() const { return type_ == ntype::dir; }
 		bool isreg() const { return type_ == ntype::reg; }
 		ntype type() const { return type_; }
 		std::streambuf *content();
-		std::string path() const;
+		std::string path();
 		size_t size() const { return fullsize_; }
-		const std::unordered_map<std::string, std::unique_ptr<node>> &children() const { return children_; }
-		//const std::unordered_set<std::unique_ptr<node>, sethash> &children() const { return children_; }
-		void addchild(node *n);
-		void addmeta() { mdata_.push_back(""); }
-		void delmeta(int idx) { mdata_.erase(mdata_.begin() + idx); }
-		std::string meta(unsigned int key) const { return mdata_.at(key); }
-		void meta(unsigned int key, const std::string &val) { mdata_.at(key) = val; }
-		void setmeta(const std::vector<std::string> &mdata) { mdata_ = mdata; }
-		node *get_child(const std::string &name) const;
-		//void write_content(std::ostream &out);
-		//void write_index(std::ostream &out);
+		const std::unordered_map<std::string, filecount> children() const { return children_; }
+		void addchild(node &n);
+		std::string meta(uint8_t key);
+		const node *getchild(const std::string &name) const;
+		node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
 		void close() { stream_.reset(); }
 		void extract(const std::string &path);
 		void resolve();
-		//size_t hash() const { return static_cast<size_t>(id_); }
-		bool operator ==(const node &other) const { return name_ == other.name_; }
+		//size_t hash() const { return static_cast<size_t>(id()); }
+		bool operator ==(node &other) { return name() == other.name(); }
 	};
 
 	class iterator
 	{
 	private:
-		archive *ar;
+		archive &ar;
 		filecount idx;
-		node *getnode() const;
+		node &getnode() const;
 	public:
-		iterator(archive *a, filecount i) : ar{a}, idx{i} { }
+		iterator(archive &a, filecount i) : ar{a}, idx{i} { }
 		filecount id() const { return idx; }
-		std::string name() const { return getnode()->name(); }
-		std::string path() const { return getnode()->path(); }
-		bool isdir() const { return getnode()->isdir(); }
+		std::string name() const { return getnode().name(); }
+		std::string path() const { return getnode().path(); }
+		bool isdir() const { return getnode().isdir(); }
 		std::string meta(const std::string &key) const;
 		std::unordered_map<std::string, filecount> children() const;
-		size_t size() const { return getnode()->size(); }
+		size_t size() const { return getnode().size(); }
 		std::streambuf *open();
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
 		void operator +=(int i) { idx += i; }
 		void operator -=(int i) { idx -= i; }
-		bool operator ==(const iterator &other) const { return ar == other.ar && idx == other.idx; }
+		bool operator ==(const iterator &other) const { return &ar == &other.ar && idx == other.idx; }
 		operator bool() const;
 	};
 
@@ -170,8 +165,7 @@ namespace zsr
 	private:
 		static std::ifstream default_istream_;
 		std::ifstream in_;
-		std::unique_ptr<node> root_;
-		std::vector<node *> index_;
+		std::vector<node> index_;
 		offset datastart_;
 		std::unordered_map<std::string, std::string> archive_meta_;
 		std::vector<std::string> node_meta_;
@@ -179,23 +173,24 @@ namespace zsr
 		std::unique_ptr<util::rangebuf> userdbuf_;
 		std::istream userd_;
 		//archive() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
-		node *getnode(const std::string &path, bool except = false) const;
+		node *getnode(const std::string &path, bool except = false);
+		std::string readstring(offset start);
 		unsigned int metaidx(const std::string &key) const;
 		friend class node; // TODO Ugh
 		friend class iterator;
 	public:
 		archive(const archive &orig) = delete;
-		archive(archive &&orig) : in_{std::move(orig.in_)}, root_{std::move(orig.root_)}, index_{std::move(orig.index_)}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.root_ = nullptr; orig.in_ = std::ifstream{}; }
+		archive(archive &&orig) : in_{std::move(orig.in_)}, index_{std::move(orig.index_)}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
 		archive(std::ifstream &&in);
 		filecount size() const { return index_.size(); }
 		std::unordered_map<std::string, std::string> &gmeta() { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
 		//void addmeta(const std::string &key);
 		//void delmeta(const std::string &key);
-		bool check(const std::string &path) const;
-		void debug_treeprint() { root_->debug_treeprint(); }
-		iterator get(const std::string &path) { return iterator{this, getnode(path, true)->id()}; }
-		iterator index(filecount idx = 0) { return iterator{this, idx}; }
+		bool check(const std::string &path);
+		void debug_treeprint() { index_[0].debug_treeprint(); }
+		iterator get(const std::string &path) { return iterator{*this, getnode(path, true)->id()}; }
+		iterator index(filecount idx = 0) { return iterator{*this, idx}; }
 		void extract(const std::string &member = "", const std::string &dest = ".");
 		std::ifstream &in() { return in_; }
 		std::istream &userdata() { return userd_; }
