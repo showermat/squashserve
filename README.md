@@ -89,6 +89,8 @@ The ZSR format is fairly simple.  It consists of:
 
   - Index: an index entry for each file, consisting of:
 
+      - The eight-byte offset to the end of this node (beginning of the next node for each node but the last) in the file, creating an on-disk linked list of nodes
+
       - The eight-byte ID of this entry's parent, or 0 for the root (index IDs are assigned in the order entries are stored in the index, starting with 0 for the root)
 
       - The one-byte type of the file: 1 for directory, 2 for regular file, 3 for symbolic link

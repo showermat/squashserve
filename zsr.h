@@ -73,7 +73,8 @@ namespace zsr
 		std::istream *userdata_;
 		std::string headf_, contf_, idxf_;
 		filecount nfile_;
-		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
+		void writestring(const std::string &s, std::ostream &out);
+		void recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
 		writer(const std::string &root) : root_{root}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr} { }
 		void userdata(std::istream &data) { userdata_ = &data; }
@@ -91,43 +92,51 @@ namespace zsr
 		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
 		//class sethash { public: size_t operator ()(const std::unique_ptr<node> &x) const { return std::hash<std::string>{}(x->name_); } };
 	private:
-		ntype type_;
-		filecount parent_, redirect_;
-		offset name_;
-		offset start_, len_;
-		std::unordered_map<std::string, filecount> children_;
-		std::vector<offset> mdata_;
+		class nodeinfo
+		{
+		private:
+			std::istream &in_;
+			offset metastart_;
+			uint8_t nmeta_;
+			std::string readstring();
+		public:
+			ntype type;
+			offset parent, redirect;
+			std::string name;
+			offset start, len;
+			size_t fullsize;
+			nodeinfo(std::istream &in, uint8_t nmeta);
+			std::vector<std::string> meta();
+		};
+		offset start_;
+		std::unique_ptr<std::unordered_map<std::string, filecount>> children_;
 		archive &container_;
-		std::unique_ptr<lzma::rdbuf> stream_;
-		size_t fullsize_;
+		nodeinfo readinfo();
 		const node &getnode(filecount idx) const;
 		node &getnode(filecount idx) { return const_cast<node &>(static_cast<const node &>(*this).getnode(idx)); }
-		const node &follow(int depth = 0) const;
+		node &follow(int depth = 0);
 		// Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 		// Need to set redirect_ when creating an archive from disk
-		node &follow(int depth = 0) { return const_cast<node &>(static_cast<const node &>(*this).follow(depth)); }
 		friend class archive; // TODO
 	public:
 		node(archive &container);
 		node(const node &orig) = delete;
-		node(node &&orig) : type_{orig.type_}, parent_{orig.parent_}, redirect_{orig.redirect_}, name_{orig.name_}, start_{orig.start_}, len_{orig.len_}, children_{std::move(orig.children_)}, mdata_{std::move(orig.mdata_)}, container_{orig.container_}, stream_{std::move(orig.stream_)}, fullsize_{orig.fullsize_} { }
+		node(node &&orig) : start_{orig.start_}, children_{std::move(orig.children_)}, container_{orig.container_} { }
 		filecount id() const;
-		std::string name();
-		const node *parent() const;
-		node *parent() { return const_cast<node *>(static_cast<const node &>(*this).parent()); }
+		std::string name() { return readinfo().name; }
+		node *parent() { if (id() == 0) return nullptr; return &getnode(readinfo().parent); }
 		void debug_treeprint(std::string prefix = ""); // TODO Debug remove
-		bool isdir() const { return type_ == ntype::dir; }
-		bool isreg() const { return type_ == ntype::reg; }
-		ntype type() const { return type_; }
+		bool isdir() { return static_cast<bool>(children_); }
+		bool isreg() { return ! children_; }
+		ntype type() { return readinfo().type; }
 		std::streambuf *content();
 		std::string path();
-		size_t size() const { return fullsize_; }
-		const std::unordered_map<std::string, filecount> children() const { return children_; }
-		void addchild(node &n);
-		std::string meta(uint8_t key);
+		size_t size() { return readinfo().fullsize; }
+		const std::unordered_map<std::string, filecount> &children() const { if (! children_) throw std::runtime_error{"Tried to get child list of non-directory"}; return *children_; }
+		std::string meta(uint8_t key) { return readinfo().meta()[key]; }
 		const node *getchild(const std::string &name) const;
 		node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
-		void close() { stream_.reset(); }
+		void close();
 		void extract(const std::string &path);
 		void resolve();
 		//size_t hash() const { return static_cast<size_t>(id()); }
@@ -150,6 +159,7 @@ namespace zsr
 		std::unordered_map<std::string, filecount> children() const;
 		size_t size() const { return getnode().size(); }
 		std::streambuf *open();
+		void close() { getnode().close(); }
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
 		void operator +=(int i) { idx += i; }
@@ -169,12 +179,11 @@ namespace zsr
 		offset datastart_;
 		std::unordered_map<std::string, std::string> archive_meta_;
 		std::vector<std::string> node_meta_;
-		std::unordered_set<node *> open_;
+		std::unordered_map<filecount, lzma::rdbuf> open_;
 		std::unique_ptr<util::rangebuf> userdbuf_;
 		std::istream userd_;
 		//archive() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
 		node *getnode(const std::string &path, bool except = false);
-		std::string readstring(offset start);
 		unsigned int metaidx(const std::string &key) const;
 		friend class node; // TODO Ugh
 		friend class iterator;
@@ -185,8 +194,6 @@ namespace zsr
 		filecount size() const { return index_.size(); }
 		std::unordered_map<std::string, std::string> &gmeta() { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
-		//void addmeta(const std::string &key);
-		//void delmeta(const std::string &key);
 		bool check(const std::string &path);
 		void debug_treeprint() { index_[0].debug_treeprint(); }
 		iterator get(const std::string &path) { return iterator{*this, getnode(path, true)->id()}; }
@@ -194,24 +201,10 @@ namespace zsr
 		void extract(const std::string &member = "", const std::string &dest = ".");
 		std::ifstream &in() { return in_; }
 		std::istream &userdata() { return userd_; }
-		void close(const std::string &path);
-		void reap();
+		void close(const std::string &path) { getnode(path, true)->close(); }
+		void reap() { open_.clear(); }
 		virtual ~archive() { reap(); }
 	};
-
-	//class node_tree : public node_base
-	//{
-	//private:
-		//archive_tree &container_;
-		//std::unique_ptr<std::ifstream> stream_;
-	//public:
-		//node_tree(archive_tree &container, node_base *parent, std::string path);
-		//bool isdir() const;
-		//std::streambuf *content();
-		//void close() { stream_->close(); stream_.release(); }
-		//std::string path() const;
-		//virtual size_t size() const;
-	//};
 }
 
 #endif

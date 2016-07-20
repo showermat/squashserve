@@ -327,7 +327,6 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 
 int main(int argc, char **argv)
 {
-	//std::ios_base::sync_with_stdio(false);
 	prefsetup(userp);
 	volumes = buildlist();
 	http::server{userp.get<int>("port"), urlhandle}.serve();

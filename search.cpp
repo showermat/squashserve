@@ -43,7 +43,7 @@ namespace rsearch
 			if (child.first == "" || ! child.second) continue;
 			treesize namelen = child.first.size();
 			out.write(reinterpret_cast<const char *>(&namelen), sizeof(treesize));
-			out.write(child.first.c_str(), namelen);
+			out.write(&child.first[0], namelen);
 			childpos.push_back(static_cast<zsr::offset>(out.tellp()));
 			out.write(reinterpret_cast<const char *>(&ptrfill), sizeof(zsr::offset));
 		}
