@@ -70,13 +70,15 @@ namespace rsearch
 
 	void disktree_writer::add(const std::string &title, zsr::filecount id)
 	{
-		std::function<bool(char)> alnum = [](char c) { return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122); };
-		std::function<bool(char)> space = [](char c) { return c == ' ' || c == '\t' || c == '\n'; };
 		if (title.size() == 0) return;
-		std::string lctitle = util::asciilower(title); // TODO Generalize to Unicode
-		for (std::string::size_type i = 0; i < lctitle.size(); i++)
-			if (i == 0 || ((! alnum(lctitle[i - 1]) && alnum(lctitle[i])) || (space(lctitle[i - 1]) && ! space(lctitle[i]))))
-				stree_[lctitle.substr(i)].insert(id); // TODO Adapt this for general Unicode
+		std::locale loc{util::ucslocale};
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convert{};
+		std::basic_ostringstream<wchar_t> ss{};
+		for (const wchar_t &c : convert.from_bytes(title)) ss << std::tolower(c, loc);
+		std::wstring lctitle = ss.str();
+		for (std::wstring::size_type i = 0; i < lctitle.size(); i++)
+			if (i == 0 || (std::isspace(lctitle[i - 1], loc) && ! std::isspace(lctitle[i], loc)) || (! std::isalnum(lctitle[i - 1], loc) && std::isalnum(lctitle[i], loc)))
+				stree_[convert.to_bytes(lctitle.substr(i))].insert(id);
 	}
 
 	//void disktree_writer::build(zsr::archive &ar)

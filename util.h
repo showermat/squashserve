@@ -13,6 +13,8 @@
 #include <regex>
 #include <sstream>
 #include <iomanip>
+#include <locale>
+#include <codecvt>
 #include <string.h>
 #include <glob.h>
 #include <ftw.h>
@@ -29,13 +31,15 @@ namespace util
 
 	const char pathsep = '/';
 
+	const std::string ucslocale = "en_US.UTF-8";
+
 	std::string strjoin(const std::vector<std::string> &list, char delim, unsigned int start = 0, unsigned int end = 0);
 
 	std::vector<std::string> argvec(int argc, char **argv);
 
 	std::string alnumonly(const std::string &str);
 
-	std::string asciilower(std::string str);
+	std::string utf8lower(const std::string &str);
 
 	int fast_atoi(const char *s);
 

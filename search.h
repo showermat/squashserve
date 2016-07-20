@@ -4,6 +4,7 @@
 #include <set>
 #include <unordered_map>
 #include <deque>
+#include <locale>
 #include "lib/radix_tree.hpp" // Thanks to github/ytakano
 #include "zsr.h"
 

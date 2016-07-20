@@ -56,11 +56,12 @@ namespace util
 		return ss.str();
 	}
 
-	std::string asciilower(std::string str)
+	std::string utf8lower(const std::string &str)
 	{
-		int diff = 'A' - 'a';
-		for (char &c : str) if (c >= 'A' && c <= 'Z') c -= diff;
-		return str;
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convert{};
+		std::basic_ostringstream<wchar_t> ss{};
+		for (const wchar_t &c : convert.from_bytes(str)) ss << std::tolower(c, std::locale{ucslocale});
+		return convert.to_bytes(ss.str());
 	}
 
 	template <> bool s2t<bool>(const std::string &s)
@@ -222,7 +223,7 @@ namespace util
 	{
 		std::string::size_type idx = path.rfind(".");
 		if (idx == path.npos) return "";
-		std::string ext = asciilower(path.substr(idx + 1));
+		std::string ext = utf8lower(path.substr(idx + 1));
 		if (! mime_types.count(ext)) return "";
 		return mime_types.at(ext);
 	}

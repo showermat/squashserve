@@ -58,7 +58,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 	parse.set_database(index_);
 	parse.set_stemmer(Xapian::Stem{lang_});
 	parse.set_stemming_strategy(Xapian::QueryParser::STEM_SOME);
-	enq.set_query(parse.parse_query(util::asciilower(query)));
+	enq.set_query(parse.parse_query(util::utf8lower(query)));
 	Xapian::MSet matches = enq.get_mset(0, nres);
 	std::vector<Result> ret{};
 	for (Xapian::MSetIterator iter = matches.begin(); iter != matches.end(); iter++)
@@ -81,7 +81,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
 {
 	std::unordered_map<std::string, std::string> ret;
-	for (const zsr::filecount &idx : titles_.search(util::asciilower(qstr)))
+	for (const zsr::filecount &idx : titles_.search(util::utf8lower(qstr)))
 	{
 		zsr::iterator n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();

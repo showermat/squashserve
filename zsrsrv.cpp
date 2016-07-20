@@ -72,7 +72,7 @@ std::string token_replace(const std::string &in, const std::unordered_map<std::s
 	std::string::size_type lastend = 0;
 	for (std::sregex_iterator iter{str.begin(), str.end(), tokenre}; iter != std::sregex_iterator{}; iter++)
 	{
-		std::string tok = util::asciilower(iter->str().substr(1));
+		std::string tok = util::utf8lower(iter->str().substr(1));
 		ret << str.substr(lastend, iter->position() - lastend);
 		if (tokens.count(tok)) ret << tokens.at(tok);
 		lastend = iter->position() + iter->length();
