@@ -160,6 +160,8 @@ Once the `_meta` directory has been filled with the appropriate material, the cr
 
     $ mkvol /data/wikipedia /data/volumes/wikipedia.zsr
 
+`mkvol` will make use of two special metadata values, if they are present.  Because it extracts the titles from HTML pages to create the search index, it needs to know the encoding of the HTML files.  The `encoding` datum in `info.txt` can be used to set this encoding.  If it is not present, `mkvol` will assume UTF-8; any file that cannot be converted will be indexed by the name of the NTML file instead.  The `title_filter` metadatum allows the user to specify a regular expression to use to process the title before indexing.  The contents of the first regex group will be used as the title.  For example, supplying the title filter `^(.*) - Wikipedia` will cause the title `Douglas Adams - Wikipedia` to be indexed as just `Douglas Adams`.
+
 
 ## Web Server and FUSE Mounter
 

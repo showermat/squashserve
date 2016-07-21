@@ -302,12 +302,17 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (volumes.count(path[1]) == 0) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
-			if (path[0] == "search") return search(volumes.at(path[1]), util::strjoin(path, '/', 2));
-			else if (path[0] == "view") return view(volumes.at(path[1]), util::strjoin(path, '/', 2) + (querystr.size() ? ("?" + querystr) : ""));
-			else if (path[0] == "complete") return complete(volumes.at(path[1]), util::strjoin(path, '/', 2));
-			else if (path[0] == "titles") return titles(volumes.at(path[1]), util::strjoin(path, '/', 2));
+			std::string input{};
+			std::string::const_iterator start = util::find_nth(url.begin(), url.end(), '/', 3) + 1;
+			if (start > url.end()) input = "";
+			else input = util::urldecode(std::string{start, url.end()});
+			std::string input_qstr = input + (querystr.size() ? "?" + querystr : "");
+			if (path[0] == "search") return search(volumes.at(path[1]), input_qstr);
+			else if (path[0] == "view") return view(volumes.at(path[1]), input_qstr);
+			else if (path[0] == "complete") return complete(volumes.at(path[1]), input_qstr);
+			else if (path[0] == "titles") return titles(volumes.at(path[1]), input_qstr);
 			else if (path[0] == "shuffle") return shuffle(volumes.at(path[1]));
-			else return content(volumes.at(path[1]), util::strjoin(path, '/', 2));
+			else return content(volumes.at(path[1]), input);
 		}
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));

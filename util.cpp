@@ -49,10 +49,39 @@ namespace util
 		return ret;
 	}
 
+	std::string conv(const std::string &in, const std::string &from, const std::string &to)
+	{
+		iconv_t cd = iconv_open(to.c_str(), from.c_str());
+		if (cd == (iconv_t) -1) throw std::runtime_error{"Can't convert from " + from + " to " + to};
+		std::stringstream ret{};
+		std::string buf(256, '\0');
+		size_t nin = in.size(), nout = buf.size();
+		char *inaddr = const_cast<char *>(&in[0]); // TODO Valid use?
+		char *outaddr = &buf[0];
+		while (nin > 0)
+		{
+			size_t status = iconv(cd, &inaddr, &nin, &outaddr, &nout);
+			if (status == (size_t) -1)
+			{
+				if (errno == E2BIG)
+				{
+					ret << buf.substr(0, buf.size() - nout);
+					nout = buf.size();
+					outaddr = &buf[0];
+				}
+				else throw std::runtime_error{"Couldn't convert string: " + std::string{strerror(errno)}};
+			}
+		}
+		buf.resize(outaddr - &buf[0]);
+		ret << buf;
+		iconv_close(cd);
+		return ret.str();
+	}
+
 	std::string alnumonly(const std::string &str)
 	{
 		std::ostringstream ss{};
-		for (const char &c : str) if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_') ss << c; // FIXME Ignoring Unicode
+		for (const wchar_t &c : str) if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') ss << c;
 		return ss.str();
 	}
 

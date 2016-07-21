@@ -23,6 +23,7 @@
 #include <dirent.h>
 #include <magic.h>
 #include <string.h>
+#include <iconv.h>
 #include <iostream> // TODO Debug remove
 
 namespace util
@@ -44,6 +45,19 @@ namespace util
 	int fast_atoi(const char *s);
 
 	int fast_atoi(const std::string &s);
+
+	std::string conv(const std::string &in, const std::string &from, const std::string &to);
+
+	template <typename It, typename T> It find_nth(It begin, It end, const T& query, unsigned int n)
+	{
+		if (n == 0) return begin;
+		unsigned int cnt = 0;
+		for (It i = begin; i != end; i++) if (*i == query)
+		{
+			if (++cnt == n) return i;
+		}
+		return end;
+	}
 
 	template <typename T> std::string t2s(const T &t)
 	{
