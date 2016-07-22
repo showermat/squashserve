@@ -117,3 +117,93 @@ std::unordered_map<std::string, std::string> Volume::tokens(std::string member)
 	return ret;
 }
 
+void Volmgr::refresh()
+{
+	if (! dir_.size()) throw std::runtime_error{"Tried to refresh uninitialized volume list"};
+	catorder_.clear();
+	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through excpetions
+	{
+		if (util::isdir(util::pathjoin({dir_, file}))) continue;
+		std::string volid = file.substr(0, file.size() - 4);
+		mapping_[volid] = "";
+	}
+	std::ifstream catin{util::pathjoin({dir_, "categories.txt"})};
+	if (! catin) return;
+	std::string line{};
+	unsigned int linen = 0;
+	while (std::getline(catin, line))
+	{
+		linen++;
+		if (line == "") continue;
+		std::vector<std::string> tok = util::strsplit(line, ':');
+		if (tok.size() != 3)
+		{
+			std::cerr << "Couldn't parse category file line " << linen << "\n";
+			continue;
+		}
+		categories_[tok[0]] = std::make_pair(tok[1], false);
+		std::vector<std::string> conts = util::strsplit(tok[2], ' ');
+		int cnt = 0;
+		for (const std::string &cont : conts) if (mapping_.count(cont))
+		{
+			mapping_[cont] = tok[0];
+			cnt++;
+		}
+		if (cnt) catorder_.push_back(tok[0]);
+	}
+
+}
+
+std::vector<std::string> &Volmgr::categories()
+{
+	return catorder_;
+}
+
+std::unordered_map<std::string, std::string> Volmgr::tokens(const std::string &cat)
+{
+	if (! categories_.count(cat)) return {{"id", ""}, {"name", ""}};
+	return {{"id", cat}, {"name", categories_[cat].first}};
+}
+
+std::unordered_set<std::string> Volmgr::load(const std::string &cat)
+{
+	std::unordered_set<std::string> ret{};
+	if (categories_.count(cat)) categories_[cat].second = true;
+	for (const std::pair<const std::string, std::string> &vol : mapping_) if (vol.second == cat)
+	{
+		try
+		{
+			volumes_.emplace(vol.first, Volume{util::pathjoin({dir_, vol.first + ".zsr"})});
+			ret.insert(vol.first);
+		}
+		catch (zsr::badzsr &e) { std::cerr << vol.first << ": " << e.what() << "\n"; }
+	}
+	return ret;
+}
+
+bool Volmgr::loaded(const std::string &cat)
+{
+	if (categories_.count(cat)) return categories_[cat].second;
+	return false;
+}
+
+void Volmgr::unload(const std::string &cat)
+{
+	if (categories_.count(cat)) categories_[cat].second = false;
+	for (const std::pair<const std::string, std::string> &vol : mapping_)
+		if (vol.second == cat) volumes_.erase(vol.first);
+}
+
+bool Volmgr::check(const std::string &name)
+{
+	return mapping_.count(name);
+}
+
+Volume &Volmgr::get(const std::string &name)
+{
+	if (! check(name)) throw std::runtime_error{"No such volume found"};
+	if (! volumes_.count(name)) load(mapping_[name]);
+	return volumes_.at(name);
+}
+
+

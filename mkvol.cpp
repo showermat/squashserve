@@ -28,7 +28,7 @@ std::string html_title(const std::string &content, const std::string &def, const
 		try { title = util::conv(title, encoding, "UTF-8"); }
 		catch (std::runtime_error &e)
 		{
-			std::cout << "\nCould not convert title for file " << def << "\n";
+			std::cout << clrln << "Could not convert title for file " << def << "\n";
 			return def;
 		}
 	}

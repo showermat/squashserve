@@ -19,7 +19,14 @@
 	<a href="/action/quit" id="quit"><img src="/rsrc/icon/quit.svg" alt="Stop server"></a>
 </div>
 <h1>Library</h1>
-<table id="volume-list">
+%
+<div class="category-container unloaded">
+<a href="/load/%ID" class="category-title" data-catname="%ID">%NAME</a>
+%
+<div class="category-container loaded">
+<a href="/unload/%ID" class="category-title" data-catname="%ID">%NAME</a>
+%
+<table class="volume-list">
 %
 <tr>
 <td class="volume-icon"><img class="favicon" src="%ICON"></td>
@@ -36,6 +43,9 @@
 </tr>
 %
 </table>
+%
+</div>
+%
 </main>
 </body>
 </html>

@@ -5,6 +5,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 #include <set>
 #include <random>
 #include <regex>
@@ -36,7 +37,6 @@ public:
 	const static std::string metadir;
 	const static std::string default_icon;
 private:
-	//std::string lang_{"english"};
 	std::string id_;
 	std::unique_ptr<zsr::archive> archive_;
 	std::unordered_map<std::string, std::string> info_;
@@ -44,7 +44,6 @@ private:
 	bool indexed_;
 	rsearch::disktree titles_;
 public:
-	static Volume newvol(const std::string fname) { return Volume{fname}; }
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname);
 	Volume(const Volume &orig) = delete;
@@ -59,6 +58,30 @@ public:
 	std::string info(const std::string &key) const;
 	std::unordered_map<std::string, std::string> tokens(std::string member = "");
 	virtual ~Volume();
+};
+
+class Volmgr
+{
+private:
+	std::string dir_;
+	std::vector<std::string> catorder_;
+	std::unordered_map<std::string, std::pair<std::string, bool>> categories_;
+	std::unordered_map<std::string, std::string> mapping_;
+	std::unordered_map<std::string, Volume> volumes_;
+public:
+	void refresh();
+	Volmgr() : dir_{} { }
+	Volmgr(const std::string &dir) : dir_{dir} { }
+	void init(const std::string &dir) { dir_ = dir; refresh(); }
+	Volmgr(const Volmgr &orig) = delete;
+	Volmgr(Volmgr &&orig) : dir_{std::move(orig.dir_)}, mapping_{std::move(orig.mapping_)}, volumes_{std::move(orig.volumes_)} { }
+	std::vector<std::string> &categories();
+	std::unordered_map<std::string, std::string> tokens(const std::string &cat);
+	std::unordered_set<std::string> load(const std::string &cat);
+	bool loaded(const std::string &cat);
+	void unload(const std::string &cat);
+	bool check(const std::string &name);
+	Volume &get(const std::string &name);
 };
 
 #endif

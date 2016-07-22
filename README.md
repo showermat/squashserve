@@ -160,12 +160,14 @@ Once the `_meta` directory has been filled with the appropriate material, the cr
 
     $ mkvol /data/wikipedia /data/volumes/wikipedia.zsr
 
-`mkvol` will make use of two special metadata values, if they are present.  Because it extracts the titles from HTML pages to create the search index, it needs to know the encoding of the HTML files.  The `encoding` datum in `info.txt` can be used to set this encoding.  If it is not present, `mkvol` will assume UTF-8; any file that cannot be converted will be indexed by the name of the NTML file instead.  The `title_filter` metadatum allows the user to specify a regular expression to use to process the title before indexing.  The contents of the first regex group will be used as the title.  For example, supplying the title filter `^(.*) - Wikipedia` will cause the title `Douglas Adams - Wikipedia` to be indexed as just `Douglas Adams`.
+`mkvol` will make use of two special metadata values, if they are present.  Because it extracts the titles from HTML pages to create the search index, it needs to know the encoding of the HTML files.  The `encoding` datum in `info.txt` can be used to set this encoding.  If it is not present, `mkvol` will assume UTF-8; any file that cannot be converted will be indexed by the name of the HTML file instead.  The `title_filter` metadatum allows the user to specify a regular expression to use to process the title before indexing.  The contents of the first regex group will be used as the title.  For example, supplying the title filter `^(.*) - Wikipedia` will cause the page titled `Douglas Adams - Wikipedia` to be indexed as just `Douglas Adams`.
 
 
 ## Web Server and FUSE Mounter
 
-The main functionality of ZSR is in zsrsrv, a small program that acts as a web server, allowing the user to browse volumes from a web browser.  When launched for the first time (with `zsrsrv` -- there are no arguments), it will start a web server accepting requests on localhost port 2234.  Click on the gear icon to set which port to listen on and where the files are located.  Then click the circular arrow icon to refresh the list of volumes.  This can take a minute if you have many large volumes; be patient and the page will reload when it's done loading the volumes.  To create a new volume from a pristine source tree (without a `_meta` directory), click the plus icon, supply the requested information, and submit.  The archive will be created, which may take a long time, and the list of volumes will be reloaded.  To browse a volume, click on its title and you will be taken to the home page.
+The main functionality of ZSR is in zsrsrv, a small program that acts as a web server, allowing the user to browse volumes from a web browser.  When launched for the first time (with `zsrsrv` -- there are no arguments), it will start a web server accepting requests on localhost port 2234.  Click on the gear icon to set which port to listen on and where the volume archives are located.  Then click the circular arrow icon to refresh the list of volumes.  This can take a minute if you have many large volumes; be patient and the page will reload when it's done loading the volumes.  To create a new volume from a pristine source tree (without a `_meta` directory), click the plus icon, supply the requested information, and submit.  The archive will be created, which may take a long time, and the list of volumes will be reloaded.  To browse a volume, click on its title and you will be taken to the home page.
+
+If there is a file named `categories.txt` in the same directory as the volume archives, it will be used to categorize the volumes.  The file should consist of one line for each category, with three fields separated by colons: the category ID (lower-case alphanumeric), the category name to be displayed, and a space-separated list of the volume IDs in that category.  (The ID of a volume is the filename without the final `.zsr`.)  Thus, to define a category containing the files `wiki1.zsr` and `wiki2.zsr`, `categories.txt` should contain a line like `cat1:Category Name:wiki1 wiki2`.  Archives will be loaded into memory only when their category is loaded by clicking on it in the volume list, so categorization can reduce memory usage by loading volumes only when they are needed.
 
 Volumes and standard ZSR archives can be mounted as read-only filesystems through FUSE using `zsrmnt`:
 
@@ -204,11 +206,13 @@ With no verbosity arguments, Wikidump will just display a continuously updating 
 Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` element is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
 
 
-## Issues
+## Credits
 
-  - The toolbar display uses an iframe and a JavaScript harness that tries to be as transparent as possible.  Unfortunately, it's not perfect, and there may be times when GET parameters don't get passed through, or clicking a link makes the toolbar go away, or something is hiding under the toolbar and won't come out.  I am continually working on improving this system, and I welcome reports of page configurations that don't work nicely.
+  - Except as indicated below, all content in this project is created solely by me and released under the Apache License version 2.0.
 
-  - I've been focusing on getting the basic framework up and running, so my code has been a bit sloppy.  There are a lot of bugs marked `TODO` or `FIXME` in the source that I need to get around to fixing.  For now, it seems to work for most sane inputs.
+  - `lib/radix_tree*` are copyright 2010, Yuuki Takano, and have been modified to suit the needs of this project.  The originals can be obtained from <https://github.com/ytakano/radix_tree>.
 
-  - Search functionality still needs a lot of work.
+  - `lib/json.hpp` is copyright 2013-2016, Niels Lohmann, and is released under the MIT License.  The original can be obtained from <https://github.com/nlohmann/json>.
+
+  - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.  The original can be obtained from <https://github.com/jquery/jquery>.
 

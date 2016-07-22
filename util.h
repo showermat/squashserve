@@ -1,7 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 #include <string>
-#include <set>
+#include <unordered_set>
 #include <vector>
 #include <sstream>
 #include <stdexcept>
@@ -30,11 +30,11 @@ namespace util
 {
 	// String manipulation
 
-	const char pathsep = '/';
-
 	const std::string ucslocale = "en_US.UTF-8";
 
 	std::string strjoin(const std::vector<std::string> &list, char delim, unsigned int start = 0, unsigned int end = 0);
+
+	std::vector<std::string> strsplit(const std::string &str, char delim);
 
 	std::vector<std::string> argvec(int argc, char **argv);
 
@@ -76,9 +76,34 @@ namespace util
 	}
 
 
+	// Container operations
+
+	template <typename T> std::unordered_set<T> intersection(const std::unordered_set<T> &s1, const std::unordered_set<T> &s2)
+	{
+		std::unordered_set<T> ret{};
+		for (const T &t : s1) if (s2.count(t)) ret.insert(t);
+		return ret;
+	}
+
+	template <typename T> std::unordered_set<T> difference(const std::unordered_set<T> &s1, const std::unordered_set<T> &s2)
+	{
+		std::unordered_set<T> ret{};
+		for (const T &t : s1) if (! s2.count(t)) ret.insert(t);
+		return ret;
+	}
+
+	template <typename T> std::unordered_set<T> set_union(const std::unordered_set<T> &s1, const std::unordered_set<T> &s2)
+	{
+		std::unordered_set<T> ret{};
+		for (const T &t : s1) ret.insert(t);
+		for (const T &t : s2) ret.insert(t);
+		return ret;
+	}
+
+
 	// Filesystem
 
-	std::vector<std::string> strsplit(const std::string &str, char delim);
+	const char pathsep = '/';
 
 	std::string pathjoin(const std::vector<std::string> &list);
 
@@ -98,7 +123,7 @@ namespace util
 
 	bool isdir(const std::string &path);
 
-	std::set<std::string> ls(const std::string &dir, const std::string &test = "");
+	std::unordered_set<std::string> ls(const std::string &dir, const std::string &test = "");
 
 	std::vector<std::string> recursive_ls(const std::string &base, const std::string &test = "");
 

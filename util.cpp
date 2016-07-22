@@ -166,9 +166,9 @@ namespace util
 		return true;
 	}
 
-	std::set<std::string> ls(const std::string &dir, const std::string &test)
+	std::unordered_set<std::string> ls(const std::string &dir, const std::string &test)
 	{
-		std::set<std::string> ret{};
+		std::unordered_set<std::string> ret{};
 		std::regex *testre = nullptr;
 		if (test != "") testre = new std::regex{test};
 		DIR *d = opendir(dir.c_str());

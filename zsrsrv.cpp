@@ -1,11 +1,12 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
-#include <set>
+#include <unordered_set>
 #include <algorithm>
 #include <regex>
 #include <sstream>
 #include <future>
+#include <memory>
 #include <stdexcept>
 #include "lib/json.hpp" // Thanks to github/nlohmann
 #include "util.h"
@@ -15,8 +16,7 @@
 
 /* TODO:
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called
- * Implement automatic ZSR file creator -- make sure it indexes before compressing
- * Skip directly to exact (or close) matches of a search term
+ * Implement automatic ZSR file creator
  *
  * FIXME:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
@@ -33,7 +33,7 @@ const std::string preffname = "zsrsrv.pref";
 const std::string rsrcdname = "resources";
 const std::string exedir = util::dirname(util::exepath());
 prefs userp{util::pathjoin({exedir, preffname})};
-std::unordered_map<std::string, Volume> volumes{};
+Volmgr volumes{};
 
 void prefsetup(prefs &p)
 {
@@ -88,19 +88,44 @@ http::doc error(const std::string &header, const std::string &body)
 	return ret;
 }
 
-http::doc home(std::unordered_map<std::string, Volume> &vols)
+http::doc loadcat(const std::string &name)
+{
+	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "home.html"})};
+	std::vector<std::string> sects = docsplit(ret.content());
+	std::stringstream buf{};
+	std::unordered_set<std::string> volnames = volumes.load(name);
+	std::set<std::string> volsort{volnames.begin(), volnames.end()};
+	for (const std::string &vol : volsort)
+		buf << token_replace(sects[4], volumes.get(vol).tokens());
+	ret.content(buf.str());
+	return ret;
+}
+
+http::doc unloadcat(const std::string &name)
+{
+	volumes.unload(name);
+	return http::doc{};
+}
+
+http::doc home()
 {
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "home.html"})};
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
-	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
-	buf << sects[0];
-	std::vector<std::string> volnames{};
-	volnames.reserve(vols.size());
-	for (const std::pair<const std::string, Volume> &vol : vols) volnames.push_back(vol.first);
-	std::sort(volnames.begin(), volnames.end());
-	for (const std::string &volname : volnames) buf << token_replace(sects[1], vols.at(volname).tokens()); // TODO Consider hiding the search field if the volume is unindexed
-	buf << sects[2];
+	if (sects.size() < 8) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
+	buf << sects[0] << sects[3] << loadcat("").content() << sects[5];
+	for (const std::string &cat : volumes.categories())
+	{
+		if (volumes.loaded(cat))
+		{
+			buf << token_replace(sects[2], volumes.tokens(cat));
+			buf << sects[3];
+			buf << loadcat(cat).content();
+		}
+		else buf << token_replace(sects[1], volumes.tokens(cat)) << sects[3];
+		buf << sects[5] << token_replace(sects[6], volumes.tokens(cat));
+	}
+	buf << sects[7];
 	ret.content(buf.str());
 	return ret;
 }
@@ -202,40 +227,14 @@ http::doc rsrc(const std::string &path)
 {
 	if (! path.size()) return error("Bad Request", "Missing path to resource to retrieve");
 	try { return http::doc{util::pathjoin({exedir, rsrcdname, path}), {{"Cache-control", "max-age=640000"}}}; }
-	catch (std::runtime_error &e) { return error("Not Found", "The resource you requested could not be found"); }
-}
-
-std::unordered_map<std::string, Volume> buildlist()
-{
-	std::unordered_map<std::string, Volume> ret{};
-	std::set<std::string> contents{};
-	const std::string basedir = userp.get<std::string>("basedir");
-	try { contents = util::ls(basedir, "\\.zsr$"); }
-	catch (std::runtime_error &e) { return ret; }
-	std::map<std::string, std::future<Volume>> loadthreads{};
-	for (const std::string &fname : contents) loadthreads[fname] = std::async(std::launch::async, Volume::newvol, util::pathjoin({basedir, fname}));
-	for (std::pair<const std::string, std::future<Volume>> &f : loadthreads)
-	{
-		try
-		{
-			Volume v = f.second.get();
-			std::cout << v.id() << "\n";
-			ret.insert(std::make_pair(v.id(), std::move(v)));
-		}
-		catch (std::exception &e)
-		{
-			std::cout << f.first << ": " << e.what() << "\n";
-		}
-	}
-	std::cout << "Done loading volumes\n";
-	return ret;
+	catch (std::runtime_error &e) { return error("Not Found", "The requested resource could not be found"); }
 }
 
 http::doc action(const std::string &verb, const std::unordered_map<std::string, std::string> &args)
 {
 	if (verb == "refresh")
 	{
-		volumes = buildlist();
+		volumes.refresh();
 		return http::redirect("/");
 	}
 	else if (verb == "pref")
@@ -256,21 +255,19 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 		std::unordered_map<std::string, std::string> info;
 		info["home"] = args.at("home");
 		for (const std::string &property : {"title", "favicon"}) if (args.count(property)) info[property] = args.at(property);
-		std::set<std::string> keynames{};
+		std::unordered_set<std::string> keynames{};
 		for (const std::pair<const std::string, std::string> &pair : args)
 		{
 			std::smatch match{};
 			if (std::regex_search(pair.first, match, std::regex{"^key_(.*)$"})) keynames.insert(match[1]);
 		}
 		for (const std::string &key : keynames) if (args.count("key_" + key) && args.count("value_" + key)) info[args.at("key_" + key)] = args.at("value_" + key);
-		try { volumes.insert(std::make_pair(id, Volume::create(srcdir, userp.get<std::string>("basedir"), id, info))); }
+		try { Volume::create(srcdir, userp.get<std::string>("basedir"), id, info); }
 		catch(std::runtime_error &e) { return error("Couldn't create volume", e.what()); }
+		volumes.refresh();
 		return http::redirect("/");
 	}
-	else if (verb == "quit")
-	{
-		exit(0);
-	}
+	else if (verb == "quit") exit(0);
 	/*else if (verb == "debug")
 	{
 		std::stringstream buf{};
@@ -297,22 +294,28 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 	}
 	try
 	{
-		if (path.size() == 0) return home(volumes);
+		if (path.size() == 0) return home();
 		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles" || path[0] == "shuffle")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
-			if (volumes.count(path[1]) == 0) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
+			if (! volumes.check(path[1])) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
 			std::string input{};
 			std::string::const_iterator start = util::find_nth(url.begin(), url.end(), '/', 3) + 1;
 			if (start > url.end()) input = "";
 			else input = util::urldecode(std::string{start, url.end()});
 			std::string input_qstr = input + (querystr.size() ? "?" + querystr : "");
-			if (path[0] == "search") return search(volumes.at(path[1]), input_qstr);
-			else if (path[0] == "view") return view(volumes.at(path[1]), input_qstr);
-			else if (path[0] == "complete") return complete(volumes.at(path[1]), input_qstr);
-			else if (path[0] == "titles") return titles(volumes.at(path[1]), input_qstr);
-			else if (path[0] == "shuffle") return shuffle(volumes.at(path[1]));
-			else return content(volumes.at(path[1]), input);
+			if (path[0] == "search") return search(volumes.get(path[1]), input_qstr);
+			else if (path[0] == "view") return view(volumes.get(path[1]), input_qstr);
+			else if (path[0] == "complete") return complete(volumes.get(path[1]), input_qstr);
+			else if (path[0] == "titles") return titles(volumes.get(path[1]), input_qstr);
+			else if (path[0] == "shuffle") return shuffle(volumes.get(path[1]));
+			else return content(volumes.get(path[1]), input);
+		}
+		else if (path[0] == "load" || path[0] == "unload")
+		{
+			if (path.size() < 2) return error("Bad Request", "Missing category name");
+			if (path[0] == "load") return loadcat(path[1]);
+			else return unloadcat(path[1]);
 		}
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
@@ -333,7 +336,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 int main(int argc, char **argv)
 {
 	prefsetup(userp);
-	volumes = buildlist();
+	volumes.init(userp.get<std::string>("basedir"));
 	http::server{userp.get<int>("port"), urlhandle}.serve();
 	return 0;
 }

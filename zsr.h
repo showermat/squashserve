@@ -23,8 +23,9 @@
 #define VERBOSE
 
 #ifdef VERBOSE
-#define loga(msg) std::cout << "\r\033[K" << util::timestr() << ": " << msg << std::endl
-#define logb(msg) std::cout << "\r\033[K" << msg << std::flush
+const std::string clrln{"\r\033[K"};
+#define loga(msg) std::cout << clrln << util::timestr() << ": " << msg << std::endl
+#define logb(msg) std::cout << clrln << msg << std::flush
 #else
 #define loga(msg)
 #define logb(msg)
