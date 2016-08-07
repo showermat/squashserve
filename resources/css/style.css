@@ -67,6 +67,15 @@ a.category-title
 	padding: 8px;
 }
 
+img.category-loading
+{
+	width: 1em;
+	max-height: 1em;
+	float: right;
+	margin: 0px 2px;
+	display: none;
+}
+
 table
 {
 	width: 100%;
@@ -94,6 +103,16 @@ table td
 table td.vcenter
 {
 	vertical-align: middle;
+}
+
+td.volume-icon, td.volume-info, td.volume-search
+{
+	white-space: nowrap;
+}
+
+td.volume-info
+{
+	width: 99%;
 }
 
 img.favicon

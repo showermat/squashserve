@@ -2,7 +2,6 @@
 
 const std::string Volume::metadir{"_meta"};
 const std::string Volume::default_icon{"/rsrc/img/volume.svg"};
-std::default_random_engine dre{std::random_device{}()};
 
 Volume Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
 {
@@ -42,11 +41,18 @@ http::doc Volume::get(std::string path)
 
 std::string Volume::shuffle() const
 {
+	const static int tries = 32;
+	for (int i = 0; i < tries; i++)
+	{
+		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size()));
+		if (n.isdir() || n.meta("title") == "") continue;
+		return n.path();
+	}
 	std::vector<zsr::filecount> files{};
 	files.reserve(archive_->size());
 	for (zsr::iterator n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
-	std::uniform_int_distribution<int> dist{0, static_cast<int>(files.size() - 1)};
-	return archive_->index(files[dist(dre)]).path();
+	if (files.size() == 0) return "";
+	return archive_->index(files[util::randint<zsr::filecount>(0, files.size())]).path();
 }
 
 std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen)
@@ -78,15 +84,26 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 	return ret;*/
 }
 
-std::unordered_map<std::string, std::string> Volume::complete(const std::string &qstr)
+std::unordered_map<std::string, std::string> Volume::complete(const std::string &query)
 {
 	std::unordered_map<std::string, std::string> ret;
-	for (const zsr::filecount &idx : titles_.search(util::utf8lower(qstr)))
+	for (const zsr::filecount &idx : titles_.search(util::utf8lower(query)))
 	{
 		zsr::iterator n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
 	}
 	return ret;
+}
+
+std::string Volume::quicksearch(std::string query)
+{
+	query = util::utf8lower(query);
+	for (const zsr::filecount &idx : titles_.exact_search(query))
+	{
+		zsr::iterator n = archive_->index(idx);
+		if (util::utf8lower(n.meta("title")) == query) return n.path();
+	}
+	return "";
 }
 
 std::string Volume::info(const std::string &key) const
@@ -173,7 +190,7 @@ std::unordered_set<std::string> Volmgr::load(const std::string &cat)
 	{
 		try
 		{
-			volumes_.emplace(vol.first, Volume{util::pathjoin({dir_, vol.first + ".zsr"})});
+			if (! volumes_.count(vol.first)) volumes_.emplace(vol.first, Volume{util::pathjoin({dir_, vol.first + ".zsr"})});
 			ret.insert(vol.first);
 		}
 		catch (zsr::badzsr &e) { std::cerr << vol.first << ": " << e.what() << "\n"; }

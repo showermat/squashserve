@@ -24,6 +24,7 @@
 #include <magic.h>
 #include <string.h>
 #include <iconv.h>
+#include <random>
 #include <iostream> // TODO Debug remove
 
 namespace util
@@ -73,6 +74,15 @@ namespace util
 		T ret;
 		ss >> ret;
 		return ret;
+	}
+
+	// Math
+
+	template <typename T> T randint(T min, T max)
+	{
+		static std::default_random_engine dre{std::random_device{}()}; // FIXME Probably not thread-safe
+		std::uniform_int_distribution<T> dist{min, max};
+		return dist(dre);
 	}
 
 

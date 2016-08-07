@@ -2,7 +2,7 @@
 
 ## Motivation
 
-ZSR attempts to provide an alternative to the [OpenZIM Project](http://www.openzim.org/wiki/OpenZIM) with slightly different aims.  The primary drawbacks of ZIM and Kiwix are that (a) ZIM files are optimized for access through the standalone application Kiwix, which essentially duplicates the functionality of a stripped-down web browser, and (b) converting ZIM files to and from other formats is difficult and lossy.  Kiwix is lacking in a lot of places -- for example, you can't have tabs open in multiple ZIM files simultaneously, and if you zoom a web page, you have to re-zoom every new tab you open.  Creating a ZIM file using zimwriterdb requires the user to install several Perl libraries and run a Postgresql server; extracting the original files with zimdump is simple enough, but the original directory structure is lost.  Additionally, all the internal links in the documents have to be rewritten to point to the `zim://` resources rather than their original targets, which is an iffy and imperfect process.
+ZSR attempts to provide an alternative to the [OpenZIM Project](http://www.openzim.org/wiki/OpenZIM) with slightly different aims.  The primary drawbacks of ZIM and Kiwix are that (a) ZIM files are optimized for access through the standalone application Kiwix, which essentially duplicates the functionality of a stripped-down web browser, and (b) converting ZIM files to and from other formats is difficult and lossy.  Kiwix is lacking in a lot of places -- for example, you can't have tabs open in multiple ZIM files simultaneously, and if you zoom a web page, you have to re-zoom every new tab you open.  Creating a ZIM file using `zimwriterdb` requires the user to install several Perl libraries and run a Postgresql server; extracting the original files with `zimdump` is simple enough, but the original directory structure is lost.  Additionally, all the internal links in the documents have to be rewritten to point to the `zim://` resources rather than their original targets, which is an iffy and imperfect process.
 
 ZSR is designed to facilitate browsing archived websites with existing web browsers rather than a standalone application and the ability to extract the original, unmodified HTML tree from the archives.  The project provides an archive format that is used for storing mirrored sites and a C++ application that runs a small local webserver, allowing the user to browse the archives with their web browser of choice.
 
@@ -73,7 +73,7 @@ The ZSR format is fairly simple.  It consists of:
 
   - Header: the four ASCII bytes `!ZSR` followed by an eight-byte integer specifying the start byte of the index
 
-  - Volume medatadata: the one-byte number of volume metadata, followed by the following for each datum:
+  - Volume metadata: the one-byte number of volume metadata, followed by the following for each datum:
 
       - The two-byte length of the key and the key itself
 
@@ -109,7 +109,7 @@ The ZSR format is fairly simple.  It consists of:
 
   - User data: arbitrary user-defined data may follow the archive.  (This is used, for example, to store the search index for volumes.)  This region of the file is made available to the user as a `std::istream` when the file is opened.
 
-The encoder for the file format is implemented in zsr.cpp.  I provide a small utility for command-line compression and decompression of ZSR files in zsrutil.cpp.  Its usage is as follows:
+The encoder for the file format is implemented in `zsr.cpp`.  I provide a small utility for command-line compression and decompression of ZSR files in `zsrutil.cpp`.  Its usage is as follows:
 
     $ zsrutil c indir out.zsr
 
@@ -123,7 +123,7 @@ To decompress a single file:
 
 `zsrutil` can also be used to list files in the archive and metadata concerning the archive.
 
-The encoder can also be used as a library in other C++ programs by including the header zsr.h.  The only classes you should have to deal with are `zsr::writer`, `zsr::archive`, and `zsr::iterator`.  Use as follows:
+The encoder can also be used as a library in other C++ programs by including the header `zsr.h`.  The only classes you should have to deal with are `zsr::writer`, `zsr::archive`, and `zsr::iterator`.  Use as follows:
 
     #include <fstream>
     #include <streambuf>
@@ -152,7 +152,7 @@ The encoder can also be used as a library in other C++ programs by including the
 
 ## Creating Volumes
 
-To broawse an archived site, you need to create a "volume", which is just a ZSR archive of the HTML source tree with some metadata.  To begin with, all links to internal resources must be relative, because HTML pages are passed by the ZSR server to the user's web browser without modification.  There are plenty of tools that will rewrite links for you, so I decided it would be redundant to incorporate rewriting capabilities into this project.  If all internal links in the source tree are sound, they should also work in the final volume.
+To browse an archived site, you need to create a "volume", which is just a ZSR archive of the HTML source tree with some metadata.  To begin with, all links to internal resources must be relative, because HTML pages are passed by the ZSR server to the user's web browser without modification.  There are plenty of tools that will rewrite links for you, so I decided it would be redundant to incorporate rewriting capabilities into this project.  If all internal links in the source tree are sound, they should also work in the final volume.
 
 The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.txt`, which contains metadata about the archive.  These metadata  are in the format `key:value`, where `key` is composed of lower-case letters and `value` is any string that does not contain a newline.  Arbitrary metadata can be specified; ones specifically used by ZSR are "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.txt` file with only the line `home:index.html`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
 
@@ -215,4 +215,6 @@ Mirroring a website rarely goes perfectly, so along with Wikidump I've provided 
   - `lib/json.hpp` is copyright 2013-2016, Niels Lohmann, and is released under the MIT License.  The original can be obtained from <https://github.com/nlohmann/json>.
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.  The original can be obtained from <https://github.com/jquery/jquery>.
+
+  - `resources/icon/loading.gif` is retrieved from <https://commons.wikimedia.org/wiki/File:Ajax-loader.gif> and can be freely reused under the terms of the [WTFPL](http://www.wtfpl.net/).
 

@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <unordered_set>
 #include <set>
-#include <random>
 #include <regex>
 #include "util.h"
 #include "zsr.h"
@@ -53,8 +52,9 @@ public:
 	http::doc get(std::string path);
 	std::string shuffle() const;
 	bool indexed() { return indexed_; }
-	std::vector<Result> search(const std::string &qstr, int nres, int prevlen);
-	std::unordered_map<std::string, std::string> complete(const std::string &qstr);
+	std::vector<Result> search(const std::string &query, int nres, int prevlen);
+	std::unordered_map<std::string, std::string> complete(const std::string &query);
+	std::string quicksearch(std::string query);
 	std::string info(const std::string &key) const;
 	std::unordered_map<std::string, std::string> tokens(std::string member = "");
 	virtual ~Volume();

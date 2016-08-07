@@ -4,13 +4,13 @@ namespace rsearch
 {
 	const zsr::offset ptrfill{0};
 
-	void debug_treeprint(radix_tree_node<std::string, std::set<zsr::filecount>> *n, std::string prefix = "") // Debug
+	void debug_treeprint(radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *n, std::string prefix = "") // Debug
 	{
 		if (! n) return;
 		std::cout << prefix << n->m_key << " -> ";
 		if (n->m_children.count("") && n->m_children[""]->m_value) for (const zsr::filecount &i : n->m_children[""]->m_value->second) std::cout << i << " ";
 		std::cout << "\n";
-		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children) if (child.first != "") debug_treeprint(child.second, prefix + "  ");
+		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children) if (child.first != "") debug_treeprint(child.second, prefix + "  ");
 	}
 
 	void disktree::debug_print(zsr::offset off, std::string prefix) // Debug
@@ -18,7 +18,7 @@ namespace rsearch
 		if (! in_) throw std::runtime_error{"Bad stream"};
 		in_.seekg(off);
 		const std::unordered_map<std::string, zsr::offset> curchild = children();
-		const std::set<zsr::filecount> myval = values();
+		const std::unordered_set<zsr::filecount> myval = values();
 		for (const zsr::filecount &val : myval) std::cout << val << " ";
 		std::cout << "\n";
 		for (const std::pair<const std::string, zsr::offset> &child : curchild)
@@ -28,17 +28,17 @@ namespace rsearch
 		}
 	}
 
-	void recursive_treewrite(std::ostream &out, radix_tree_node<std::string, std::set<zsr::filecount>> *n, zsr::offset treestart)
+	void recursive_treewrite(std::ostream &out, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *n, zsr::offset treestart)
 	{
 		static int nwritten = 0;
 		logb(++nwritten);
 		treesize nval = 0;
 		if (n->m_children.count("") && n->m_children[""]->m_value) nval = n->m_children[""]->m_value->second.size();
 		treesize nchild = 0;
-		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children) if (child.first != "" && child.second) nchild++; // TODO Probably a faster way?
+		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children) if (child.first != "" && child.second) nchild++; // TODO Probably a faster way?
 		out.write(reinterpret_cast<const char *>(&nchild), sizeof(treesize));
 		std::deque<zsr::offset> childpos{};
-		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children)
+		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
 			treesize namelen = child.first.size();
@@ -50,7 +50,7 @@ namespace rsearch
 		out.write(reinterpret_cast<const char *>(&nval), sizeof(treesize));
 		if (n->m_children.count("") && n->m_children[""]->m_value)
 			for (const zsr::filecount &i : n->m_children[""]->m_value->second) out.write(reinterpret_cast<const char *>(&i), sizeof(zsr::filecount));
-		for (const std::pair<const std::string, radix_tree_node<std::string, std::set<zsr::filecount>> *> child : n->m_children)
+		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
 			zsr::offset childstart = static_cast<zsr::offset>(out.tellp()) - treestart;
@@ -106,9 +106,9 @@ namespace rsearch
 		return ret;
 	}
 
-	std::set<zsr::filecount> disktree::values()
+	std::unordered_set<zsr::filecount> disktree::values()
 	{
-		std::set<zsr::filecount> ret{};
+		std::unordered_set<zsr::filecount> ret{};
 		treesize nval;
 		in_.read(reinterpret_cast<char *>(&nval), sizeof(treesize));
 		for (treesize i = 0; i < nval; i++)
@@ -120,25 +120,25 @@ namespace rsearch
 		return ret;
 	}
 
-	std::set<zsr::filecount> disktree::subtree_closure(zsr::offset nodepos)
+	std::unordered_set<zsr::filecount> disktree::subtree_closure(zsr::offset nodepos)
 	{
-		std::set<zsr::filecount> ret{};
+		std::unordered_set<zsr::filecount> ret{};
 		in_.seekg(nodepos);
 		if (! in_) throw std::runtime_error{"Tried to seek outside of file"};
 		const std::unordered_map<std::string, zsr::offset> curchild = children();
-		const std::set<zsr::filecount> myval = values();
+		const std::unordered_set<zsr::filecount> myval = values();
 		ret.insert(myval.cbegin(), myval.cend());
 		for (const std::pair<const std::string, zsr::offset> &child : curchild)
 		{
 			if (child.second == nodepos) throw std::runtime_error{"Loop detected in search tree"};
 			//std::cerr << "  Child " << child.second << "\n";
-			const std::set<zsr::filecount> curval = subtree_closure(child.second);
+			const std::unordered_set<zsr::filecount> curval = subtree_closure(child.second);
 			ret.insert(curval.cbegin(), curval.cend());
 		}
 		return ret;
 	}
 
-	std::set<zsr::filecount> disktree::search(const std::string &query)
+	zsr::offset disktree::nodefind(const std::string &query)
 	{
 		zsr::offset curnode = 0;
 		std::string::size_type idx = 0;
@@ -156,9 +156,26 @@ namespace rsearch
 					break;
 				}
 			}
-			if (curnode == 0) return std::set<zsr::filecount>{}; // No matches possible
+			if (curnode == 0) return 0;
 		}
-		return subtree_closure(curnode);
+		return curnode;
+	}
+
+	std::unordered_set<zsr::filecount> disktree::search(const std::string &query)
+	{
+		zsr::offset top = nodefind(query);
+		if (top == 0) return std::unordered_set<zsr::filecount>{};
+		return subtree_closure(top);
+	}
+
+	std::unordered_set<zsr::filecount> disktree::exact_search(const std::string &query)
+	{
+		zsr::offset top = nodefind(query);
+		if (top == 0) return std::unordered_set<zsr::filecount>{};
+		in_.seekg(top);
+		if (! in_) throw std::runtime_error{"Tried to seek outside of file"};
+		children();
+		return values();
 	}
 }
 

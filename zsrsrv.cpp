@@ -132,7 +132,7 @@ http::doc home()
 
 http::doc search(Volume &vol, const std::string &query)
 {
-	std::unordered_map<std::string, std::string> tokens = vol.tokens();
+	/*std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "search.html"})};
 	std::vector<std::string> sects = docsplit(ret.content());
@@ -154,7 +154,11 @@ http::doc search(Volume &vol, const std::string &query)
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
 	buf << token_replace(sects[2], tokens);
 	ret.content(buf.str());
-	return ret;
+	return ret;*/
+
+	std::string match = vol.quicksearch(query);
+	if (match != "") return http::redirect(http::mkpath({"view", vol.id(), match}));
+	else return http::redirect(http::mkpath({"titles", vol.id(), query}));
 }
 
 http::doc complete(Volume &vol, const std::string &query)
@@ -167,8 +171,8 @@ http::doc complete(Volume &vol, const std::string &query)
 	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
 	if (names.size() > limit) names.resize(limit);
 	nlohmann::json ret{};
-	ret.push_back(std::unordered_map<std::string, std::string>{{"title", "<b>See all</b>"}, {"url", "/titles/" + vol.id() + "/" + query}});
 	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + "/" + res[name]}});
+	ret.push_back(std::unordered_map<std::string, std::string>{{"title", "<b>See all</b>"}, {"url", "/titles/" + vol.id() + "/" + query}});
 	return http::doc{"text/plain", ret.dump()};
 }
 
