@@ -142,6 +142,8 @@ namespace util
 
 	std::string from_htmlent(const std::string &str);
 
+	std::string to_htmlent(const std::string &str);
+
 
 	// Time
 

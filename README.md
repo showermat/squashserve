@@ -47,7 +47,7 @@ Build requirements are as follows:
 
   - I have made no effort to develop code that will work on anything but Linux on an x86_64 architecture.  I may broaden this a bit in the future.
 
-  - The following libraries should be on most systems already: pthread, magic, lzma
+  - The following libraries should be on most systems already: pthread, magic, lzma, iconv
 
   - The following library might need to be installed: [Mongoose](https://github.com/cesanta/mongoose) (`mongoose` in AUR)
 

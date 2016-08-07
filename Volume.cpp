@@ -103,7 +103,7 @@ std::unordered_map<std::string, std::string> Volume::tokens(std::string member)
 	if (member != "")
 	{
 		ret["member"] = member;
-		if (archive_->check(member)) ret["title"] = archive_->get(member).meta("title");
+		if (archive_->check(member)) ret["title"] = util::to_htmlent(archive_->get(member).meta("title"));
 	}
 	ret["search"] = "";
 	ret["id"] = id();
@@ -162,7 +162,7 @@ std::vector<std::string> &Volmgr::categories()
 std::unordered_map<std::string, std::string> Volmgr::tokens(const std::string &cat)
 {
 	if (! categories_.count(cat)) return {{"id", ""}, {"name", ""}};
-	return {{"id", cat}, {"name", categories_[cat].first}};
+	return {{"id", cat}, {"name", util::to_htmlent(categories_[cat].first)}};
 }
 
 std::unordered_set<std::string> Volmgr::load(const std::string &cat)

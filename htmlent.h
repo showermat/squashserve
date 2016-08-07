@@ -1,3 +1,5 @@
+#ifndef HTMLENT_H
+#define HTMLENT_H
 #include <map>
 #include <string>
 
@@ -256,4 +258,6 @@ const std::map<std::string, std::string> htmlent{
 	{"hearts", "♥"},
 	{"diams", "♦"}
 };
+
+#endif // HTMLENT_H
 

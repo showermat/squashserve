@@ -80,9 +80,10 @@ namespace util
 
 	std::string alnumonly(const std::string &str)
 	{
-		std::ostringstream ss{};
-		for (const wchar_t &c : str) if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') ss << c;
-		return ss.str();
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convert{};
+		std::basic_ostringstream<wchar_t> ss{};
+		for (const wchar_t &c : convert.from_bytes(str)) if ((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9') || c == L'_') ss << c;
+		return convert.to_bytes(ss.str());
 	}
 
 	std::string utf8lower(const std::string &str)
@@ -411,5 +412,20 @@ namespace util
 		}
 		if (entproc) ret << '&' << curent.str();
 		return ret.str();
+	}
+
+	std::string to_htmlent(const std::string &str)
+	{
+		static std::map<wchar_t, std::wstring> basic_ent{{L'"', L"quot"}, {L'&', L"amp"}, {L'\'', L"apos"}, {L'<', L"lt"}, {L'>', L"gt"}};
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convert{};
+		std::basic_ostringstream<wchar_t> ret{};
+		for (const wchar_t &c : convert.from_bytes(str))
+		{
+			if (basic_ent.count(c)) ret << L"&" << basic_ent[c] << L";";
+			//else if (c <= L'~') ret << c; // What about control characters?
+			//else ret << L"&#" << static_cast<wint_t>(c) << L";";
+			else ret << c;
+		}
+		return convert.to_bytes(ret.str());
 	}
 }

@@ -74,7 +74,8 @@ namespace rsearch
 		std::locale loc{util::ucslocale};
 		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convert{};
 		std::basic_ostringstream<wchar_t> ss{};
-		for (const wchar_t &c : convert.from_bytes(title)) ss << std::tolower(c, loc);
+		try { for (const wchar_t &c : convert.from_bytes(title)) ss << std::tolower(c, loc); }
+		catch (std::range_error &e) { std::cerr << clrln << "Could not decode title \"" << title << "\" as UTF-8\n"; return; }
 		std::wstring lctitle = ss.str();
 		for (std::wstring::size_type i = 0; i < lctitle.size(); i++)
 			if (i == 0 || (std::isspace(lctitle[i - 1], loc) && ! std::isspace(lctitle[i], loc)) || (! std::isalnum(lctitle[i - 1], loc) && std::isalnum(lctitle[i], loc)))
