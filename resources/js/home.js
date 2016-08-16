@@ -6,7 +6,7 @@ function search_setup()
 	$(".search").on('submit', function() {
 		var query = $(this).find(".search-input").val();
 		window.open("/search/" + $(this).data("volid") + "/" + encodeURIComponent(query));
-		$(this).find(".search-input").val("");
+		$(this).find(".search-input").val(""); // FIXME Why doesn't this work?
 		return false;
 	});
 }
@@ -31,5 +31,6 @@ $(document).ready(function() {
 		});
 		return false;
 	});
+	search_setup();
 });
 

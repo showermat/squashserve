@@ -21,7 +21,7 @@ The following files are included in this project:
 
   - `zsr.cpp` and `zsr.h`: ZSR file format library
 
-  - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary to be used with `zsrsrv`
+  - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary to be used with zsrsrv
 
   - `search.cpp` and `search.h`: On-disk radix tree library for fast title search
 
@@ -180,12 +180,18 @@ This will make the archive browsable like a normal directory.  Files and directo
 
 ## Searching
 
-(In progress)
+Earlier versions of zsrsrv provided full-content search with [Xapian](https://xapian.org/), but for volumes over one or two gigabytes, it proved impractical to bundle the search databases in the volume, so full-content search has been dropped indefinitely.  Instead, a search on page titles has been built into zsrsrv.  During volume creation, the titles of all HTML files in the tree are indexed in a serialized radix tree that is stored in the user data portion of the volume, and this radix tree is traversed on-disk when a query is made.  This method has proven quite efficient and scalable, taking up almost no memory and requiring few disk reads.  Every title is indexed multiple times, once starting after every non-word character, so searches will find any page where the query is at the beginning of a word.
+
+The first 50 results of the search are placed in a typeahead box below the search input.  Selecting one of these will take the user directly to the matching article.  Pressing enter will take the user to the matching article if there is an article whose title matches the query exactly, or if there is only one article matching the query.  Otherwise, it displays a page with a full list of all matching articles.
 
 
 ## So, What about Wikipedia?
 
-(In progress)
+Of course, the holy grail of website archiving, and the most useful site to have, is Wikipedia.  A goal of this project was to enable efficient offline Wikipedia browsing suitable for replacing OpenZIM.  I have succeeded in creating a working volume from an HTML source tree of a May 2015 snapshot of the English Wikipedia, although the approach needs to be refined.  The raw source tree contains about 9.2 million files, both HTML and thumbnail images, and occupies about 178 GiB on disk.  With the current code, this compresses down to a 55.7-GiB volume that loads in 24 seconds from my SSD and occupies about 822 MiB of RAM once loaded.  Searching is almost instantaneous, and page loading takes less than one second, so the browsing experience is quite acceptable.  I am working now on decreasing the memory footprint and loading time of the archive.
+
+The volume was created from the Wikipedia ZIM file because that is the best preprocessed HTML tree of Wikipedia that I could find for download.  The original ZIM file is 47.4 GiB in size and does not include search indexing.  Downloading, extracting, and cleaning the HTML tree took several days of processing; once a browsable source tree had been created, `mkvol` took 54.5 hours and 6.9 GiB of RAM to compile the volume from the source tree.  I lack the means to host the archive, but one can be created fairly easily by following the steps in `accessories/enwiki_zsr.sh`.  To be safe, the machine should have about 500 GiB of available disk space and at least 8 GiB of RAM.
+
+The HTML tree for Wikipedia extracted from ZIM has plenty of problems of its own, concerning missing files, poor formatting, and others, in addition to having to perform time-costly renaming of many files.  I am working on a solution that generates an HTML source tree directly from the periodic database dumps that Wikipedia provides -- this will also allow the user to always have a copy of Wikipedia no more than a month old, rather than the once- or twice-a-year updates provided by OpenZIM.  This project will be updated as this course of inquiry progresses (or fails to progress).
 
 
 ## Accessory Tools

@@ -161,13 +161,13 @@ namespace zsr
 		nodeinfo inf = readinfo();
 		if (inf.type != ntype::link) return *this;
 		if (depth > maxdepth) throw std::runtime_error{"Links exceed maximum depth"};
-		return getnode(inf.redirect).follow(depth + 1);
+		return container_.getnode(inf.redirect).follow(depth + 1);
 	}
 	
 	void node::debug_treeprint(std::string prefix)
 	{
 		std::cout << prefix << name() << "\n";
-		for (const std::pair<const std::string, filecount> &child : *children_) getnode(child.second).debug_treeprint(prefix + "    ");
+		for (const std::pair<const size_t, filecount> &child : *children_) container_.getnode(child.second).debug_treeprint(prefix + "    ");
 	}
 
 	node::node(archive &container) : container_{container}
@@ -184,7 +184,13 @@ namespace zsr
 	filecount node::id() const
 	{
 		if (container_.size() == 0) return 0;
-		return this - &getnode(0);
+		return this - &container_.getnode(0);
+	}
+
+	node *node::parent()
+	{
+		if (id() == 0) return nullptr;
+		return &container_.getnode(readinfo().parent);
 	}
 
 	node::nodeinfo node::readinfo()
@@ -197,19 +203,16 @@ namespace zsr
 		return ret;
 	}
 
-	const node &node::getnode(filecount idx) const
-	{
-		return container_.index_[idx];
-	}
-
 	void node::resolve()
 	{
 		nodeinfo inf = readinfo();
 		if (id() > 0)
 		{
-			node &parent = getnode(inf.parent);
-			if (! parent.children_) parent.children_.reset(new std::unordered_map<std::string, filecount>{});
-			(*parent.children_)[inf.name] = id();
+			node &parent = container_.getnode(inf.parent);
+			if (! parent.children_) parent.children_.reset(new std::unordered_map<size_t, filecount>{});
+			size_t key = std::hash<std::string>{}(inf.name);
+			if (parent.children_->count(key)) throw std::runtime_error{"Internal error: collision in child map for node " + path()}; // FIXME Unlikely to cause problems...
+			(*parent.children_)[key] = id();
 		}
 		//children_.insert(std::unique_ptr<node>{n});
 	}
@@ -233,12 +236,21 @@ namespace zsr
 		if (ppath != "") ppath += "/";
 		return ppath + name();
 	}
+	
+	std::unordered_map<std::string, filecount> node::children() const
+	{
+		if (! children_) throw std::runtime_error{"Tried to get child list of non-directory"};
+		std::unordered_map<std::string, filecount> ret{};
+		for (const std::pair<const size_t, filecount> &child : *children_) ret[container_.index(child.second).name()] = child.second;
+		return ret;
+	}
 
 	const node *node::getchild(const std::string &name) const
 	{
 		if (! children_) throw std::runtime_error{"Tried to get child of non-directory"};
-		if (! children_->count(name)) return nullptr;
-		return &getnode(children_->at(name));
+		size_t key = std::hash<std::string>{}(name);
+		if (! children_->count(key)) return nullptr;
+		return &container_.getnode((*children_)[key]);
 		//std::unique_ptr<node_base> testobj{new test_node{name}}; // Ew.
 		//if (! children_.count(testobj)) return nullptr;
 		//return &**children_.find(testobj);
@@ -256,7 +268,7 @@ namespace zsr
 		if (children_)
 		{
 			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
-			for (const std::pair<const std::string, filecount> &child : *children_) getnode(child.second).extract(fullpath);
+			for (const std::pair<const size_t, filecount> &child : *children_) container_.getnode(child.second).extract(fullpath);
 		}
 		else
 		{

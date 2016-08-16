@@ -98,11 +98,15 @@ std::unordered_map<std::string, std::string> Volume::complete(const std::string 
 std::string Volume::quicksearch(std::string query)
 {
 	query = util::utf8lower(query);
-	for (const zsr::filecount &idx : titles_.exact_search(query))
+	std::unordered_set<zsr::filecount> res = titles_.exact_search(query);
+	//if (res.size() == 1) return archive_->index(*res.begin()).path();
+	for (const zsr::filecount &idx : res)
 	{
 		zsr::iterator n = archive_->index(idx);
 		if (util::utf8lower(n.meta("title")) == query) return n.path();
 	}
+	res = titles_.search(query);
+	if (res.size() == 1) return archive_->index(*res.begin()).path();
 	return "";
 }
 

@@ -28,6 +28,7 @@ $(document).ready(function() {
 	$("#search").on('submit', function() {
 		var query = $("#search-input").val();
 		window.location = "/search/" + volid + "/" + encodeURIComponent(query);
+		$("#search-input").val("");
 		return false;
 	});
 	$(window).bind('hashchange', function() {

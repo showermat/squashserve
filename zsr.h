@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
+#include "lib/sparsehash/sparse_hash_map"
 #include "util.h"
 #include "compress.h"
 
@@ -110,11 +111,9 @@ namespace zsr
 			std::vector<std::string> meta();
 		};
 		offset start_;
-		std::unique_ptr<std::unordered_map<std::string, filecount>> children_;
+		std::unique_ptr<std::unordered_map<size_t, filecount>> children_;
 		archive &container_;
 		nodeinfo readinfo();
-		const node &getnode(filecount idx) const;
-		node &getnode(filecount idx) { return const_cast<node &>(static_cast<const node &>(*this).getnode(idx)); }
 		node &follow(int depth = 0);
 		// Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 		// Need to set redirect_ when creating an archive from disk
@@ -125,7 +124,7 @@ namespace zsr
 		node(node &&orig) : start_{orig.start_}, children_{std::move(orig.children_)}, container_{orig.container_} { }
 		filecount id() const;
 		std::string name() { return readinfo().name; }
-		node *parent() { if (id() == 0) return nullptr; return &getnode(readinfo().parent); }
+		node *parent();
 		void debug_treeprint(std::string prefix = ""); // TODO Debug remove
 		bool isdir() { return static_cast<bool>(children_); }
 		bool isreg() { return ! children_; }
@@ -133,7 +132,7 @@ namespace zsr
 		std::streambuf *content();
 		std::string path();
 		size_t size() { return readinfo().fullsize; }
-		const std::unordered_map<std::string, filecount> &children() const { if (! children_) throw std::runtime_error{"Tried to get child list of non-directory"}; return *children_; }
+		std::unordered_map<std::string, filecount> children() const;
 		std::string meta(uint8_t key) { return readinfo().meta()[key]; }
 		const node *getchild(const std::string &name) const;
 		node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
@@ -184,6 +183,7 @@ namespace zsr
 		std::unique_ptr<util::rangebuf> userdbuf_;
 		std::istream userd_;
 		//archive() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
+		node &getnode(filecount idx) { return index_[idx]; }
 		node *getnode(const std::string &path, bool except = false);
 		unsigned int metaidx(const std::string &key) const;
 		friend class node; // TODO Ugh
