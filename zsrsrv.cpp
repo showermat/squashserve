@@ -163,7 +163,7 @@ http::doc search(Volume &vol, const std::string &query)
 
 http::doc complete(Volume &vol, const std::string &query)
 {
-	const int limit = 50;
+	constexpr int limit = 40;
 	std::unordered_map<std::string, std::string> res = vol.complete(query);
 	std::vector<std::string> names{};
 	names.reserve(res.size());

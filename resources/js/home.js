@@ -6,7 +6,7 @@ function search_setup()
 	$(".search").on('submit', function() {
 		var query = $(this).find(".search-input").val();
 		window.open("/search/" + $(this).data("volid") + "/" + encodeURIComponent(query));
-		$(this).find(".search-input").val(""); // FIXME Why doesn't this work?
+		clearform($(this).data("volid"));
 		return false;
 	});
 }
