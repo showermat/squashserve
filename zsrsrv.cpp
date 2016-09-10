@@ -8,9 +8,9 @@
 #include <future>
 #include <memory>
 #include <stdexcept>
-#include "lib/json.hpp" // Thanks to github/nlohmann
-#include "util.h"
-#include "prefs.h"
+#include "lib/json/json.hpp" // Thanks to github/nlohmann
+#include "util/util.h"
+#include "util/prefs.h"
 #include "zsr.h"
 #include "Volume.h"
 
@@ -285,16 +285,14 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 {
 	//std::cout << url << "\n";
 	std::vector<std::string> path = util::strsplit(url, '/');
+	if (path.size() && path[0] == "") path.erase(path.begin());
 	for (std::string &elem : path) elem = util::urldecode(elem);
 	std::unordered_map<std::string, std::string> query{};
-	if (querystr.size() > 0)
+	if (querystr.size() > 0) for (const std::string &qu : util::strsplit(querystr, '&'))
 	{
-		for (const std::string &qu : util::strsplit(querystr, '&'))
-		{
-			std::string::size_type idx = qu.find("=");
-			if (idx == qu.npos) query[util::urldecode(qu)] = "";
-			else query[util::urldecode(qu.substr(0, idx))] = util::urldecode(qu.substr(idx + 1));
-		}
+		std::string::size_type idx = qu.find("=");
+		if (idx == qu.npos) query[util::urldecode(qu)] = "";
+		else query[util::urldecode(qu.substr(0, idx))] = util::urldecode(qu.substr(idx + 1));
 	}
 	try
 	{

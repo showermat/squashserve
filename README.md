@@ -107,6 +107,10 @@ The ZSR format is fairly simple.  It consists of:
 
               - The two-byte length of the value and the value itself
 
+      - If the entry is a *link*:
+
+          - The eight-byte ID of the entry to which this link points
+
   - User data: arbitrary user-defined data may follow the archive.  (This is used, for example, to store the search index for volumes.)  This region of the file is made available to the user as a `std::istream` when the file is opened.
 
 The encoder for the file format is implemented in `zsr.cpp`.  I provide a small utility for command-line compression and decompression of ZSR files in `zsrutil.cpp`.  Its usage is as follows:

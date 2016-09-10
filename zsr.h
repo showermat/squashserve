@@ -17,8 +17,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
-#include "lib/sparsehash/sparse_hash_map"
-#include "util.h"
+#include "util/util.h"
 #include "compress.h"
 
 #define VERBOSE
@@ -32,17 +31,10 @@ const std::string clrln{"\r\033[K"};
 #define logb(msg)
 #endif
 
-/* TODO
- * Support symlinks
- * Then, in Wikipedia, when an article redirects, just make it a symlink
- */
-
 namespace zsr
 {
 	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
 	typedef uint64_t offset; // Constrains the size of the archive and individual files
-
-	const int maxdepth = 255;
 
 	class archive;
 	class index;
@@ -68,7 +60,8 @@ namespace zsr
 			std::string path() const { return path_; }
 		};
 	private:
-		const std::string root_;
+		const std::string root_, fullroot_;
+		//std::unordered_map<std::string, offset> links_;
 		std::unordered_map<std::string, std::string> volmeta_;
 		std::vector<std::string> nodemeta_;
 		std::function<std::vector<std::string>(const filenode &)> metagen_;
@@ -78,7 +71,7 @@ namespace zsr
 		void writestring(const std::string &s, std::ostream &out);
 		void recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
-		writer(const std::string &root) : root_{root}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr} { }
+		writer(const std::string &root) : root_{root}, fullroot_{util::resolve(std::string{getenv("PWD")}, root_)}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr} { }
 		void userdata(std::istream &data) { userdata_ = &data; }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
@@ -114,9 +107,7 @@ namespace zsr
 		std::unique_ptr<std::unordered_map<size_t, filecount>> children_;
 		archive &container_;
 		nodeinfo readinfo();
-		node &follow(int depth = 0);
-		// Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
-		// Need to set redirect_ when creating an archive from disk
+		node &follow(unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 		friend class archive; // TODO
 	public:
 		node(archive &container);
@@ -126,21 +117,22 @@ namespace zsr
 		std::string name() { return readinfo().name; }
 		node *parent();
 		void debug_treeprint(std::string prefix = ""); // TODO Debug remove
-		bool isdir() { return static_cast<bool>(children_); }
-		bool isreg() { return ! children_; }
 		ntype type() { return readinfo().type; }
+		bool isdir() { return follow().type() == ntype::dir; }
+		bool isreg() { return follow().type() == ntype::reg; }
+		std::string dest() { return util::relreduce(util::dirname(path()), follow().path()); }
 		std::streambuf *content();
 		std::string path();
-		size_t size() { return readinfo().fullsize; }
-		std::unordered_map<std::string, filecount> children() const;
-		std::string meta(uint8_t key) { return readinfo().meta()[key]; }
-		const node *getchild(const std::string &name) const;
-		node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
+		size_t size() { return follow().readinfo().fullsize; } // TODO Follow?
+		std::unordered_map<std::string, filecount> children();
+		std::string meta(uint8_t key) { return follow().readinfo().meta()[key]; }
+		node *getchild(const std::string &name);
+		//node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
 		void close();
 		void extract(const std::string &path);
 		void resolve();
 		//size_t hash() const { return static_cast<size_t>(id()); }
-		bool operator ==(node &other) { return name() == other.name(); }
+		bool operator ==(node &other) { return id() == other.id(); }
 	};
 
 	class iterator
@@ -155,8 +147,11 @@ namespace zsr
 		std::string name() const { return getnode().name(); }
 		std::string path() const { return getnode().path(); }
 		bool isdir() const { return getnode().isdir(); }
+		bool isreg() const { return getnode().isreg(); }
+		node::ntype type() const { return getnode().type(); }
 		std::string meta(const std::string &key) const;
 		std::unordered_map<std::string, filecount> children() const;
+		std::string dest() const { return getnode().dest(); }
 		size_t size() const { return getnode().size(); }
 		std::streambuf *open();
 		void close() { getnode().close(); }

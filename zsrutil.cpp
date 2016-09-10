@@ -48,7 +48,14 @@ int main(int argc, char **argv)
 	{
 		if (args.size() < 3) help_exit();
 		zsr::archive ar{std::ifstream{args[2]}};
-		for (const std::pair<const std::string, zsr::filecount> &child : ar.get(args.size() > 3 ? args[3] : "").children()) std::cout << child.first << (ar.index(child.second).isdir() ? "/" : "") << "\n";
+		for (const std::pair<const std::string, zsr::filecount> &child : ar.get(args.size() > 3 ? args[3] : "").children())
+		{
+			std::cout << child.first;
+			zsr::node::ntype type = ar.index(child.second).type();
+			if (type == zsr::node::ntype::dir) std::cout << "/";
+			else if (type == zsr::node::ntype::link) std::cout << " -> " << ar.index(child.second).dest();
+			std::cout << "\n";
+		}
 	}
 	else help_exit();
 	return 0;

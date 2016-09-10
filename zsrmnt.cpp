@@ -57,6 +57,15 @@ int fs_release(const char *path, struct fuse_file_info *info)
 	return 0;
 }
 
+int fs_readlink(const char *path, char *buf, size_t size)
+{
+	zsr::iterator n = ar->get(std::string{path});
+	if (n.type() != zsr::node::ntype::link) return -EINVAL;
+	strncpy(buf, n.dest().c_str(), size - 1);
+	buf[size - 1] = 0;
+	return 0;
+}
+
 int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *info)
 {
 	std::vector<dirent> ls{};
@@ -65,8 +74,11 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 		for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
 		{
 			dirent dir;
-			strncpy(dir.d_name, child.first.c_str(), 256);
-			dir.d_type = (ar->index(child.second).isdir() ? DT_DIR : DT_REG);
+			strncpy(dir.d_name, child.first.c_str(), 256); // TODO Path name length limit?
+			zsr::node::ntype type = ar->index(child.second).type();
+			if (type == zsr::node::ntype::reg) dir.d_type = DT_REG;
+			else if (type == zsr::node::ntype::dir) dir.d_type = DT_DIR;
+			else if (type == zsr::node::ntype::link) dir.d_type = DT_LNK;
 			ls.push_back(dir);
 		}
 	}
@@ -81,12 +93,21 @@ int fs_getattr(const char *path, struct stat *stat)
 {
 	memset(stat, 0, sizeof(struct stat));
 	stat->st_nlink = 1;
-	if (std::string{path} == "/") {  }
 	try
 	{
 		zsr::iterator n = ar->get(std::string{path});
-		stat->st_mode = (n.isdir() ? S_IFDIR : S_IFREG) | 00750;
-		if (! n.isdir()) stat->st_size = n.size();
+		if (n.type() == zsr::node::ntype::dir) stat->st_mode = S_IFDIR;
+		else if (n.type() == zsr::node::ntype::reg)
+		{
+			stat->st_mode = S_IFREG;
+			stat->st_size = n.size();
+		}
+		else if (n.type() == zsr::node::ntype::link)
+		{
+			stat->st_mode = S_IFLNK;
+			stat->st_size = n.dest().size();
+		}
+		stat->st_mode |= 00750;
 	}
 	catch (std::runtime_error &e) { return -ENOENT; }
 	return 0;
@@ -102,6 +123,7 @@ int main(int argc, char **argv)
 	ar.reset(new zsr::archive{std::ifstream{args[1]}});
 	ops.open = fs_open;
 	ops.read = fs_read;
+	ops.readlink = fs_readlink;
 	ops.readdir = fs_readdir;
 	ops.getattr = fs_getattr;
 	ops.release = fs_release;

@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <lzma.h>
-#include "util.h"
+#include "util/util.h"
 
 namespace lzma
 {

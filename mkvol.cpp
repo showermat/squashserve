@@ -3,7 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <getopt.h>
-#include "util.h"
+#include "util/util.h"
 #include "zsr.h"
 #include "search.h"
 
