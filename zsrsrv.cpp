@@ -17,6 +17,7 @@
 /* TODO:
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called
  * Implement automatic ZSR file creator
+ * ZSR files without info.txt (and "home" attr?) should not be included in the list of volumes
  *
  * FIXME:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor

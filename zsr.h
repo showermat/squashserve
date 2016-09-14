@@ -19,6 +19,7 @@
 #include <string.h>
 #include "util/util.h"
 #include "compress.h"
+#include "diskmap.h"
 
 #define VERBOSE
 
@@ -69,7 +70,7 @@ namespace zsr
 		std::string headf_, contf_, idxf_;
 		filecount nfile_;
 		void writestring(const std::string &s, std::ostream &out);
-		void recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
+		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
 		writer(const std::string &root) : root_{root}, fullroot_{util::resolve(std::string{getenv("PWD")}, root_)}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr} { }
 		void userdata(std::istream &data) { userdata_ = &data; }
@@ -91,20 +92,22 @@ namespace zsr
 		{
 		private:
 			std::istream &in_;
-			offset metastart_;
+			offset metastart_, childrenstart_;
 			uint8_t nmeta_;
+			std::function<std::string(const filecount &)> &revcheck_;
 			std::string readstring();
 		public:
+			nodeinfo(std::istream &in, std::function<std::string(const filecount &)> &revcheck, uint8_t nmeta);
 			ntype type;
 			offset parent, redirect;
 			std::string name;
 			offset start, len;
 			size_t fullsize;
-			nodeinfo(std::istream &in, uint8_t nmeta);
 			std::vector<std::string> meta();
+			diskmap::map<std::string, filecount> children() { in_.seekg(childrenstart_); return diskmap::map<std::string, filecount>{in_, revcheck_}; }
 		};
 		offset start_;
-		std::unique_ptr<std::unordered_map<size_t, filecount>> children_;
+		//std::unique_ptr<std::unordered_map<size_t, filecount>> children_;
 		archive &container_;
 		nodeinfo readinfo();
 		node &follow(unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
@@ -112,7 +115,7 @@ namespace zsr
 	public:
 		node(archive &container);
 		node(const node &orig) = delete;
-		node(node &&orig) : start_{orig.start_}, children_{std::move(orig.children_)}, container_{orig.container_} { }
+		node(node &&orig) : start_{orig.start_}, container_{orig.container_} { }
 		filecount id() const;
 		std::string name() { return readinfo().name; }
 		node *parent();
@@ -169,6 +172,7 @@ namespace zsr
 		static const std::string magic_number;
 	private:
 		static std::ifstream default_istream_;
+		std::function<std::string(const filecount &)> revcheck = [this](const filecount &x) { return index(x).name(); };
 		std::ifstream in_;
 		std::vector<node> index_;
 		offset datastart_;
