@@ -12,6 +12,7 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	// If the tree is not indexed yet, index it
 	// Compress the tree to the destination
 	// Load the volume
+	// If an exception is thrown, display the error message to the user
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
@@ -198,6 +199,7 @@ std::unordered_set<std::string> Volmgr::load(const std::string &cat)
 			ret.insert(vol.first);
 		}
 		catch (zsr::badzsr &e) { std::cerr << vol.first << ": " << e.what() << "\n"; }
+		catch (std::runtime_error &e) { std::cerr << vol.first << ": " << e.what() << "\n"; } // TODO How should this be done?  Exception subclassing and handling needs some refinement
 	}
 	return ret;
 }

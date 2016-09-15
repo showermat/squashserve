@@ -86,64 +86,48 @@ namespace zsr
 	{
 	public:
 		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
-		//class sethash { public: size_t operator ()(const std::unique_ptr<node> &x) const { return std::hash<std::string>{}(x->name_); } };
 	private:
-		class nodeinfo
-		{
-		private:
-			std::istream &in_;
-			offset metastart_, childrenstart_;
-			uint8_t nmeta_;
-			std::function<std::string(const filecount &)> &revcheck_;
-			std::string readstring();
-		public:
-			nodeinfo(std::istream &in, std::function<std::string(const filecount &)> &revcheck, uint8_t nmeta);
-			ntype type;
-			offset parent, redirect;
-			std::string name;
-			offset start, len;
-			size_t fullsize;
-			std::vector<std::string> meta();
-			diskmap::map<std::string, filecount> children() { in_.seekg(childrenstart_); return diskmap::map<std::string, filecount>{in_, revcheck_}; }
-		};
-		offset start_;
-		//std::unique_ptr<std::unordered_map<size_t, filecount>> children_;
 		archive &container_;
-		nodeinfo readinfo();
-		node &follow(unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
-		friend class archive; // TODO
+		std::istream &in_; // TODO Replace with container_.in_?
+		filecount id_;
+		std::vector<std::string> meta_;
+		std::function<std::string(const filecount &)> &revcheck_;
+		ntype type_;
+		offset parent_, redirect_;
+		std::string name_;
+		offset len_;
+		size_t fullsize_;
+		offset datastart_;
+		std::string readstring();
+		diskmap::map<std::string, filecount> childmap();
+		node follow(unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 	public:
-		node(archive &container);
-		node(const node &orig) = delete;
-		node(node &&orig) : start_{orig.start_}, container_{orig.container_} { }
-		filecount id() const;
-		std::string name() { return readinfo().name; }
-		node *parent();
-		void debug_treeprint(std::string prefix = ""); // TODO Debug remove
-		ntype type() { return readinfo().type; }
-		bool isdir() { return follow().type() == ntype::dir; }
-		bool isreg() { return follow().type() == ntype::reg; }
-		std::string dest() { return util::relreduce(util::dirname(path()), follow().path()); }
-		std::streambuf *content();
+		node(archive &container, offset idx);
+		node(const node &orig) = default; // Can these both be default?
+		node(node &&orig) = default;
+		filecount id() const { return id_; }
+		std::string name() const { return name_; }
+		std::unique_ptr<node> parent(); // Pending existence of std::optional
+		ntype type() const { return type_; }
+		bool isdir() { return follow().type_ == ntype::dir; }
+		bool isreg() { return follow().type_ == ntype::reg; }
 		std::string path();
-		size_t size() { return follow().readinfo().fullsize; } // TODO Follow?
+		std::string dest() { return util::relreduce(util::dirname(path()), follow().path()); }
+		size_t size() { return follow().fullsize_; }
+		std::string meta(uint8_t key) { return follow().meta_[key]; }
 		std::unordered_map<std::string, filecount> children();
-		std::string meta(uint8_t key) { return follow().readinfo().meta()[key]; }
-		node *getchild(const std::string &name);
-		//node *getchild(const std::string &name) { return const_cast<node *>(static_cast<const node &>(*this).getchild(name)); }
+		std::unique_ptr<node> getchild(const std::string &name); // Pending std::optional
+		std::streambuf *content(); // TODO Parts of this should be moved into zsr::archive
 		void close();
 		void extract(const std::string &path);
-		void resolve();
-		//size_t hash() const { return static_cast<size_t>(id()); }
-		bool operator ==(node &other) { return id() == other.id(); }
 	};
 
-	class iterator
+	class iterator // TODO Make this actually inherit from std::iterator
 	{
 	private:
 		archive &ar;
 		filecount idx;
-		node &getnode() const;
+		node getnode() const;
 	public:
 		iterator(archive &a, filecount i) : ar{a}, idx{i} { }
 		filecount id() const { return idx; }
@@ -174,32 +158,29 @@ namespace zsr
 		static std::ifstream default_istream_;
 		std::function<std::string(const filecount &)> revcheck = [this](const filecount &x) { return index(x).name(); };
 		std::ifstream in_;
-		std::vector<node> index_;
-		offset datastart_;
+		offset idxstart_, datastart_;
+		filecount size_;
 		std::unordered_map<std::string, std::string> archive_meta_;
 		std::vector<std::string> node_meta_;
 		std::unordered_map<filecount, lzma::rdbuf> open_;
 		std::unique_ptr<util::rangebuf> userdbuf_;
 		std::istream userd_;
-		//archive() : root_{}, index_{}, archive_meta_{}, node_meta_{}, open_{} { }
-		node &getnode(filecount idx) { return index_[idx]; }
-		node *getnode(const std::string &path, bool except = false);
+		node getnode(filecount idx) { return node{*this, idx}; }
+		std::unique_ptr<node> getnode(const std::string &path, bool except = false); // TODO Pending std::optional
 		unsigned int metaidx(const std::string &key) const;
 		friend class node; // TODO Ugh
 		friend class iterator;
 	public:
 		archive(const archive &orig) = delete;
-		archive(archive &&orig) : in_{std::move(orig.in_)}, index_{std::move(orig.index_)}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
+		archive(archive &&orig) : in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
 		archive(std::ifstream &&in);
-		filecount size() const { return index_.size(); }
+		filecount size() const { return size_; }
 		std::unordered_map<std::string, std::string> &gmeta() { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
 		bool check(const std::string &path);
-		void debug_treeprint() { index_[0].debug_treeprint(); }
 		iterator get(const std::string &path) { return iterator{*this, getnode(path, true)->id()}; }
 		iterator index(filecount idx = 0) { return iterator{*this, idx}; }
 		void extract(const std::string &member = "", const std::string &dest = ".");
-		std::ifstream &in() { return in_; }
 		std::istream &userdata() { return userd_; }
 		void close(const std::string &path) { getnode(path, true)->close(); }
 		void reap() { open_.clear(); }

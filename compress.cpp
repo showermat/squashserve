@@ -95,7 +95,7 @@ namespace lzma
 		setg(start, start, end);
 		return lzma_.total_out;
 	}
-	//catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; }
+	//catch (std::exception &e) { std::cerr << "Error: " << e.what() << "\n"; return 0; } // FIXME Exceptions aren't propagated by operator <<.  Use ios::exceptions flags instead?
 	
 	std::streambuf::int_type buf_base::underflow()
 	{

@@ -11,9 +11,7 @@ ZSR is designed to facilitate browsing archived websites with existing web brows
 
 The following files are included in this project:
 
-  - `util.cpp`, `mime.h`, `htmlent.h`, and `util.h`: Miscellaneous utility functions
-
-  - `prefs.h`: Preferences manager
+  - `util/*`: Miscellaneous utility functions
 
   - `http.cpp` and `http.h`: Various abstractions for HTTP and HTML used by zsrsrv
 
@@ -21,9 +19,11 @@ The following files are included in this project:
 
   - `zsr.cpp` and `zsr.h`: ZSR file format library
 
-  - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary to be used with zsrsrv
+  - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary for use with zsrsrv
 
   - `search.cpp` and `search.h`: On-disk radix tree library for fast title search
+
+  - `diskmap.h`: On-disk hash map variant for storing directory contents
 
   - `zsrutil.cpp`: ZSR command-line utility
 
@@ -65,6 +65,8 @@ The ZSR format is a general-purpose archive format designed to combine XZ compre
 
   - **High compression**.  This was partially achieved by using XZ, which currently provides some of the best compression ratios available.  However, the effectiveness was decreased by the necessity of compressing each file separately to enable random access.  There is currently a modest improvement over ZIP, but I am looking for ways to further improve this ratio.
 
+  - **Total encapsulation**, so that a volume can be transferred as a single file.  OpenZIM separates the search index from the ZIM file, which requires each user to index files before they can be searched.  ZSR aims to encapsulate all data necessary to use the archive in a single file.
+
   - **Ability to reconstruct the original file tree**.  OpenZIM places all files in a flat system of "namespaces" and does not support hierarchical organization.  Since one of the aims of this project is to allow modification of the archive, it was necessary to have a format that conserved the original directory structure.
 
   - **Emphasis on read speed**.  Although writing archives is important, the intended scenario involves archives being read much more frequently than they are written.  The XZ compression used in the format is much slower than ZIP compression, and the archive must be completely decompressed and rewritten if changes are to be made, but there is a small size improvement and the lightweight nature of the format makes decompression fast enough to allow most pages to load within a second or two on my computer.
@@ -72,45 +74,31 @@ The ZSR format is a general-purpose archive format designed to combine XZ compre
 The ZSR format is fairly simple.  It consists of:
 
   - Header: the four ASCII bytes `!ZSR` followed by an eight-byte integer specifying the start byte of the index
-
   - Volume metadata: the one-byte number of volume metadata, followed by the following for each datum:
-
       - The two-byte length of the key and the key itself
-
       - The two-byte length of the value and the value itself
-
   - File metadata: the one-byte number of file metadata, followed by the following for each datum:
-
       - The two-byte length of the key and the key itself
-
-  - Data: the XZ-compressed archive data for the files, extending to the last byte before the index
-
-  - The eight-byte number of index entries; that is, the total number of files and directories stored in the index
-
-  - Index: an index entry for each file, consisting of:
-
-      - The eight-byte offset to the end of this node (beginning of the next node for each node but the last) in the file, creating an on-disk linked list of nodes
-
+  - Data: a data entry for each file, consisting of:
       - The eight-byte ID of this entry's parent, or 0 for the root (index IDs are assigned in the order entries are stored in the index, starting with 0 for the root)
-
       - The one-byte type of the file: 1 for directory, 2 for regular file, 3 for symbolic link
-
       - The two-byte length of the entry's name and the name itself
-
       - If the entry is a *file*:
-
-          - The eight-byte start position and length of the file's compressed data in the archive
-
-          - The eight-byte size of the file when decompressed
-
           - For each file metadatum defined at the beginning of the archive:
-
               - The two-byte length of the value and the value itself
-
+          - The eight-byte size of the file when decompressed
+          - The length of the file's compressed data
+          - The file's data, compressed in XZ format
       - If the entry is a *link*:
-
           - The eight-byte ID of the entry to which this link points
-
+      - If the entry is a *directory*:
+          - The eight-byte number of children of this directory
+          - For each child:
+              - The eight-byte hash of the child's name
+              - The eight-byte ID of the child
+  - Index: one entry for each file, allowing fast random access to any file by ID
+      - The eight-byte number of index entries; that is, the total number of files and directories stored in the index
+      - For each file, the offset from the start of the data section to the start of the data entry for that file
   - User data: arbitrary user-defined data may follow the archive.  (This is used, for example, to store the search index for volumes.)  This region of the file is made available to the user as a `std::istream` when the file is opened.
 
 The encoder for the file format is implemented in `zsr.cpp`.  I provide a small utility for command-line compression and decompression of ZSR files in `zsrutil.cpp`.  Its usage is as follows:
@@ -158,7 +146,7 @@ The encoder can also be used as a library in other C++ programs by including the
 
 To browse an archived site, you need to create a "volume", which is just a ZSR archive of the HTML source tree with some metadata.  To begin with, all links to internal resources must be relative, because HTML pages are passed by the ZSR server to the user's web browser without modification.  There are plenty of tools that will rewrite links for you, so I decided it would be redundant to incorporate rewriting capabilities into this project.  If all internal links in the source tree are sound, they should also work in the final volume.
 
-The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.txt`, which contains metadata about the archive.  These metadata  are in the format `key:value`, where `key` is composed of lower-case letters and `value` is any string that does not contain a newline.  Arbitrary metadata can be specified; ones specifically used by ZSR are "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.txt` file with only the line `home:index.html`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
+The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.txt`, which contains metadata about the archive.  These metadata  are in the format `key:value`, where `key` is composed of lower-case letters and `value` is any string that does not contain a newline.  Arbitrary metadata can be specified; ones actually used by ZSR include "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.txt` file with only the line `home:index.html`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
 
 Once the `_meta` directory has been filled with the appropriate material, the creation of a volume archive can be automated by running the `mkvol` binary:
 
@@ -169,9 +157,9 @@ Once the `_meta` directory has been filled with the appropriate material, the cr
 
 ## Web Server and FUSE Mounter
 
-The main functionality of ZSR is in zsrsrv, a small program that acts as a web server, allowing the user to browse volumes from a web browser.  When launched for the first time (with `zsrsrv` -- there are no arguments), it will start a web server accepting requests on localhost port 2234.  Click on the gear icon to set which port to listen on and where the volume archives are located.  Then click the circular arrow icon to refresh the list of volumes.  This can take a minute if you have many large volumes; be patient and the page will reload when it's done loading the volumes.  To create a new volume from a pristine source tree (without a `_meta` directory), click the plus icon, supply the requested information, and submit.  The archive will be created, which may take a long time, and the list of volumes will be reloaded.  To browse a volume, click on its title and you will be taken to the home page.
+The main functionality of ZSR is in zsrsrv, a small program that acts as a web server, allowing the user to browse volumes from a web browser.  When launched for the first time (with `zsrsrv` -- there are no arguments), it will start a web server accepting requests on localhost port 2234.  Click on the gear icon to set which port to listen on and where the volume archives are located.  Then click the circular arrow icon to refresh the list of volumes.  To create a new volume from a pristine source tree (without a `_meta` directory), click the plus icon, supply the requested information, and submit.  The archive will be created, which may take a long time, and the list of volumes will be reloaded.  To browse a volume, click on its title and you will be taken to the home page.  Very large document trees may take several hours to archive; it is recommended to run `mkvol` from the command line yourself so that errors can be more easily diagnosed and resolved.
 
-If there is a file named `categories.txt` in the same directory as the volume archives, it will be used to categorize the volumes.  The file should consist of one line for each category, with three fields separated by colons: the category ID (lower-case alphanumeric), the category name to be displayed, and a space-separated list of the volume IDs in that category.  (The ID of a volume is the filename without the final `.zsr`.)  Thus, to define a category containing the files `wiki1.zsr` and `wiki2.zsr`, `categories.txt` should contain a line like `cat1:Category Name:wiki1 wiki2`.  Archives will be loaded into memory only when their category is loaded by clicking on it in the volume list, so categorization can reduce memory usage by loading volumes only when they are needed.
+If there is a file named `categories.txt` in the same directory as the volume archives, it will be used to categorize the volumes.  The file should consist of one line for each category, with three fields separated by colons: the category ID (lower-case alphanumeric), the category name to be displayed, and a space-separated list of the volume IDs in that category.  (The ID of a volume is the filename without the final `.zsr`.)  Thus, to define a category containing the files `wiki1.zsr` and `wiki2.zsr`, `categories.txt` should contain a line like `cat1:Category Name:wiki1 wiki2`.  Archives will be loaded into memory only when their category is loaded by clicking on it in the volume list.
 
 Volumes and standard ZSR archives can be mounted as read-only filesystems through FUSE using `zsrmnt`:
 
@@ -184,7 +172,7 @@ This will make the archive browsable like a normal directory.  Files and directo
 
 ## Searching
 
-Earlier versions of zsrsrv provided full-content search with [Xapian](https://xapian.org/), but for volumes over one or two gigabytes, it proved impractical to bundle the search databases in the volume, so full-content search has been dropped indefinitely.  Instead, a search on page titles has been built into zsrsrv.  During volume creation, the titles of all HTML files in the tree are indexed in a serialized radix tree that is stored in the user data portion of the volume, and this radix tree is traversed on-disk when a query is made.  This method has proven quite efficient and scalable, taking up almost no memory and requiring few disk reads.  Every title is indexed multiple times, once starting after every non-word character, so searches will find any page where the query is at the beginning of a word.
+Earlier versions of zsrsrv provided full-content search with [Xapian](https://xapian.org/), but for volumes over one or two gigabytes, it proved impractical to bundle the search databases in the volume, so full-content search has been dropped indefinitely.  Instead, a search on page titles has been built into zsrsrv.  During volume creation, the titles of all HTML files in the tree are indexed in a serialized radix tree that is stored in the user data portion of the volume, and this radix tree is traversed on-disk when a query is made.  This method has proven quite efficient and scalable, taking up almost no memory and requiring few disk reads.  Every title is indexed multiple times, once starting after each non-word character, so searches will find any page where the query is at the beginning of a word.
 
 The first 50 results of the search are placed in a typeahead box below the search input.  Selecting one of these will take the user directly to the matching article.  Pressing enter will take the user to the matching article if there is an article whose title matches the query exactly, or if there is only one article matching the query.  Otherwise, it displays a page with a full list of all matching articles.
 
