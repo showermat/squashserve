@@ -65,6 +65,12 @@ namespace rsearch
 	void disktree_writer::write(std::ostream &out)
 	{
 		loga("Writing search index");
+		if (! stree_.m_root)
+		{
+			constexpr treesize fill{0};
+			for (int i = 0; i < 2; i++) out.write(reinterpret_cast<const char *>(&fill), sizeof(treesize));
+			return;
+		}
 		recursive_treewrite(out, stree_.m_root, static_cast<zsr::offset>(out.tellp()));
 	}
 

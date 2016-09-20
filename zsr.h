@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <list>
 #include <tuple>
 #include <memory>
 #include <fstream>
@@ -61,18 +62,43 @@ namespace zsr
 			std::string path() const { return path_; }
 		};
 	private:
+		class linkmgr
+		{
+		public:
+			struct linkinfo
+			{
+				bool resolved;
+				std::streampos destpos;
+				filecount destid;
+				linkinfo() : resolved{false} { }
+			};
+		private:
+			std::string root_;
+			std::list<linkinfo> links_;
+			std::unordered_map<std::string, linkinfo *> by_src_;
+			std::unordered_multimap<std::string, linkinfo *> by_dest_;
+			void add(const std::string &src, const std::string &dest);
+			static bool walk_add(const std::string &path, const struct stat *st, void *dest);
+		public:
+			linkmgr(const std::string root) : root_{root} { }
+			void search();
+			void handle_src(const std::string &path, std::streampos destpos);
+			void handle_dest(const std::string &path, filecount id);
+			void write(std::ostream &out);
+			size_t size() { return links_.size(); }
+		};
 		const std::string root_, fullroot_;
-		//std::unordered_map<std::string, offset> links_;
 		std::unordered_map<std::string, std::string> volmeta_;
 		std::vector<std::string> nodemeta_;
 		std::function<std::vector<std::string>(const filenode &)> metagen_;
 		std::istream *userdata_;
 		std::string headf_, contf_, idxf_;
 		filecount nfile_;
+		linkmgr links_;
 		void writestring(const std::string &s, std::ostream &out);
 		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
-		writer(const std::string &root) : root_{root}, fullroot_{util::resolve(std::string{getenv("PWD")}, root_)}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr} { }
+		writer(const std::string &root) : root_{root}, fullroot_{util::resolve(std::string{getenv("PWD")}, root_)}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, links_{fullroot_} { }
 		void userdata(std::istream &data) { userdata_ = &data; }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
@@ -93,14 +119,15 @@ namespace zsr
 		std::vector<std::string> meta_;
 		std::function<std::string(const filecount &)> &revcheck_;
 		ntype type_;
-		offset parent_, redirect_;
+		offset parent_;
+		filecount redirect_;
 		std::string name_;
 		offset len_;
 		size_t fullsize_;
 		offset datastart_;
 		std::string readstring();
 		diskmap::map<std::string, filecount> childmap();
-		node follow(unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
+		node follow(unsigned int limit = 0, unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 	public:
 		node(archive &container, offset idx);
 		node(const node &orig) = default; // Can these both be default?
@@ -112,7 +139,7 @@ namespace zsr
 		bool isdir() { return follow().type_ == ntype::dir; }
 		bool isreg() { return follow().type_ == ntype::reg; }
 		std::string path();
-		std::string dest() { return util::relreduce(util::dirname(path()), follow().path()); }
+		std::string dest() { return util::relreduce(util::dirname(path()), follow(1).path()); }
 		size_t size() { return follow().fullsize_; }
 		std::string meta(uint8_t key) { return follow().meta_[key]; }
 		std::unordered_map<std::string, filecount> children();

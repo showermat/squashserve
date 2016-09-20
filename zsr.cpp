@@ -12,6 +12,7 @@ namespace zsr
 	filecount writer::recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout) // TODO Needs a little refactoring
 	{
 		constexpr offset ptrfill{0};
+		std::string fullpath = util::resolve(std::string{getenv("PWD")}, path);
 		struct stat s;
 		if (lstat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't lstat " + path};
 		node::ntype type = node::ntype::reg;
@@ -20,9 +21,8 @@ namespace zsr
 		std::string fulltarget{};
 		if ((s.st_mode & S_IFMT) == S_IFLNK)
 		{
-			fulltarget = util::linktarget(util::resolve(std::string{getenv("PWD")}, path));
-			if (fulltarget.substr(0, fullroot_.size()) == fullroot_ && (fulltarget.size() == fullroot_.size() || fulltarget[fullroot_.size()] == util::pathsep))
-				type = node::ntype::link; // Only treat as link if destination is inside the tree
+			fulltarget = util::linktarget(fullpath);
+			if (util::is_under(fullroot_, fulltarget)) type = node::ntype::link; // Only treat as link if destination is inside the tree
 			else if (stat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
 		}
 		if ((s.st_mode & S_IFMT) == S_IFDIR)
@@ -39,6 +39,7 @@ namespace zsr
 		filecount id = nfile_++;
 		logb(id << " " << path);
 		//std::cout << "File " << id << " path " << path << " parent " << parent << "\n";
+		links_.handle_dest(fullpath, id);
 		offset mypos = contout.tellp();
 		idxout.write(reinterpret_cast<const char *>(&mypos), sizeof(offset));
 		contout.write(reinterpret_cast<const char *>(&parent), sizeof(filecount));
@@ -64,8 +65,8 @@ namespace zsr
 		}
 		if (type == node::ntype::link)
 		{
+			links_.handle_src(fullpath, contout.tellp());
 			constexpr filecount fcfill{0}; // To fill in later
-			//links_[util::relreduce(fullroot_, fulltarget)] = idxout.tellp(); // TODO links
 			contout.write(reinterpret_cast<const char *>(&fcfill), sizeof(filecount));
 		}
 		if (type == node::ntype::dir)
@@ -94,8 +95,63 @@ namespace zsr
 		return id;
 	}
 
+	void writer::linkmgr::add(const std::string &src, const std::string &dest)
+	{
+		links_.push_back(linkinfo{});
+		linkinfo *inserted = &links_.back();
+		by_src_.insert(std::make_pair(src, inserted));
+		by_dest_.insert(std::make_pair(dest, inserted));
+	}
+
+	bool writer::linkmgr::walk_add(const std::string &path, const struct stat *st, void *arg)
+	{
+		linkmgr *caller = (linkmgr *) arg;
+		if ((st->st_mode & S_IFMT) == S_IFLNK)
+		{
+			std::string target = util::linktarget(path);
+			if (util::is_under(caller->root_, target)) caller->add(path, target);
+			else return true;
+			return false;
+		}
+		return true;
+	}
+
+	void writer::linkmgr::search()
+	{
+		util::fswalk(root_, walk_add, (void *) this, false);
+	}
+
+	void writer::linkmgr::handle_src(const std::string &path, std::streampos destpos)
+	{
+		std::unordered_map<std::string, linkinfo *>::iterator iter = by_src_.find(path);
+		if (iter == by_src_.end()) throw std::runtime_error{"Couldn't find " + path + " in link table"};
+		iter->second->destpos = destpos;
+	}
+
+	void writer::linkmgr::handle_dest(const std::string &path, filecount id)
+	{
+		std::pair<std::unordered_map<std::string, linkinfo *>::iterator, std::unordered_map<std::string, linkinfo *>::iterator> range = by_dest_.equal_range(path);
+		for (std::unordered_map<std::string, linkinfo *>::iterator iter = range.first; iter != range.second; iter++)
+		{
+			iter->second->destid = id;
+			iter->second->resolved = true;
+		}
+	}
+	void writer::linkmgr::write(std::ostream &out)
+	{
+		for (const std::pair<const std::string, linkinfo *> &link : by_src_)
+		{
+			if (! link.second->resolved) throw std::runtime_error{"Link " + link.first + " was not resolved"};
+			out.seekp(link.second->destpos);
+			out.write(reinterpret_cast<char *>(&link.second->destid), sizeof(filecount));
+		}
+	}
+
 	void writer::write_body(const std::string &contname, const std::string &idxname)
 	{
+		loga("Finding links");
+		links_.search();
+		logb(links_.size() << " links found");
 		loga("Writing archive body");
 		contf_ = contname;
 		idxf_ = idxname;
@@ -105,6 +161,8 @@ namespace zsr
 		nfile_ = 0;
 		recursive_process(root_, 0, contout, idxout);
 		loga("Wrote " << nfile_ << " entries");
+		loga("Writing links");
+		links_.write(contout);
 	}
 
 	void writer::write_header(const std::string &tmpfname)
@@ -192,12 +250,13 @@ namespace zsr
 		return diskmap::map<std::string, filecount>{in_, revcheck_};
 	}
 
-	node node::follow(unsigned int depth)
+	node node::follow(unsigned int limit, unsigned int depth)
 	{
 		constexpr unsigned int maxdepth = 255;
 		if (type_ != ntype::link) return *this;
-		if (depth > maxdepth) throw std::runtime_error{"Links exceed maximum depth"};
-		return node{container_, redirect_}.follow(depth + 1);
+		if (limit && depth >= limit) return *this;
+		if (! limit && depth > maxdepth) throw std::runtime_error{"Links exceed maximum depth"};
+		return node{container_, redirect_}.follow(limit, depth + 1);
 	}
 
 	std::unique_ptr<node> node::parent()
@@ -246,14 +305,14 @@ namespace zsr
 		container_.open_.erase(follow().id_);
 	}
 
-	void node::extract(const std::string &path)
+	void node::extract(const std::string &location)
 	{
-		std::string fullpath = util::pathjoin({path, name_});
+		std::string fullpath = util::pathjoin({location, name_});
 		if (type_ == ntype::dir)
 		{
 			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
 			diskmap::map<std::string, filecount> cont = childmap();
-			std::cerr << "Node " << id_ << " name " << name_ << ": " << cont.size() << " children\n";
+			//std::cerr << "Node " << id_ << " name " << name_ << ": " << cont.size() << " children\n";
 			for (filecount i = 0; i < cont.size(); i++) node{container_, cont[i]}.extract(fullpath);
 		}
 		else if (type_ == ntype::reg)
@@ -266,7 +325,7 @@ namespace zsr
 		}
 		else if (type_ == ntype::link)
 		{
-			symlink(util::relreduce(util::dirname(path), follow().path()).c_str(), fullpath.c_str());
+			symlink(dest().c_str(), fullpath.c_str());
 		}
 	}
 

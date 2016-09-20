@@ -12,31 +12,18 @@ ZSR is designed to facilitate browsing archived websites with existing web brows
 The following files are included in this project:
 
   - `util/*`: Miscellaneous utility functions
-
   - `http.cpp` and `http.h`: Various abstractions for HTTP and HTML used by zsrsrv
-
   - `compress.cpp` and `compress.h`: Wrappers around liblzma for stream compression and decompression
-
   - `zsr.cpp` and `zsr.h`: ZSR file format library
-
   - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary for use with zsrsrv
-
   - `search.cpp` and `search.h`: On-disk radix tree library for fast title search
-
   - `diskmap.h`: On-disk hash map variant for storing directory contents
-
   - `zsrutil.cpp`: ZSR command-line utility
-
   - `Volume.cpp` and `Volume.h`: Class representing one volume for zsrsrv
-
   - `zsrsrv.cpp`: ZSR HTTP server
-
   - `zsrmnt.cpp`: Permits mounting ZSR archives as read-only FUSE filesystems
-
   - `accessories/wikidump.py` and `accessories/linkcheck.py`: Accessory programs to aid in the creation of ZSR files from wikis
-
   - `CMakeLists.txt`: Configuration for CMake
-
   - `LICENSE` and `README.md`: User information
 
 Build requirements are as follows:
@@ -93,7 +80,7 @@ The ZSR format is fairly simple.  It consists of:
           - The eight-byte ID of the entry to which this link points
       - If the entry is a *directory*:
           - The eight-byte number of children of this directory
-          - For each child:
+          - For each child, ordered by hash:
               - The eight-byte hash of the child's name
               - The eight-byte ID of the child
   - Index: one entry for each file, allowing fast random access to any file by ID
