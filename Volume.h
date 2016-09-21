@@ -44,7 +44,7 @@ private:
 	rsearch::disktree titles_;
 public:
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
-	Volume(const std::string &fname);
+	Volume(const std::string &fname, const std::string &id = "");
 	Volume(const Volume &orig) = delete;
 	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, dbfname_{orig.dbfname_}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
 	const std::string &id() const { return id_; }
@@ -63,6 +63,7 @@ public:
 class Volmgr
 {
 private:
+	static unsigned int unique_id;
 	std::string dir_;
 	std::vector<std::string> catorder_;
 	std::unordered_map<std::string, std::pair<std::string, bool>> categories_;
@@ -81,6 +82,7 @@ public:
 	bool loaded(const std::string &cat);
 	void unload(const std::string &cat);
 	bool check(const std::string &name);
+	std::string load_external(const std::string &path);
 	Volume &get(const std::string &name);
 };
 

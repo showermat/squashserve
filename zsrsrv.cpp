@@ -15,6 +15,8 @@
 #include "Volume.h"
 
 /* TODO:
+ * Include schema in pref file
+ * Add preference for which IP addresses from which to accept requests
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called and remove *.tmp files if writing
  * Implement automatic ZSR file creator
  * ZSR files without info.txt (and "home" attr?) should not be included in the list of volumes
@@ -321,6 +323,11 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 			if (path[0] == "load") return loadcat(path[1]);
 			else return unloadcat(path[1]);
 		}
+		else if (path[0] == "external")
+		{
+			if (path.size() < 2) return error("Bad Request", "Missing external path");
+			return http::doc{"text/plain", volumes.load_external(path[1])};
+		}
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
 		else if (path[0] == "add") return http::doc{util::pathjoin({exedir, rsrcdname, "html", "add.html"})};
@@ -331,7 +338,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		}
 		else throw handle_error{"Unknown action “" + path[0] + "”"};
 	}
-	catch (handle_error &e)
+	catch (std::exception &e)
 	{
 		return error("Error", e.what());
 	}

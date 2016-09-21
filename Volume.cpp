@@ -16,9 +16,9 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
-Volume::Volume(const std::string &fname) : id_{}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
+Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
 {
-	id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
+	if (! id_.size()) id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	info_ = archive_->gmeta();
 	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
 	// TODO Check whether there are metadata and set indexed_ appropriately
@@ -139,10 +139,15 @@ std::unordered_map<std::string, std::string> Volume::tokens(std::string member)
 	return ret;
 }
 
+unsigned int Volmgr::unique_id = 1;
+
 void Volmgr::refresh()
 {
 	if (! dir_.size()) throw std::runtime_error{"Tried to refresh uninitialized volume list"};
 	catorder_.clear();
+	categories_.clear();
+	mapping_.clear();
+	volumes_.clear();
 	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through excpetions
 	{
 		if (util::isdir(util::pathjoin({dir_, file}))) continue;
@@ -222,8 +227,22 @@ bool Volmgr::check(const std::string &name)
 	return mapping_.count(name);
 }
 
+std::string Volmgr::load_external(const std::string &path)
+{
+	unsigned int volnum = unique_id++;
+	std::string volid = "@ext:" + util::t2s(volnum);
+	try
+	{
+		volumes_.emplace(volid, Volume{path, volid});
+		mapping_[volid] = "";
+	}
+	catch (std::runtime_error &e) { throw std::runtime_error{"Could not load ZSR file " + path + ": " + e.what()}; }
+	return volid;
+}
+
 Volume &Volmgr::get(const std::string &name)
 {
+	if (! name.size()) throw std::runtime_error{"Cannot load null volume"};
 	if (! check(name)) throw std::runtime_error{"No such volume found"};
 	if (! volumes_.count(name)) load(mapping_[name]);
 	return volumes_.at(name);

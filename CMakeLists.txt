@@ -14,6 +14,4 @@ add_executable(mkvol mkvol.cpp search.cpp)
 target_link_libraries(mkvol zsr)
 add_executable(zsrsrv zsrsrv.cpp search.cpp http.cpp Volume.cpp)
 target_link_libraries(zsrsrv util zsr mongoose pthread)
-#add_executable(t test.cpp)
-#target_link_libraries(t util zsr)
 
