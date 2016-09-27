@@ -80,6 +80,7 @@ int main(int argc, char **argv)
 	std::vector<std::string> args = util::argvec(argc - optind, argv + optind);
 	if (args.size() < 2) help_exit();
 	std::ofstream out{args[1]};
+	if (! out) throw std::runtime_error{"Couldn't open output file"};
 	zsr::writer archwriter{args[0]};
 	std::unordered_map<std::string, std::string> volmeta = gmeta(args[0]);
 	if (volmeta.count("encoding")) encoding = volmeta["encoding"];

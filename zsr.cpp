@@ -352,7 +352,7 @@ namespace zsr
 		if (! n.isreg()) throw std::runtime_error{"Tried to get content of directory " + path()};
 		return n.content();
 	}
-	
+
 	iterator::operator bool() const
 	{
 		return idx >= 0 && idx < ar.size();
@@ -361,7 +361,7 @@ namespace zsr
 	const std::string archive::magic_number{"!ZSR"};
 
 	std::ifstream archive::default_istream_{};
-	
+
 	std::unique_ptr<node> archive::getnode(const std::string &path, bool except)
 	{
 		if (! size_)
@@ -370,14 +370,20 @@ namespace zsr
 			return std::unique_ptr<node>{};
 		}
 		std::unique_ptr<node> n{new node{*this, 0}};
+		std::cerr << ">>>> " << this << " " << idxstart_ << " " << datastart_ << " " << n->name() << "|\n";
 		for (std::string &item : util::strsplit(path, util::pathsep))
 		{
-			if (item == "") continue;
+			if (! n->isdir())
+			{
+				if (except) throw std::runtime_error{"Tried to get child of non-directory " + path};
+				return std::unique_ptr<node>{};
+			}
+			if (item == "" || item == ".") continue; // TODO Handle ..
 			n = n->getchild(item);
 			if (! n)
 			{
 				if (except) throw std::runtime_error{"Tried to access nonexistent path " + path};
-				return nullptr;
+				return std::unique_ptr<node>{};
 			}
 		}
 		return n;

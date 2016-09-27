@@ -61,7 +61,6 @@ std::vector<std::string> docsplit(const std::string &doc, const std::string &del
 			buf.str(std::string{});
 		}
 		else buf << line << "\n";
-		
 	}
 	ret.push_back(buf.str());
 	return ret;
