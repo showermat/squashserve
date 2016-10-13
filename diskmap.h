@@ -67,7 +67,7 @@ namespace diskmap
 		{
 			size_t qhash = std::hash<K>{}(query);
 			in_.seekg(binsearch(start_, size_, qhash));
-			while (in_.tellg() >= start_ && readent().first == qhash) in_.seekg(-2 * skipsize, std::ios::cur);
+			while (in_.tellg() >= start_ && readent().first == qhash) in_.seekg(-2 * static_cast<int>(skipsize), std::ios::cur);
 			if (in_.tellg() < start_) in_.seekg(start_);
 			while (in_.tellg() < start_ + static_cast<std::streampos>(size_ * skipsize))
 			{

@@ -61,10 +61,10 @@ namespace lzma
 		std::streampos ptr_, start_, size_, decomp_;
 		std::streamsize fill();
 	public:
-		rdbuf() : buf_base{}, ptr_{}, start_{}, size_{} { };
+		rdbuf() : buf_base{}, ptr_{}, start_{}, size_{}, decomp_{} { };
 		rdbuf(std::istream &file, std::streampos start, std::streampos size, std::streampos decomp);
 		rdbuf(const rdbuf &orig) = delete;
-		rdbuf(rdbuf &&orig) : buf_base{std::move(orig)}, ptr_{orig.ptr_}, start_{orig.start_}, size_{orig.size_} { }
+		rdbuf(rdbuf &&orig) : buf_base{std::move(orig)}, ptr_{orig.ptr_}, start_{orig.start_}, size_{orig.size_}, decomp_{orig.decomp_} { }
 		pos_type seekpos(pos_type target, std::ios_base::openmode which);
 		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
 		void init(std::istream &file, std::streampos start, std::streampos size, std::streampos decomp);

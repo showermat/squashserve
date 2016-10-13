@@ -2,14 +2,18 @@
 #include <functional>
 #include <iostream>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <getopt.h>
 #include "util/util.h"
 #include "zsr.h"
 #include "search.h"
 
+// TODO Clean up temporary files on interrupt
+
 void help_exit()
 {
-	std::cerr << "Usage:\n    mkvol srcdir dest.zsr\n"; // TODO Improve
+	std::cerr << "Usage:\n    mkvol [-l POL] srcdir dest.zsr\nFlags:\n    -l POL: Handle symbolic links according to policy POL:\n        process: Encode symbolic links within the tree as links in the archive\n        follow: Always follow symbolic links and archive the destination\n        skip: Ignore symbolic links completely\n"; // TODO Improve
 	exit(1);
 }
 
@@ -66,22 +70,31 @@ std::unordered_map<std::string, std::string> gmeta(const std::string &path)
 
 int main(int argc, char **argv)
 {
-	int arg;
-	while ((arg = getopt(argc, argv, "")) > 0) // May come in handy at some point
+	std::unordered_map<std::string, std::vector<std::string>> flags{};
+	std::vector<std::string> args{};
+	try
 	{
-		switch (arg)
-		{
-		case '?':
-		default:
-			help_exit();
-			break;
-		}
+		auto cmdln = util::argmap(argc, argv, "l:");
+		flags = cmdln.first;
+		args = cmdln.second;
 	}
-	std::vector<std::string> args = util::argvec(argc - optind, argv + optind);
+	catch (std::runtime_error &e)
+	{
+		std::cerr << "Error: " << e.what() << "\n";
+		help_exit();
+	}
 	if (args.size() < 2) help_exit();
+	zsr::writer::linkpolicy linkpol = zsr::writer::linkpolicy::process;
+	if (flags.count("l"))
+	{
+		if (std::unordered_set<std::string>{"process", "proc"}.count(flags["l"][0])) linkpol = zsr::writer::linkpolicy::process;
+		else if (std::unordered_set<std::string>{"skip", "ignore", "ign"}.count(flags["l"][0])) linkpol = zsr::writer::linkpolicy::skip;
+		else if (std::unordered_set<std::string>{"follow", "fol"}.count(flags["l"][0])) linkpol = zsr::writer::linkpolicy::follow;
+		else throw std::runtime_error{"Invalid value for flag \"-l\": " + flags["l"][0]};
+	}
 	std::ofstream out{args[1]};
 	if (! out) throw std::runtime_error{"Couldn't open output file"};
-	zsr::writer archwriter{args[0]};
+	zsr::writer archwriter{args[0], linkpol};
 	std::unordered_map<std::string, std::string> volmeta = gmeta(args[0]);
 	if (volmeta.count("encoding")) encoding = volmeta["encoding"];
 	if (volmeta.count("title_filter")) process = std::regex{volmeta["title_filter"]};

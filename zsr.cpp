@@ -14,32 +14,43 @@ namespace zsr
 		constexpr offset ptrfill{0};
 		std::string fullpath = util::resolve(std::string{getenv("PWD")}, path);
 		struct stat s;
-		if (lstat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't lstat " + path};
 		node::ntype type = node::ntype::reg;
 		DIR *dir = nullptr;
 		std::ifstream in{};
 		std::string fulltarget{};
-		if ((s.st_mode & S_IFMT) == S_IFLNK)
+		try
 		{
-			fulltarget = util::linktarget(fullpath);
-			if (util::is_under(fullroot_, fulltarget)) type = node::ntype::link; // Only treat as link if destination is inside the tree
-			else if (stat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't stat " + path};
+			if (lstat(path.c_str(), &s) != 0) throw std::runtime_error{"Couldn't lstat " + path};
+			if ((s.st_mode & S_IFMT) == S_IFLNK)
+			{
+				if (linkpol_ == linkpolicy::skip) return 0;
+				fulltarget = util::linktarget(fullpath);
+				struct stat ls;
+				if (stat(path.c_str(), &ls) != 0) throw std::runtime_error{"Broken symbolic link " + path};
+				if (util::is_under(fullroot_, fulltarget) && linkpol_ == linkpolicy::process) type = node::ntype::link; // Only treat as link if destination is inside the tree
+				else s = ls;
+			}
+			if ((s.st_mode & S_IFMT) == S_IFDIR)
+			{
+				dir = opendir(path.c_str());
+				if (! dir) throw std::runtime_error{"Couldn't open directory " + path};
+				type = node::ntype::dir;
+			}
+			if ((s.st_mode & S_IFMT) == S_IFREG)
+			{
+				in.open(path);
+				if (! in) throw std::runtime_error{"Couldn't open file " + path};
+			}
 		}
-		if ((s.st_mode & S_IFMT) == S_IFDIR)
+		catch (std::runtime_error &e)
 		{
-			dir = opendir(path.c_str());
-			if (! dir) throw std::runtime_error{"Couldn't open directory " + path};
-			type = node::ntype::dir;
-		}
-		if ((s.st_mode & S_IFMT) == S_IFREG)
-		{
-			in.open(path);
-			if (! in) throw std::runtime_error{"Couldn't open file " + path};
+			std::cout << "\n" << e.what() << "\n";
+			return 0;
 		}
 		filecount id = nfile_++;
 		logb(id << " " << path);
 		//std::cout << "File " << id << " path " << path << " parent " << parent << "\n";
-		links_.handle_dest(fullpath, id);
+		if (linkpol_ == linkpolicy::process) links_.handle_dest(fullpath, id);
 		offset mypos = contout.tellp();
 		idxout.write(reinterpret_cast<const char *>(&mypos), sizeof(offset));
 		contout.write(reinterpret_cast<const char *>(&parent), sizeof(filecount));
@@ -73,18 +84,22 @@ namespace zsr
 		{
 			diskmap::writer<std::string, filecount> children{};
 			std::streampos childstart = contout.tellp();
-			size_t nchild = 0;
-			while (readdir(dir)) nchild++;
+			size_t maxnchild = 0;
+			struct dirent *ent;
+			while ((ent = readdir(dir)))
+			{
+				if (! (linkpol_ == linkpolicy::skip && ent->d_type == DT_LNK)) maxnchild++;
+			}
 			rewinddir(dir);
-			nchild -= 2;
-			contout.seekp(children.hdrsize + children.recsize * nchild, std::ios::cur);
+			maxnchild -= 2;
+			contout.seekp(children.hdrsize + children.recsize * maxnchild, std::ios::cur);
 			struct dirent *file;
 			while ((file = readdir(dir)))
 			{
 				std::string fname{file->d_name};
 				if (fname == "." || fname == "..") continue;
 				filecount childid = recursive_process(path + util::pathsep + fname, id, contout, idxout);
-				children.add(fname, childid);
+				if (childid != 0) children.add(fname, childid);
 			}
 			if (closedir(dir)) throw std::runtime_error{"Couldn't close " + path + ": " + strerror(errno)};
 			std::streampos end = contout.tellp();
@@ -109,6 +124,7 @@ namespace zsr
 		if ((st->st_mode & S_IFMT) == S_IFLNK)
 		{
 			std::string target = util::linktarget(path);
+			if (! util::fexists(target)) return false;
 			if (util::is_under(caller->root_, target)) caller->add(path, target);
 			else return true;
 			return false;
@@ -149,9 +165,12 @@ namespace zsr
 
 	void writer::write_body(const std::string &contname, const std::string &idxname)
 	{
-		loga("Finding links");
-		links_.search();
-		logb(links_.size() << " links found");
+		if (linkpol_ == linkpolicy::process)
+		{
+			loga("Finding links");
+			links_.search();
+			logb(links_.size() << " links found");
+		}
 		loga("Writing archive body");
 		contf_ = contname;
 		idxf_ = idxname;
@@ -161,8 +180,11 @@ namespace zsr
 		nfile_ = 0;
 		recursive_process(root_, 0, contout, idxout);
 		loga("Wrote " << nfile_ << " entries");
-		loga("Writing links");
-		links_.write(contout);
+		if (linkpol_ == linkpolicy::process)
+		{
+			loga("Writing links");
+			links_.write(contout);
+		}
 	}
 
 	void writer::write_header(const std::string &tmpfname)
@@ -370,7 +392,7 @@ namespace zsr
 			return std::unique_ptr<node>{};
 		}
 		std::unique_ptr<node> n{new node{*this, 0}};
-		std::cerr << ">>>> " << this << " " << idxstart_ << " " << datastart_ << " " << n->name() << "|\n";
+		//std::cerr << ">>>> " << this << " " << idxstart_ << " " << datastart_ << " " << n->name() << "|\n";
 		for (std::string &item : util::strsplit(path, util::pathsep))
 		{
 			if (! n->isdir())

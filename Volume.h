@@ -75,7 +75,7 @@ public:
 	Volmgr(const std::string &dir) : dir_{dir} { }
 	void init(const std::string &dir) { dir_ = dir; refresh(); }
 	Volmgr(const Volmgr &orig) = delete;
-	Volmgr(Volmgr &&orig) : dir_{std::move(orig.dir_)}, mapping_{std::move(orig.mapping_)}, volumes_{std::move(orig.volumes_)} { }
+	Volmgr(Volmgr &&orig) : dir_{std::move(orig.dir_)}, catorder_{std::move(orig.catorder_)}, categories_{std::move(orig.categories_)}, mapping_{std::move(orig.mapping_)}, volumes_{std::move(orig.volumes_)} { }
 	std::vector<std::string> &categories();
 	std::unordered_map<std::string, std::string> tokens(const std::string &cat);
 	std::unordered_set<std::string> load(const std::string &cat);

@@ -21,6 +21,8 @@
  * Implement automatic ZSR file creator
  * ZSR files without info.txt (and "home" attr?) should not be included in the list of volumes
  * Make sure that we're forgiving about extra lines and whitespace in info.txt
+ * Old C functions called in util.cpp should always be prefixed by :: to avoid namespace clashes
+ * Add CamelCase name splitting to radix searchtree
  *
  * FIXME:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
