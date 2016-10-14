@@ -7,6 +7,7 @@
 #include <fstream>
 #include <regex>
 #include <stdexcept>
+#include <unordered_map>
 #include "util/util.h"
 #include "mongoose.h"
 
@@ -29,14 +30,25 @@ namespace http
 		const std::unordered_map<std::string, std::string> &headers();
 	};
 
+	class ipfilter // A proper implementation of this would use a radix tree to check successive bits of the incoming address against all stored addresses -- but this project's intended purpose involves a very small accept list, so let's go with an easier implementation for now.
+	{
+	private:
+		std::unordered_map<uint32_t, uint32_t> whitelist;
+	public:
+		ipfilter(const std::string &accept);
+		bool check(uint32_t addr);
+	};
+
 	class server
 	{
 	private:
 		struct mg_mgr mgr;
 		std::function<doc(std::string, std::string)> callback;
+		ipfilter filter;
+		static std::string denied_msg;
 		static void handle(struct mg_connection *conn, int ev, void *data);
 	public:
-		server(int port, std::function<doc(std::string, std::string)> handler);
+		server(uint16_t port, std::function<doc(std::string, std::string)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};

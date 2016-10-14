@@ -48,32 +48,61 @@ namespace http
 		std::string::size_type endidx = bodymatch.position();
 		if (endidx < startidx) return content;
 		std::string body = content.substr(startidx, endidx - startidx);
-		body = std::regex_replace(body, std::regex{"<style>[\\w\\W]*</style>"}, ""); // TODO Will wipe out anything between two script or style blocks
+		body = std::regex_replace(body, std::regex{"<style>[\\w\\W]*</style>"}, ""); // FIXME  Will wipe out anything between two script or style blocks
 		body = std::regex_replace(body, std::regex{"<script>[\\w\\W]*</script>"}, "");
 		body = std::regex_replace(body, std::regex{"<[^>]+>"}, "");
 		body = std::regex_replace(body, std::regex{"[\\s\\n]+"}, " ");
 		return body;
 	}
 
+	ipfilter::ipfilter(const std::string &accept)
+	{
+		if (accept == "") whitelist[0] = 0;
+		else for (const std::string &straddr : util::strsplit(accept, ','))
+		{
+			std::vector<std::string> components = util::strsplit(straddr, '/');
+			if (components.size() > 2) throw std::runtime_error{"Malformed CIDR specification " + straddr};
+			uint32_t addr = util::str2ip(components[0]);
+			int masksize = 32;
+			if (components.size() == 2) masksize = util::s2t<int>(components[1]);
+			if (masksize < 0) masksize = 0;
+			uint32_t mask = ~0;
+			if (masksize < 32) mask = ~((1 << (32 - masksize)) - 1);
+			whitelist[addr] = mask;
+		}
+	}
+
+	bool ipfilter::check(uint32_t addr)
+	{
+		for (const std::pair<const uint32_t, int> &pair : whitelist) if ((addr & pair.second) == (pair.first & pair.second)) return true;
+		return false;
+	}
+
+	std::string server::denied_msg{"HTTP/1.1 403 Forbidden\r\nContent-type: text/html\r\nContent-length: 122\r\n\r\n<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>You are not authorized to view this page.</body></html>"};
+
 	void server::handle(struct mg_connection *conn, int ev, void *data)
 	{
+		server *srv = static_cast<server *>(conn->mgr->user_data);
+		if (! srv->filter.check(conn->sa.sin.sin_addr.s_addr))
+		{
+			mg_printf(conn, denied_msg.c_str(), denied_msg.size());
+			return;
+		}
 		switch (ev)
 		{
 		case MG_EV_HTTP_REQUEST:
 			struct http_message *msg = static_cast<struct http_message *>(data);
-			doc d = static_cast<server *>(conn->mgr->user_data)->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
+			doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
 			std::ostringstream head{};
 			head << "HTTP/1.1 200 OK\r\n";
 			for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
 			head << "\r\n";
 			mg_printf(conn, "%s", head.str().c_str());
 			mg_send(conn, d.content().data(), d.size());
-			//mg_send_header(conn, "Content-type", d.type.c_str());
-			//mg_send_data(conn, d.content.data(), d.content.size());
 		}
 	}
 
-	server::server(int port, std::function<doc(std::string, std::string)> handler) : mgr{}, callback{handler}
+	server::server(uint16_t port, std::function<doc(std::string, std::string)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
 	{
 		mg_mgr_init(&mgr, this);
 		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);

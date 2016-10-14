@@ -15,7 +15,6 @@
 #include "Volume.h"
 
 /* TODO:
- * Include schema in pref file
  * Add preference for which IP addresses from which to accept requests
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called and remove *.tmp files if writing
  * Implement automatic ZSR file creator
@@ -43,10 +42,11 @@ Volmgr volumes{};
 
 void prefsetup(prefs &p)
 {
-	p.addpref<std::string>("basedir", "Directory for ZSR files", "");
+	p.addpref<std::string>("basedir", "Directory for ZSR files", ".");
 	p.addpref<int>("port", "Server port", 2234);
 	p.addpref<int>("results", "Number of search results to display", 20);
 	p.addpref<int>("preview", "Search result preview length", 400);
+	p.addpref<std::string>("accept", "Comma-delimited list of CIDR blocks and IP addresses to accept, or all if empty", "127.0.0.1");
 	p.read();
 }
 
@@ -349,7 +349,7 @@ int main(int argc, char **argv)
 {
 	prefsetup(userp);
 	volumes.init(userp.get<std::string>("basedir"));
-	http::server{userp.get<int>("port"), urlhandle}.serve();
+	http::server{static_cast<uint16_t>(userp.get<int>("port")), urlhandle, userp.get<std::string>("accept")}.serve();
 	return 0;
 }
 
