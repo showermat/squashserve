@@ -84,8 +84,10 @@ namespace rsearch
 		catch (std::range_error &e) { std::cerr << clrln << "Could not decode title \"" << title << "\" as UTF-8\n"; return; }
 		std::wstring lctitle = ss.str();
 		for (std::wstring::size_type i = 0; i < lctitle.size(); i++)
-			if (i == 0 || (std::isspace(lctitle[i - 1], loc) && ! std::isspace(lctitle[i], loc)) || (! std::isalnum(lctitle[i - 1], loc) && std::isalnum(lctitle[i], loc)))
-				stree_[convert.to_bytes(lctitle.substr(i))].insert(id);
+			if (i == 0 ||
+				(std::isspace(lctitle[i - 1], loc) && ! std::isspace(lctitle[i], loc)) ||
+				(! std::isalnum(lctitle[i - 1], loc) && std::isalnum(lctitle[i], loc))) // TODO Index starting from new words in camel case
+					stree_[convert.to_bytes(lctitle.substr(i))].insert(id);
 	}
 
 	//void disktree_writer::build(zsr::archive &ar)

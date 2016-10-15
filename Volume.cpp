@@ -16,18 +16,12 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
-Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, dbfname_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
+Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
 {
 	if (! id_.size()) id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
 	info_ = archive_->gmeta();
-	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location in info file"};
+	if (info_.count("home") == 0) throw zsr::badzsr{"Missing home location"};
 	// TODO Check whether there are metadata and set indexed_ appropriately
-}
-
-Volume::~Volume()
-{
-	//if (util::isdir(dbfname_)) std::experimental::filesystem::remove_all(std::experimental::filesystem::path{dbfname_});
-	if (indexed_ && util::isdir(dbfname_)) util::rm_recursive(dbfname_);
 }
 
 http::doc Volume::get(std::string path)
@@ -196,15 +190,16 @@ std::unordered_set<std::string> Volmgr::load(const std::string &cat)
 {
 	std::unordered_set<std::string> ret{};
 	if (categories_.count(cat)) categories_[cat].second = true;
-	for (const std::pair<const std::string, std::string> &vol : mapping_) if (vol.second == cat)
+	for (const std::pair<const std::string, std::string> &pair : mapping_) if (pair.second == cat)
 	{
 		try
 		{
-			if (! volumes_.count(vol.first)) volumes_.emplace(vol.first, Volume{util::pathjoin({dir_, vol.first + ".zsr"})});
-			ret.insert(vol.first);
+			Volume vol{util::pathjoin({dir_, pair.first + ".zsr"})};
+			if (! volumes_.count(pair.first)) volumes_.insert(std::make_pair(pair.first, std::move(vol)));
+			ret.insert(pair.first);
 		}
-		catch (zsr::badzsr &e) { std::cerr << vol.first << ": " << e.what() << "\n"; }
-		catch (std::runtime_error &e) { std::cerr << vol.first << ": " << e.what() << "\n"; } // TODO How should this be done?  Exception subclassing and handling needs some refinement
+		catch (zsr::badzsr &e) { std::cerr << pair.first << ": " << e.what() << "\n"; }
+		catch (std::runtime_error &e) { std::cerr << pair.first << ": " << e.what() << "\n"; } // TODO How should this be done?  Exception subclassing and handling needs some refinement
 	}
 	return ret;
 }

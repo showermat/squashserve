@@ -44,7 +44,7 @@ namespace zsr
 		}
 		catch (std::runtime_error &e)
 		{
-			std::cout << "\n" << e.what() << "\n";
+			std::cout << "\r\033[K" << e.what() << "\n";
 			return 0;
 		}
 		filecount id = nfile_++;

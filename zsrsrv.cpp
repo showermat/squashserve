@@ -10,20 +10,17 @@
 #include <stdexcept>
 #include "lib/json/json.hpp" // Thanks to github/nlohmann
 #include "util/util.h"
-#include "util/prefs.h"
 #include "zsr.h"
 #include "Volume.h"
+#include "prefs.h"
 
 /* TODO:
- * Add preference for which IP addresses from which to accept requests
  * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called and remove *.tmp files if writing
  * Implement automatic ZSR file creator
- * ZSR files without info.txt (and "home" attr?) should not be included in the list of volumes
  * Make sure that we're forgiving about extra lines and whitespace in info.txt
- * Old C functions called in util.cpp should always be prefixed by :: to avoid namespace clashes
- * Add CamelCase name splitting to radix searchtree
  *
  * FIXME:
+ * Preference changes are not taking effect until app is restarted
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
  * Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
  */
@@ -34,21 +31,8 @@ public:
 	handle_error(const std::string &msg) : runtime_error{msg} { }
 };
 
-const std::string preffname = "zsrsrv.pref";
-const std::string rsrcdname = "resources";
-const std::string exedir = util::dirname(util::exepath());
-prefs userp{util::pathjoin({exedir, preffname})};
+const std::string rsrcd = util::pathjoin({util::dirname(util::exepath()), "resources"});
 Volmgr volumes{};
-
-void prefsetup(prefs &p)
-{
-	p.addpref<std::string>("basedir", "Directory for ZSR files", ".");
-	p.addpref<int>("port", "Server port", 2234);
-	p.addpref<int>("results", "Number of search results to display", 20);
-	p.addpref<int>("preview", "Search result preview length", 400);
-	p.addpref<std::string>("accept", "Comma-delimited list of CIDR blocks and IP addresses to accept, or all if empty", "127.0.0.1");
-	p.read();
-}
 
 std::vector<std::string> docsplit(const std::string &doc, const std::string &delim = "%")
 {
@@ -88,14 +72,14 @@ std::string token_replace(const std::string &in, const std::unordered_map<std::s
 
 http::doc error(const std::string &header, const std::string &body)
 {
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "error.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "error.html"})};
 	ret.content(token_replace(ret.content(), {{"header", header}, {"message", body}}));
 	return ret;
 }
 
 http::doc loadcat(const std::string &name)
 {
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "home.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "home.html"})};
 	std::vector<std::string> sects = docsplit(ret.content());
 	std::stringstream buf{};
 	std::unordered_set<std::string> volnames = volumes.load(name);
@@ -114,7 +98,7 @@ http::doc unloadcat(const std::string &name)
 
 http::doc home()
 {
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "home.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "home.html"})};
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 8) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
@@ -139,14 +123,14 @@ http::doc search(Volume &vol, const std::string &query)
 {
 	/*std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "search.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "search.html"})};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/search.html");
 	std::stringstream buf{};
 	buf << token_replace(sects[0], tokens);
 	try
 	{
-		for (const Result &res : vol.search(query, userp.get<int>("results"), userp.get<int>("preview")))
+		for (const Result &res : vol.search(query, prefs::get("results"), prefs::get("preview")))
 		{
 			std::unordered_map<std::string, std::string> qtoks = tokens;
 			qtoks["url"] = res.url;
@@ -183,7 +167,7 @@ http::doc complete(Volume &vol, const std::string &query)
 
 http::doc titles(Volume &vol, const std::string &query)
 {
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "titles.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "titles.html"})};
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
@@ -204,7 +188,7 @@ http::doc shuffle(Volume &vol)
 http::doc view(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "view.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "view.html"})};
 	ret.content(token_replace(ret.content(), vol.tokens(path)));
 	return ret;
 }
@@ -218,14 +202,14 @@ http::doc content(Volume &vol, const std::string &path)
 
 http::doc pref()
 {
-	http::doc ret{util::pathjoin({exedir, rsrcdname, "html", "mainpref.html"})};
+	http::doc ret{util::pathjoin({rsrcd, "html", "mainpref.html"})};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/mainpref.html");
 	std::stringstream buf{};
 	buf << sects[0];
-	for (const std::string &prefname : userp.list())
+	for (const std::string &prefname : prefs::list())
 	{
-		buf << token_replace(sects[1], {{"name", userp.desc(prefname)}, {"key", prefname}, {"value", userp.getstr(prefname)}});
+		buf << token_replace(sects[1], {{"name", prefs::desc(prefname)}, {"key", prefname}, {"value", prefs::getstr(prefname)}});
 	}
 	buf << sects[2];
 	ret.content(buf.str());
@@ -235,7 +219,7 @@ http::doc pref()
 http::doc rsrc(const std::string &path)
 {
 	if (! path.size()) return error("Bad Request", "Missing path to resource to retrieve");
-	try { return http::doc{util::pathjoin({exedir, rsrcdname, path}), {{"Cache-control", "max-age=640000"}}}; }
+	try { return http::doc{util::pathjoin({rsrcd, path}), {{"Cache-control", "max-age=640000"}}}; }
 	catch (std::runtime_error &e) { return error("Not Found", "The requested resource could not be found"); }
 }
 
@@ -250,10 +234,10 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 	{
 		for (const std::pair<const std::string, std::string> &kvpair : args)
 		{
-			try { userp.setstr(kvpair.first, kvpair.second); }
+			try { prefs::set(kvpair.first, kvpair.second); }
 			catch (std::out_of_range &e) { continue; }
 		}
-		userp.write();
+		prefs::write();
 		return http::redirect("/");
 	}
 	else if (verb == "add")
@@ -271,7 +255,7 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 			if (std::regex_search(pair.first, match, std::regex{"^key_(.*)$"})) keynames.insert(match[1]);
 		}
 		for (const std::string &key : keynames) if (args.count("key_" + key) && args.count("value_" + key)) info[args.at("key_" + key)] = args.at("value_" + key);
-		try { Volume::create(srcdir, userp.get<std::string>("basedir"), id, info); }
+		try { Volume::create(srcdir, prefs::get("basedir"), id, info); }
 		catch(std::runtime_error &e) { return error("Couldn't create volume", e.what()); }
 		volumes.refresh();
 		return http::redirect("/");
@@ -331,7 +315,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		}
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
-		else if (path[0] == "add") return http::doc{util::pathjoin({exedir, rsrcdname, "html", "add.html"})};
+		else if (path[0] == "add") return http::doc{util::pathjoin({rsrcd, "html", "add.html"})};
 		else if (path[0] == "action")
 		{
 			if (path.size() < 2) return error("Bad Request", "No action selected");
@@ -347,9 +331,9 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 
 int main(int argc, char **argv)
 {
-	prefsetup(userp);
-	volumes.init(userp.get<std::string>("basedir"));
-	http::server{static_cast<uint16_t>(userp.get<int>("port")), urlhandle, userp.get<std::string>("accept")}.serve();
+	prefs::init();
+	volumes.init(prefs::get("basedir"));
+	http::server{static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
 	return 0;
 }
 

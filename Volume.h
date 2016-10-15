@@ -39,14 +39,13 @@ private:
 	std::string id_;
 	std::unique_ptr<zsr::archive> archive_;
 	std::unordered_map<std::string, std::string> info_;
-	std::string dbfname_;
 	bool indexed_;
 	rsearch::disktree titles_;
 public:
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname, const std::string &id = "");
 	Volume(const Volume &orig) = delete;
-	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, dbfname_{orig.dbfname_}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
+	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
 	const std::string &id() const { return id_; }
 	const zsr::archive &archive() const { return *archive_; }
 	http::doc get(std::string path);
@@ -57,7 +56,7 @@ public:
 	std::string quicksearch(std::string query);
 	std::string info(const std::string &key) const;
 	std::unordered_map<std::string, std::string> tokens(std::string member = "");
-	virtual ~Volume();
+	virtual ~Volume() { }
 };
 
 class Volmgr
