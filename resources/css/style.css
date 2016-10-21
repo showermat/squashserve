@@ -33,11 +33,6 @@ div#utils a
 	margin: 0px 8px;
 }
 
-div#utils a img
-{
-	height: 24px;
-}
-
 h1
 {
 	font-size: 14pt;
@@ -48,6 +43,11 @@ h1
 input
 {
 	border: none;
+}
+
+i.fa
+{
+	color: black;
 }
 
 div.category-container
@@ -259,7 +259,7 @@ div#toolbar-right
 	float: right;
 }
 
-a.toolbar-button img
+a.toolbar-button i
 {
 	height: 16px;
 	margin: 0px 8px;

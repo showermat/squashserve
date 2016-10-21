@@ -8,11 +8,11 @@ $(document).ready(function() {
 	var attrcnt = 0;
 	for (var attr in secondary_attr)
 	{
-		table.append("<tr><td><input type=\"text\" name=\"key_" + attrcnt + "\" value=\"" + secondary_attr[attr] + "\" class=\"form-key\"></td><td><input type=\"text\" name=\"value_" + attrcnt + "\" class=\"form-value\"></td><td><a href=\"#\" class=\"form-action row-remove\"><img src=\"/rsrc/icon/remove.svg\"></a></td></tr>");
+		table.append("<tr><td><input type=\"text\" name=\"key_" + attrcnt + "\" value=\"" + secondary_attr[attr] + "\" class=\"form-key\"></td><td><input type=\"text\" name=\"value_" + attrcnt + "\" class=\"form-value\"></td><td><a href=\"#\" class=\"form-action row-remove\"><i class=\"fa fa-lg fa-times\"></i></a></td></tr>");
 		attrcnt += 1;
 	}
 	$("#row-add").on('click', function() {
-		table.append("<tr><td><input type=\"text\" name=\"key_" + attrcnt + "\" class=\"form-key\"></td><td><input type=\"text\" name=\"value_" + attrcnt + "\" class=\"form-value\"></td><td><a href=\"#\" class=\"form-action row-remove\"><img src=\"/rsrc/icon/remove.svg\"></a></td></tr>");
+		table.append("<tr><td><input type=\"text\" name=\"key_" + attrcnt + "\" class=\"form-key\"></td><td><input type=\"text\" name=\"value_" + attrcnt + "\" class=\"form-value\"></td><td><a href=\"#\" class=\"form-action row-remove\"><i class=\"fa fa-lg fa-times\"></i></a></td></tr>");
 		attrcnt += 1;
 		$(".row-remove").on('click', function() {
 			$(this).parent().parent().remove();

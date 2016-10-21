@@ -23,6 +23,8 @@ The following files are included in this project:
   - `zsrsrv.cpp`: ZSR HTTP server
   - `zsrmnt.cpp`: Permits mounting ZSR archives as read-only FUSE filesystems
   - `accessories/wikidump.py` and `accessories/linkcheck.py`: Accessory programs to aid in the creation of ZSR files from wikis
+  - `lib/*`: Third-party libraries
+  - `resources/*`: Web resources for zsrsrv
   - `CMakeLists.txt`: Configuration for CMake
   - `LICENSE` and `README.md`: User information
 
@@ -198,6 +200,8 @@ Mirroring a website rarely goes perfectly, so along with Wikidump I've provided 
   - `lib/radix_tree*` are copyright 2010, Yuuki Takano, and have been modified to suit the needs of this project.  The originals can be obtained from <https://github.com/ytakano/radix_tree>.
 
   - `lib/json.hpp` is copyright 2013-2016, Niels Lohmann, and is released under the MIT License.  The original can be obtained from <https://github.com/nlohmann/json>.
+
+  - `resources/fonts` and `resources/css/font-awesome*.css` are from the Font Awesome project by Dave Gandy, released under the Creative Commons license 3.0.  The originals can be obtained from <http://fontawesome.io>.
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.  The original can be obtained from <https://github.com/jquery/jquery>.
 

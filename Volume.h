@@ -45,7 +45,7 @@ public:
 	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname, const std::string &id = "");
 	Volume(const Volume &orig) = delete;
-	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{orig.info_}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
+	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{std::move(orig.info_)}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
 	const std::string &id() const { return id_; }
 	const zsr::archive &archive() const { return *archive_; }
 	http::doc get(std::string path);

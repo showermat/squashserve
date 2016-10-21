@@ -108,6 +108,7 @@ namespace zsr
 		void write_header(const std::string &tmpfname = "header.zsr.tmp");
 		void combine(std::ofstream &out);
 		void write(std::ofstream &out);
+		virtual ~writer();
 	};
 
 	class node
@@ -201,7 +202,7 @@ namespace zsr
 		friend class iterator;
 	public:
 		archive(const archive &orig) = delete;
-		archive(archive &&orig) : in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
+		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
 		archive(std::ifstream &&in);
 		filecount size() const { return size_; }
 		std::unordered_map<std::string, std::string> &gmeta() { return archive_meta_; }

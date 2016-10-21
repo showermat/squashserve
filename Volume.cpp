@@ -194,8 +194,7 @@ std::unordered_set<std::string> Volmgr::load(const std::string &cat)
 	{
 		try
 		{
-			Volume vol{util::pathjoin({dir_, pair.first + ".zsr"})};
-			if (! volumes_.count(pair.first)) volumes_.insert(std::make_pair(pair.first, std::move(vol)));
+			if (! volumes_.count(pair.first)) volumes_.emplace(pair.first, Volume{util::pathjoin({dir_, pair.first + ".zsr"})}); // FIXME Creating the volume and then move-inserting causes issues in the stream.  Why?  Missing a field in move constructor?
 			ret.insert(pair.first);
 		}
 		catch (zsr::badzsr &e) { std::cerr << pair.first << ": " << e.what() << "\n"; }

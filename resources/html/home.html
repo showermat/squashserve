@@ -4,6 +4,7 @@
 <title>Library</title>
 <meta charset="UTF-8" />
 <link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
 <link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
 <script src="/rsrc/js/typeahead.bundle.js"></script>
@@ -13,18 +14,18 @@
 <body>
 <main class="normal">
 <div id="utils">
-	<a href="/action/refresh"><img src="/rsrc/icon/refresh.svg" alt="Refresh volumes"></a>
-	<a href="/add"><img src="/rsrc/icon/add.svg" alt="Add Volume"></a>
-	<a href="/pref"><img src="/rsrc/icon/prefs.svg" alt="Preferences"></a>
-	<a href="/action/quit" id="quit"><img src="/rsrc/icon/quit.svg" alt="Stop server"></a>
+	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
+	<a href="/add"><i class="fa fa-2x fa-plus"></i></a>
+	<a href="/pref"><i class="fa fa-2x fa-gear"></i></a>
+	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
 </div>
 <h1>Library</h1>
 %
 <div class="category-container unloaded">
-<a href="/load/%ID" class="category-title" data-catname="%ID">%NAME <img class="category-loading" src="/rsrc/icon/loading.gif"></a>
+<a href="/load/%ID" class="category-title" data-catname="%ID">%NAME <img class="category-loading" src="/rsrc/img/loading.gif"></a>
 %
 <div class="category-container loaded">
-<a href="/unload/%ID" class="category-title" data-catname="%ID">%NAME<img class="category-loading" src="/rsrc/icon/loading.gif"></a>
+<a href="/unload/%ID" class="category-title" data-catname="%ID">%NAME<img class="category-loading" src="/rsrc/img/loading.gif"></a>
 %
 <table class="volume-list">
 %

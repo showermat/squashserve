@@ -155,8 +155,11 @@ namespace zsr
 	}
 	void writer::linkmgr::write(std::ostream &out)
 	{
+		size_t total = by_src_.size();
+		size_t done = 0;
 		for (const std::pair<const std::string, linkinfo *> &link : by_src_)
 		{
+			logb(++done << "/" << total);
 			if (! link.second->resolved) throw std::runtime_error{"Link " + link.first + " was not resolved"};
 			out.seekp(link.second->destpos);
 			out.write(reinterpret_cast<char *>(&link.second->destid), sizeof(filecount));
@@ -228,9 +231,21 @@ namespace zsr
 
 	void writer::write(std::ofstream &out)
 	{
+		//std::function<void(int)> sighdl = [this](int sig) { for (const std::string &file : {headf_, contf_, idxf_}) util::rm(file); };
+		//struct sigaction act, oldact;
+		//act.sa_flags = 0;
+		//::sigemptyset(&act.sa_mask);
+		//act.sa_handler = *sighdl.target<void(*)(int)>();
+		//if (! ::sigaction(SIGINT, &act, &oldact));
 		write_header();
 		write_body();
 		combine(out);
+		//::sigaction(SIGINT, &oldact, nullptr);
+	}
+
+	writer::~writer()
+	{
+		for (const std::string &file : {headf_, contf_, idxf_}) if (util::fexists(file)) util::rm(file);
 	}
 
 	std::string node::readstring()

@@ -15,9 +15,7 @@
 #include "prefs.h"
 
 /* TODO:
- * Cleanup on exit!  Install a signal handler to make sure all destructors (esp. prefs, Volume) are called and remove *.tmp files if writing
  * Implement automatic ZSR file creator
- * Make sure that we're forgiving about extra lines and whitespace in info.txt
  *
  * FIXME:
  * Preference changes are not taking effect until app is restarted
