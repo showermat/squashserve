@@ -1,6 +1,7 @@
 #ifndef HTTP_H
 #define HTTP_H
 #include <string>
+#include <sstream>
 #include <functional>
 #include <unordered_map>
 #include <sstream>

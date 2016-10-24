@@ -201,7 +201,7 @@ Mirroring a website rarely goes perfectly, so along with Wikidump I've provided 
 
   - `lib/json.hpp` is copyright 2013-2016, Niels Lohmann, and is released under the MIT License.  The original can be obtained from <https://github.com/nlohmann/json>.
 
-  - `resources/fonts` and `resources/css/font-awesome*.css` are from the Font Awesome project by Dave Gandy, released under the Creative Commons license 3.0.  The originals can be obtained from <http://fontawesome.io>.
+  - `resources/fonts/fontawesome*` and `resources/css/font-awesome*.css` are from the Font Awesome project by Dave Gandy, released under the Creative Commons license 3.0.  The originals can be obtained from <http://fontawesome.io>.
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.  The original can be obtained from <https://github.com/jquery/jquery>.
 

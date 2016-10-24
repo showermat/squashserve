@@ -8,6 +8,7 @@
 #include <future>
 #include <memory>
 #include <stdexcept>
+#include <cstdlib>
 #include "lib/json/json.hpp" // Thanks to github/nlohmann
 #include "util/util.h"
 #include "zsr.h"
@@ -29,8 +30,16 @@ public:
 	handle_error(const std::string &msg) : runtime_error{msg} { }
 };
 
-const std::string rsrcd = util::pathjoin({util::dirname(util::exepath()), "resources"});
+std::unique_ptr<zsr::archive> resources{};
 Volmgr volumes{};
+
+http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})
+{
+	std::ostringstream ret{};
+	ret << resources->get(path).open(); // Not checking if resources is null because it is set at program launch
+	resources->close(path);
+	return http::doc(util::mimetype(path, ret.str()), ret.str(), headers);
+}
 
 std::vector<std::string> docsplit(const std::string &doc, const std::string &delim = "%")
 {
@@ -70,14 +79,14 @@ std::string token_replace(const std::string &in, const std::unordered_map<std::s
 
 http::doc error(const std::string &header, const std::string &body)
 {
-	http::doc ret{util::pathjoin({rsrcd, "html", "error.html"})};
+	http::doc ret = resource("html/error.html");
 	ret.content(token_replace(ret.content(), {{"header", header}, {"message", body}}));
 	return ret;
 }
 
 http::doc loadcat(const std::string &name)
 {
-	http::doc ret{util::pathjoin({rsrcd, "html", "home.html"})};
+	http::doc ret = resource("html/home.html");
 	std::vector<std::string> sects = docsplit(ret.content());
 	std::stringstream buf{};
 	std::unordered_set<std::string> volnames = volumes.load(name);
@@ -96,7 +105,7 @@ http::doc unloadcat(const std::string &name)
 
 http::doc home()
 {
-	http::doc ret{util::pathjoin({rsrcd, "html", "home.html"})};
+	http::doc ret = resource("html/home.html");
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 8) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
@@ -121,7 +130,7 @@ http::doc search(Volume &vol, const std::string &query)
 {
 	/*std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
-	http::doc ret{util::pathjoin({rsrcd, "html", "search.html"})};
+	http::doc ret = resource("html/search.html");
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/search.html");
 	std::stringstream buf{};
@@ -165,7 +174,7 @@ http::doc complete(Volume &vol, const std::string &query)
 
 http::doc titles(Volume &vol, const std::string &query)
 {
-	http::doc ret{util::pathjoin({rsrcd, "html", "titles.html"})};
+	http::doc ret = resource("html/titles.html");
 	std::stringstream buf{};
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
@@ -186,7 +195,7 @@ http::doc shuffle(Volume &vol)
 http::doc view(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
-	http::doc ret{util::pathjoin({rsrcd, "html", "view.html"})};
+	http::doc ret = resource("html/view.html");
 	ret.content(token_replace(ret.content(), vol.tokens(path)));
 	return ret;
 }
@@ -200,7 +209,7 @@ http::doc content(Volume &vol, const std::string &path)
 
 http::doc pref()
 {
-	http::doc ret{util::pathjoin({rsrcd, "html", "mainpref.html"})};
+	http::doc ret = resource("html/mainpref.html");
 	std::vector<std::string> sects = docsplit(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/mainpref.html");
 	std::stringstream buf{};
@@ -217,7 +226,7 @@ http::doc pref()
 http::doc rsrc(const std::string &path)
 {
 	if (! path.size()) return error("Bad Request", "Missing path to resource to retrieve");
-	try { return http::doc{util::pathjoin({rsrcd, path}), {{"Cache-control", "max-age=640000"}}}; }
+	try { return resource(path, {{"Cache-control", "max-age=640000"}}); }
 	catch (std::runtime_error &e) { return error("Not Found", "The requested resource could not be found"); }
 }
 
@@ -258,7 +267,7 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 		volumes.refresh();
 		return http::redirect("/");
 	}
-	else if (verb == "quit") exit(0);
+	else if (verb == "quit") std::exit(0);
 	/*else if (verb == "debug")
 	{
 		std::stringstream buf{};
@@ -313,7 +322,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		}
 		else if (path[0] == "pref") return pref();
 		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
-		else if (path[0] == "add") return http::doc{util::pathjoin({rsrcd, "html", "add.html"})};
+		else if (path[0] == "add") return http::doc{resource("html/add.html")};
 		else if (path[0] == "action")
 		{
 			if (path.size() < 2) return error("Bad Request", "No action selected");
@@ -330,6 +339,11 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 int main(int argc, char **argv)
 {
 	prefs::init();
+	std::string rsrcpath = prefs::get("resources");
+	if (rsrcpath == "") rsrcpath = util::pathjoin({util::dirname(util::exepath()), "resources.zsr"});
+	std::ifstream rsrcfile{rsrcpath};
+	if (! rsrcfile) throw std::runtime_error{"Couldn't open resource archive at " + rsrcpath + "\n"};
+	resources.reset(new zsr::archive{std::move(rsrcfile)});
 	volumes.init(prefs::get("basedir"));
 	http::server{static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
 	return 0;

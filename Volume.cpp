@@ -39,7 +39,7 @@ std::string Volume::shuffle() const
 	const static int tries = 32;
 	for (int i = 0; i < tries; i++)
 	{
-		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size()));
+		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size() - 1));
 		if (n.isdir() || n.meta("title") == "") continue;
 		return n.path();
 	}
@@ -47,7 +47,7 @@ std::string Volume::shuffle() const
 	files.reserve(archive_->size());
 	for (zsr::iterator n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
 	if (files.size() == 0) return "";
-	return archive_->index(files[util::randint<zsr::filecount>(0, files.size())]).path();
+	return archive_->index(files[util::randint<zsr::filecount>(0, files.size() - 1)]).path();
 }
 
 std::vector<Result> Volume::search(const std::string &query, int nres, int prevlen)

@@ -368,7 +368,7 @@ namespace zsr
 
 	node iterator::getnode() const
 	{
-		if (idx >= ar.size()) throw std::runtime_error("Tried to access invalid node");
+		if (idx >= ar.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(ar.size()) + ")");
 		return node{ar, idx};
 	}
 
