@@ -5,15 +5,25 @@ const std::string Volume::default_icon{"/rsrc/img/volume.svg"};
 
 Volume Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
 {
+	throw std::runtime_error{"This functionality is not implemented yet"};
 	//std::cout << "src = " << srcdir << "\ndest = " << destdir << "\nid = " << id << "\n";
 	//for (const std::pair<const std::string, std::string> &pair : info) std::cout << "  " << pair.first << " = " << pair.second << "\n";
-	// Check that srcdir and destdir exist, id is alphanumeric plus underscore, and id.zsr does not yet exist in destdir
-	// Create _meta if it does not exist, create info.txt, copy the favicon there if it exists
-	// If the tree is not indexed yet, index it
+	const std::regex validmeta{"^[A-Za-z_]+$"};
+	if (! util::isdir(srcdir)) throw std::runtime_error{"Source directory " + srcdir + " is not accessible"};
+	if (! util::isdir(destdir)) throw std::runtime_error{"Destination directory " + destdir + " is not accessible"};
+	if (! util::isdir(util::pathjoin({srcdir, metadir})))
+	{
+		util::mkdir(util::pathjoin({srcdir, metadir}));
+		std::ofstream infofile{util::pathjoin({srcdir, metadir, "info.txt"})};
+		if (! infofile) throw std::runtime_error{"Could not open information file " + util::pathjoin({srcdir, metadir, "info.txt"}) + " for writing"};
+		for (const std::pair<const std::string, std::string> &item : info)
+		{
+			if (! std::regex_match(item.first, validmeta)) throw std::runtime_error{"Metadata name “" + item.first + "” contains invalid characters"};
+			infofile << item.first << ":" << item.second << "\n";
+		}
+		if (info.count("favicon")) util::cp(info.at("favicon"), util::pathjoin({srcdir, metadir, "favicon.png"}));
+	}
 	// Compress the tree to the destination
-	// Load the volume
-	// If an exception is thrown, display the error message to the user
-	throw std::runtime_error{"This functionality is not implemented yet"};
 }
 
 Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
@@ -107,7 +117,7 @@ std::string Volume::quicksearch(std::string query)
 
 std::string Volume::info(const std::string &key) const
 {
-	if (! info_.count(key)) throw std::runtime_error{"Requested nonexistent info \"" + key + "\" from volume " + id_};
+	if (! info_.count(key)) throw std::runtime_error{"Requested nonexistent info “" + key + "” from volume " + id_};
 	return info_.at(key);
 }
 

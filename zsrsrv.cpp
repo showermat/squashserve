@@ -41,17 +41,23 @@ http::doc resource(const std::string &path, const std::unordered_map<std::string
 	return http::doc(util::mimetype(path, ret.str()), ret.str(), headers);
 }
 
-std::vector<std::string> docsplit(const std::string &doc, const std::string &delim = "%")
+std::vector<std::string> docsplit(const std::string &doc, const std::unordered_map<std::string, std::string> &vars = {}, const std::string &delim = "%")
 {
 	std::vector<std::string> ret{};
 	std::vector<std::string> lines = util::strsplit(doc, '\n');
 	std::stringstream buf{};
+	const std::regex varname{"^%\\?([A-Z]+)\\s(.*)$"};
+	std::smatch match{};
 	for (const std::string &line : lines)
 	{
 		if (line == delim)
 		{
 			ret.push_back(buf.str());
 			buf.str(std::string{});
+		}
+		else if (std::regex_match(line, match, varname))
+		{
+			if (vars.count(util::utf8lower(match[1]))) buf << match[2] << "\n";
 		}
 		else buf << line << "\n";
 	}
@@ -103,11 +109,13 @@ http::doc unloadcat(const std::string &name)
 	return http::doc{};
 }
 
-http::doc home()
+http::doc home(bool privileged)
 {
 	http::doc ret = resource("html/home.html");
 	std::stringstream buf{};
-	std::vector<std::string> sects = docsplit(ret.content());
+	std::unordered_map<std::string, std::string> docvars{};
+	if (privileged) docvars["priv"] = "";
+	std::vector<std::string> sects = docsplit(ret.content(), docvars);
 	if (sects.size() < 8) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
 	buf << sects[0] << sects[3] << loadcat("").content() << sects[5];
 	for (const std::string &cat : volumes.categories())
@@ -209,9 +217,9 @@ http::doc content(Volume &vol, const std::string &path)
 
 http::doc pref()
 {
-	http::doc ret = resource("html/mainpref.html");
+	http::doc ret = resource("html/pref.html");
 	std::vector<std::string> sects = docsplit(ret.content());
-	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/mainpref.html");
+	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/pref.html");
 	std::stringstream buf{};
 	buf << sects[0];
 	for (const std::string &prefname : prefs::list())
@@ -227,7 +235,7 @@ http::doc rsrc(const std::string &path)
 {
 	if (! path.size()) return error("Bad Request", "Missing path to resource to retrieve");
 	try { return resource(path, {{"Cache-control", "max-age=640000"}}); }
-	catch (std::runtime_error &e) { return error("Not Found", "The requested resource could not be found"); }
+	catch (std::runtime_error &e) { return error("Not Found", "The requested resource " + path + " could not be found"); }
 }
 
 http::doc action(const std::string &verb, const std::unordered_map<std::string, std::string> &args)
@@ -239,17 +247,19 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 	}
 	else if (verb == "pref")
 	{
+		std::string old_basedir = prefs::get("basedir");
 		for (const std::pair<const std::string, std::string> &kvpair : args)
 		{
 			try { prefs::set(kvpair.first, kvpair.second); }
 			catch (std::out_of_range &e) { continue; }
 		}
 		prefs::write();
+		if (prefs::get("basedir") != old_basedir) volumes.init(prefs::get("basedir"));
 		return http::redirect("/");
 	}
 	else if (verb == "add")
 	{
-		if (! args.count("home") || ! args.count("location") || ! args.count("id")) return error("Couldn't create volume", "A required parameter is missing.");
+		for (const std::string & reqarg : {"home", "location", "id"}) if (! args.count(reqarg)) return error("Volume Creation Failed", "Required parameter “" + reqarg + "” is missing.");
 		std::string srcdir = args.at("location");
 		std::string id = args.at("id");
 		std::unordered_map<std::string, std::string> info;
@@ -263,7 +273,7 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 		}
 		for (const std::string &key : keynames) if (args.count("key_" + key) && args.count("value_" + key)) info[args.at("key_" + key)] = args.at("value_" + key);
 		try { Volume::create(srcdir, prefs::get("basedir"), id, info); }
-		catch(std::runtime_error &e) { return error("Couldn't create volume", e.what()); }
+		catch(std::runtime_error &e) { return error("Volume Creation Failed", e.what()); }
 		volumes.refresh();
 		return http::redirect("/");
 	}
@@ -277,9 +287,10 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 	else return error("Bad Request", "Unknown action “" + verb + "”");
 }
 
-http::doc urlhandle(const std::string &url, const std::string &querystr)
+http::doc urlhandle(const std::string &url, const std::string &querystr, const uint32_t remoteip)
 {
 	//std::cout << url << "\n";
+	const uint32_t localip = util::str2ip("127.0.0.1"); // TODO Make this configurable
 	std::vector<std::string> path = util::strsplit(url, '/');
 	if (path.size() && path[0] == "") path.erase(path.begin());
 	for (std::string &elem : path) elem = util::urldecode(elem);
@@ -292,7 +303,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 	}
 	try
 	{
-		if (path.size() == 0) return home();
+		if (path.size() == 0) return home(remoteip == localip);
 		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles" || path[0] == "shuffle")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
@@ -318,6 +329,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		else if (path[0] == "external")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing external path");
+			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
 			return http::doc{"text/plain", volumes.load_external(path[1])};
 		}
 		else if (path[0] == "pref") return pref();
@@ -326,6 +338,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr)
 		else if (path[0] == "action")
 		{
 			if (path.size() < 2) return error("Bad Request", "No action selected");
+			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
 			return action(path[1], query);
 		}
 		else throw handle_error{"Unknown action “" + path[0] + "”"};

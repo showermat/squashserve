@@ -37,12 +37,12 @@ h1
 {
 	font-size: 14pt;
 	font-weight: bold;
-	margin-bottom: 40px;
+	margin: 20px 0;
 }
 
 input
 {
-	border: none;
+	border: 1px solid #aaa;;
 }
 
 i.fa
@@ -96,7 +96,6 @@ table tr
 
 table td
 {
-	vertical-align: top;
 	padding: 8px 4px;
 }
 
@@ -156,9 +155,26 @@ a.form-action img
 	height: 16px;
 }
 
+div.form-sub
+{
+	margin-top: 8px;
+}
+
+span.submit-explain
+{
+	font-size: 90%;
+	color: gray;
+	font-style: italic;
+}
+
 span.form-ops
 {
 	float: right;
+}
+
+span.form-ops button
+{
+	margin-left: 8px;
 }
 
 form.search
@@ -221,7 +237,7 @@ form.search
 form#search button, form.search button, form#search input, form.search input
 {
 	height: 100%;
-	border: 0px;
+	border: 1px solid #aaa;
 	line-height: 100%;
 }
 

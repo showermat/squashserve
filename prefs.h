@@ -19,7 +19,7 @@ namespace prefs
 			"default": 2234
 		}, {
 			"name": "resources",
-			"desc": "ZSR archive of server resources, or \"resources.zsr\" in the executable directory if empty",
+			"desc": "ZSR archive of server resources, or “resources.zsr” in the executable directory if empty",
 			"default": ""
 		}, {
 			"name": "accept",
@@ -34,7 +34,7 @@ namespace prefs
 			"desc": "Search result preview length",
 			"default": 400
 		}
-	])");
+	])"); // TODO Maybe generate this in C++?
 
 	const std::string preffname = "zsrsrv.conf";
 	std::vector<std::string> preflocs;

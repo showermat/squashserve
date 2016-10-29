@@ -84,7 +84,8 @@ namespace http
 	void server::handle(struct mg_connection *conn, int ev, void *data)
 	{
 		server *srv = static_cast<server *>(conn->mgr->user_data);
-		if (! srv->filter.check(conn->sa.sin.sin_addr.s_addr))
+		uint32_t remoteip = conn->sa.sin.sin_addr.s_addr;
+		if (! srv->filter.check(remoteip))
 		{
 			mg_printf(conn, denied_msg.c_str(), denied_msg.size());
 			return;
@@ -93,7 +94,7 @@ namespace http
 		{
 		case MG_EV_HTTP_REQUEST:
 			struct http_message *msg = static_cast<struct http_message *>(data);
-			doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len});
+			doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len}, remoteip);
 			std::ostringstream head{};
 			head << "HTTP/1.1 200 OK\r\n";
 			for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
@@ -103,7 +104,7 @@ namespace http
 		}
 	}
 
-	server::server(uint16_t port, std::function<doc(std::string, std::string)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
+	server::server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
 	{
 		mg_mgr_init(&mgr, this);
 		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);

@@ -44,12 +44,12 @@ namespace http
 	{
 	private:
 		struct mg_mgr mgr;
-		std::function<doc(std::string, std::string)> callback;
+		std::function<doc(std::string, std::string, uint32_t)> callback;
 		ipfilter filter;
 		static std::string denied_msg;
 		static void handle(struct mg_connection *conn, int ev, void *data);
 	public:
-		server(uint16_t port, std::function<doc(std::string, std::string)> handler, const std::string &accept = "");
+		server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};

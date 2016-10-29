@@ -15,7 +15,6 @@
 #include <algorithm>
 #include <ctime>
 #include <dirent.h>
-#include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
 #include "util/util.h"
@@ -37,6 +36,11 @@ namespace zsr
 {
 	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
 	typedef uint64_t offset; // Constrains the size of the archive and individual files
+
+	//bool verbose = false;
+	//const std::string clrln{"\r\033[K"};
+	//inline void loga(const std::string &msg) { if (verbose) std::cout << clrln << util::timestr() << ": " << msg << std::endl; }
+	//inline void logb(const std::string &msg) { if (verbose) std::cout << clrln << msg << std::flush; }
 
 	class archive;
 	class index;
@@ -117,7 +121,6 @@ namespace zsr
 		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
 	private:
 		archive &container_;
-		std::istream &in_; // TODO Replace with container_.in_?
 		filecount id_;
 		std::vector<std::string> meta_;
 		std::function<std::string(const filecount &)> &revcheck_;
@@ -147,7 +150,7 @@ namespace zsr
 		std::string meta(uint8_t key) { return follow().meta_[key]; }
 		std::unordered_map<std::string, filecount> children();
 		std::unique_ptr<node> getchild(const std::string &name); // Pending std::optional
-		std::streambuf *content(); // TODO Parts of this should be moved into zsr::archive
+		std::streambuf *content();
 		void close();
 		void extract(const std::string &path);
 	};

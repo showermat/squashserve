@@ -251,31 +251,32 @@ namespace zsr
 	std::string node::readstring()
 	{
 		uint16_t len;
-		in_.read(reinterpret_cast<char *>(&len), sizeof(uint16_t));
+		container_.in_.read(reinterpret_cast<char *>(&len), sizeof(uint16_t));
 		std::string ret{};
 		ret.resize(len);
-		in_.read(reinterpret_cast<char *>(&ret[0]), len);
+		container_.in_.read(reinterpret_cast<char *>(&ret[0]), len);
 		return ret;
 	}
 
-	node::node(archive &container, offset idx): container_{container}, in_{container.in_}, id_{idx}, revcheck_{container_.revcheck}
+	node::node(archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
+		std::istream &in = container_.in_;
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
-		in_.seekg(container_.idxstart_ + idx * sizeof(offset));
+		in.seekg(container_.idxstart_ + idx * sizeof(offset));
 		offset start;
-		in_.read(reinterpret_cast<char *>(&start), sizeof(offset));
-		in_.seekg(container_.datastart_ + start);
-		in_.read(reinterpret_cast<char *>(&parent_), sizeof(filecount));
-		in_.read(reinterpret_cast<char *>(&type_), sizeof(ntype));
+		in.read(reinterpret_cast<char *>(&start), sizeof(offset));
+		in.seekg(container_.datastart_ + start);
+		in.read(reinterpret_cast<char *>(&parent_), sizeof(filecount));
+		in.read(reinterpret_cast<char *>(&type_), sizeof(ntype));
 		name_ = readstring();
-		if (type_ == ntype::link) in_.read(reinterpret_cast<char *>(&redirect_), sizeof(filecount));
+		if (type_ == ntype::link) in.read(reinterpret_cast<char *>(&redirect_), sizeof(filecount));
 		else if (type_ == ntype::reg)
 		{
 			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(readstring());
-			in_.read(reinterpret_cast<char *>(&fullsize_), sizeof(offset));
-			in_.read(reinterpret_cast<char *>(&len_), sizeof(offset));
+			in.read(reinterpret_cast<char *>(&fullsize_), sizeof(offset));
+			in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
 		}
-		datastart_ = in_.tellg();
+		datastart_ = in.tellg();
 		//std::cerr << "Node " << id_ << ": " << name_ << "@" << std::hex << start << "[" << std::dec << len_ << "]" << "\n";
 	}
 
@@ -283,8 +284,8 @@ namespace zsr
 	{
 		if (type_ == ntype::link) return follow().childmap();
 		if (type_ != ntype::dir) throw std::runtime_error{"Tried to get child of non-directory"};
-		in_.seekg(datastart_);
-		return diskmap::map<std::string, filecount>{in_, revcheck_};
+		container_.in_.seekg(datastart_);
+		return diskmap::map<std::string, filecount>{container_.in_, revcheck_};
 	}
 
 	node node::follow(unsigned int limit, unsigned int depth)
@@ -347,7 +348,7 @@ namespace zsr
 		std::string fullpath = util::pathjoin({location, name_});
 		if (type_ == ntype::dir)
 		{
-			if (mkdir(fullpath.c_str(), 0755) != 0 && errno != EEXIST) throw std::runtime_error{"Could not create directory " + fullpath};
+			util::mkdir(fullpath, 0755, true);
 			diskmap::map<std::string, filecount> cont = childmap();
 			//std::cerr << "Node " << id_ << " name " << name_ << ": " << cont.size() << " children\n";
 			for (filecount i = 0; i < cont.size(); i++) node{container_, cont[i]}.extract(fullpath);
@@ -415,7 +416,12 @@ namespace zsr
 				if (except) throw std::runtime_error{"Tried to get child of non-directory " + path};
 				return std::unique_ptr<node>{};
 			}
-			if (item == "" || item == ".") continue; // TODO Handle ..
+			if (item == "" || item == ".") continue;
+			if (item == "..")
+			{
+				if (n->id() > 0) n = n->parent();
+				continue;
+			}
 			n = n->getchild(item);
 			if (! n)
 			{
@@ -435,7 +441,7 @@ namespace zsr
 
 	void archive::extract(const std::string &path, const std::string &dest)
 	{
-		if (! util::isdir(dest) && mkdir(dest.c_str(), 0750) < 0) throw std::runtime_error{"Couldn't access or create destination directory " + dest}; // TODO Abstract mkdir
+		if (! util::isdir(dest)) util::mkdir(dest, 0750);
 		std::unique_ptr<node> member = getnode(path);
 		if (! member) throw std::runtime_error{"Member " + path + " does not exist in this archive"};
 		member->extract(dest);
