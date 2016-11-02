@@ -8,13 +8,13 @@ body
 main.normal
 {
 	width: 800px;
-	margin: 0px auto;
+	margin: 0 auto;
 }
 
 main.narrow
 {
 	width: 400px;
-	margin: 0px auto;
+	margin: 0 auto;
 }
 
 span.code
@@ -30,7 +30,7 @@ div#utils
 
 div#utils a
 {
-	margin: 0px 8px;
+	margin: 0 8px;
 }
 
 h1
@@ -52,7 +52,7 @@ i.fa
 
 div.category-container
 {
-	margin-bottom: 20px;
+	margin: 20px 0;
 }
 
 a.category-title
@@ -72,7 +72,7 @@ img.category-loading
 	width: 1em;
 	max-height: 1em;
 	float: right;
-	margin: 0px 2px;
+	margin: 0 2px;
 	display: none;
 }
 
@@ -179,7 +179,7 @@ span.form-ops button
 
 form.search
 {
-	margin: 0px;
+	margin: 0;
 	white-space: nowrap;
 }
 
@@ -197,7 +197,7 @@ div.tt-menu
 
 p.tt-suggestion, p.tt-footer
 {
-	margin: 0px;
+	margin: 0;
 }
 
 p.tt-suggestion a, p.tt-footer a
@@ -248,7 +248,7 @@ div#topbar
 	left: 0;
 	width: 100%;
 	height: 16px;
-	padding: 8px 0px;
+	padding: 8px 0;
 	background: rgba(192, 192, 192, 0.6);
 }
 
@@ -256,7 +256,7 @@ div#toolbar
 {
 	max-width: 800px;
 	height: 100%;
-	margin: 0px auto;
+	margin: 0 auto;
 }
 
 div#toolbar-inner

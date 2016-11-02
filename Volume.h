@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <memory>
 #include <sstream>
+#include <functional>
 #include <stdexcept>
 #include <unordered_set>
 #include <set>
@@ -11,7 +12,23 @@
 #include "util/util.h"
 #include "zsr.h"
 #include "search.h"
-#include "http.h"
+
+class Volwriter
+{
+private:
+	const std::string indir;
+	zsr::writer archwriter;
+	rsearch::disktree_writer searchwriter;
+	std::string encoding;
+	std::regex process;
+
+	static std::string html_title(const std::string &content, const std::string &def, const std::string &encoding = "", const std::regex &process = std::regex{});
+	static std::unordered_map<std::string, std::string> gmeta(const std::string &path);
+	std::vector<std::string> meta(const zsr::writer::filenode &n);
+public:
+	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol);
+	void write(std::ofstream &out);
+};
 
 struct Result
 {
@@ -42,13 +59,13 @@ private:
 	bool indexed_;
 	rsearch::disktree titles_;
 public:
-	static Volume create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
+	static void create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname, const std::string &id = "");
 	Volume(const Volume &orig) = delete;
 	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{std::move(orig.info_)}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
 	const std::string &id() const { return id_; }
 	const zsr::archive &archive() const { return *archive_; }
-	http::doc get(std::string path);
+	std::pair<std::string, std::string> get(std::string path);
 	std::string shuffle() const;
 	bool indexed() { return indexed_; }
 	std::vector<Result> search(const std::string &query, int nres, int prevlen);

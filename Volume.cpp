@@ -3,9 +3,79 @@
 const std::string Volume::metadir{"_meta"};
 const std::string Volume::default_icon{"/rsrc/img/volume.svg"};
 
-Volume Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
+std::string Volwriter::html_title(const std::string &content, const std::string &def, const std::string &encoding, const std::regex &process)
 {
-	throw std::runtime_error{"This functionality is not implemented yet"};
+	std::regex titlere{"<title>(.*?)</title>", std::regex_constants::ECMAScript | std::regex_constants::icase};
+	std::smatch match{};
+	if (! std::regex_search(content, match, titlere)) return def;
+	std::string title = match[1];
+	if (encoding.size())
+	{
+		try { title = util::conv(title, encoding, "UTF-8"); }
+		catch (std::runtime_error &e)
+		{
+			std::cout << clrln << "Could not convert title for file " << def << "\n";
+			return def;
+		}
+	}
+	std::string ret = util::from_htmlent(title);
+	if (! std::regex_search(ret, match, process)) return ret;
+	return match[1];
+}
+
+std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
+{
+	std::string path = n.path();
+	if (util::mimetype(path) != "text/html") return {""};
+	std::ostringstream content{};
+	content << std::ifstream{path}.rdbuf();
+	std::string title = html_title(content.str(), util::basename(path), encoding, process);
+	searchwriter.add(title, n.id());
+	return {title};
+}
+
+std::unordered_map<std::string, std::string> Volwriter::gmeta(const std::string &path)
+{
+	std::unordered_map<std::string, std::string> ret{};
+	std::ostringstream infoss{};
+	infoss << std::ifstream{util::pathjoin({path, Volume::metadir, "info.txt"})}.rdbuf();
+	std::string info = infoss.str();
+	for (const std::string &line : util::strsplit(info, '\n'))
+	{
+		if (line.size() == 0 || line[0] == '#') continue;
+		unsigned int splitloc = line.find(":");
+		if (splitloc == line.npos) continue;
+		ret[line.substr(0, splitloc)] = line.substr(splitloc + 1);
+	}
+	return ret;
+}
+
+Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, encoding{}, process{}
+{
+	std::unordered_map<std::string, std::string> volmeta = gmeta(indir);
+	if (volmeta.count("encoding")) encoding = volmeta["encoding"];
+	if (volmeta.count("title_filter")) process = std::regex{volmeta["title_filter"]};
+	archwriter.volume_meta(volmeta);
+	std::function<std::vector<std::string>(const zsr::writer::filenode &)> meta_callback = [this](const zsr::writer::filenode &n) { return this->meta(n); };
+	archwriter.node_meta({"title"}, meta_callback);
+}
+
+void Volwriter::write(std::ofstream &out)
+{
+	std::string searchtmpf{"search.zsr.tmp"};
+	archwriter.write_header();
+	archwriter.write_body();
+	std::ofstream searchout{searchtmpf};
+	searchwriter.write(searchout);
+	searchout.close();
+	std::ifstream searchin{searchtmpf};
+	archwriter.userdata(searchin);
+	archwriter.combine(out);
+	util::rm(searchtmpf);
+}
+
+void Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)
+{
 	//std::cout << "src = " << srcdir << "\ndest = " << destdir << "\nid = " << id << "\n";
 	//for (const std::pair<const std::string, std::string> &pair : info) std::cout << "  " << pair.first << " = " << pair.second << "\n";
 	const std::regex validmeta{"^[A-Za-z_]+$"};
@@ -23,7 +93,10 @@ Volume Volume::create(const std::string &srcdir, const std::string &destdir, con
 		}
 		if (info.count("favicon")) util::cp(info.at("favicon"), util::pathjoin({srcdir, metadir, "favicon.png"}));
 	}
-	// Compress the tree to the destination
+	std::string outpath = util::pathjoin({destdir, id + ".zsr"});
+	std::ofstream out{outpath};
+	if (! out) throw std::runtime_error{"Could not open output file " + outpath};
+	Volwriter{srcdir, zsr::writer::linkpolicy::process}.write(out);
 }
 
 Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, indexed_{false}, titles_{archive_->userdata()} // FIXME Unsafe assumption about initialization order of archive_ and titles_
@@ -34,14 +107,14 @@ Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archi
 	// TODO Check whether there are metadata and set indexed_ appropriately
 }
 
-http::doc Volume::get(std::string path)
+std::pair<std::string, std::string> Volume::get(std::string path)
 {
 	if (! archive_->check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
 	contentss << archive_->get(path).open(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
 	archive_->reap();
-	return http::doc{util::mimetype(path, content), content};
+	return std::make_pair(util::mimetype(path, content), content);
 }
 
 std::string Volume::shuffle() const
@@ -89,7 +162,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 	return ret;*/
 }
 
-std::unordered_map<std::string, std::string> Volume::complete(const std::string &query)
+std::unordered_map<std::string, std::string> Volume::complete(const std::string &query) // FIXME For short queries to large volumes, this requires getting the titles of hundreds or thousands of articles, which can take many seconds.  This is not a common use case, but is something that needs consideration.
 {
 	std::unordered_map<std::string, std::string> ret;
 	for (const zsr::filecount &idx : titles_.search(util::utf8lower(query)))
@@ -124,7 +197,7 @@ std::string Volume::info(const std::string &key) const
 std::unordered_map<std::string, std::string> Volume::tokens(std::string member)
 {
 	std::unordered_map<std::string, std::string> ret = info_;
-	if (archive_->check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = http::mkpath({"content", id(), metadir, "favicon.png"});
+	if (archive_->check(util::pathjoin({metadir, "favicon.png"}))) ret["icon"] = "/" + util::strjoin({"content", id(), metadir, "favicon.png"}, '/');
 	else ret["icon"] = default_icon;
 	if (member != "")
 	{

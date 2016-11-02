@@ -3,7 +3,7 @@ function match(id)
 	return new Bloodhound({
 		datumTokenizer: function (d) { return Bloodhound.tokenizers.whitespace(d.value); },
 		queryTokenizer : Bloodhound.tokenizers.whitespace,
-		remote : { url : "/complete/" + id + "/%QUERY", wildcard : "%QUERY" }
+		remote : { url : "/complete/" + id + "/%QUERY", wildcard : "%QUERY", rateLimitWait : 500 }
 	});
 }
 

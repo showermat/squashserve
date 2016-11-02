@@ -13,15 +13,13 @@
 #include "util/util.h"
 #include "zsr.h"
 #include "Volume.h"
+#include "http.h"
 #include "prefs.h"
 
-/* TODO:
- * Implement automatic ZSR file creator
- *
- * FIXME:
- * Preference changes are not taking effect until app is restarted
+/* Frame issues:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
  * Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
+ * Browser doesn't remember your position on the page if you e.g. go back
  */
 
 class handle_error : public std::runtime_error
@@ -168,12 +166,17 @@ http::doc search(Volume &vol, const std::string &query)
 http::doc complete(Volume &vol, const std::string &query)
 {
 	constexpr int limit = 40;
+	std::function<bool(const std::string &, const std::string &)> strlencomp = [](const std::string &a, const std::string &b) { return a.size() < b.size(); };
 	std::unordered_map<std::string, std::string> res = vol.complete(query);
 	std::vector<std::string> names{};
 	names.reserve(res.size());
 	for (const std::pair<const std::string, std::string> &pair : res) names.push_back(pair.first);
-	std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); });
-	if (names.size() > limit) names.resize(limit);
+	if (names.size() > limit)
+	{
+		std::nth_element(names.begin(), names.begin() + limit, names.end(), strlencomp);
+		names.resize(limit);
+	}
+	std::sort(names.begin(), names.end(), strlencomp);
 	nlohmann::json ret{};
 	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + "/" + res[name]}});
 	ret.push_back(std::unordered_map<std::string, std::string>{{"title", "<b>See all</b>"}, {"url", "/titles/" + vol.id() + "/" + query}});
@@ -211,7 +214,11 @@ http::doc view(Volume &vol, const std::string &path)
 http::doc content(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"content", vol.id(), vol.info("home")}));
-	try { return vol.get(path); }
+	try
+	{
+		std::pair<std::string, std::string> contpair = vol.get(path);
+		return http::doc{contpair.first, contpair.second};
+	}
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
 }
 
@@ -299,7 +306,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 	{
 		std::string::size_type idx = qu.find("=");
 		if (idx == qu.npos) query[util::urldecode(qu)] = "";
-		else query[util::urldecode(qu.substr(0, idx))] = util::urldecode(qu.substr(idx + 1));
+		else query[util::urldecode(qu.substr(0, idx), true)] = util::urldecode(qu.substr(idx + 1), true);
 	}
 	try
 	{
