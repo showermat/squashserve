@@ -1,3 +1,5 @@
+#ifndef ZSR_DISKMAP_H
+#define ZSR_DISKMAP_H
 #include <map>
 #include <fstream>
 #include <functional>
@@ -86,4 +88,6 @@ namespace diskmap
 		}
 	};
 }
+
+#endif
 

@@ -1,5 +1,5 @@
-#ifndef ZSR_H
-#define ZSR_H
+#ifndef ZSR_ZSR_H
+#define ZSR_ZSR_H
 #include <string>
 #include <vector>
 #include <unordered_map>

@@ -1,5 +1,5 @@
-#ifndef PREFS_H
-#define PREFS_H
+#ifndef ZSR_PREFS_H
+#define ZSR_PREFS_H
 #include <vector>
 #include <map>
 #include <fstream>

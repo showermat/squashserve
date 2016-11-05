@@ -1,5 +1,5 @@
-#ifndef HTTP_H
-#define HTTP_H
+#ifndef ZSR_HTTP_H
+#define ZSR_HTTP_H
 #include <string>
 #include <sstream>
 #include <functional>
@@ -57,7 +57,6 @@ namespace http
 	doc redirect(const std::string &url);
 	std::string mkpath(const std::vector<std::string> &items);
 	std::string title(const std::string &content, const std::string def = "");
-	std::string strings(const std::string &content);
 }
 
 #endif

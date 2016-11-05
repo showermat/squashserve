@@ -16,7 +16,8 @@
 #include "http.h"
 #include "prefs.h"
 
-/* Frame issues:
+/* 
+ * Frame issues:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
  * Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
  * Browser doesn't remember your position on the page if you e.g. go back
@@ -134,7 +135,10 @@ http::doc home(bool privileged)
 
 http::doc search(Volume &vol, const std::string &query)
 {
-	/*std::unordered_map<std::string, std::string> tokens = vol.tokens();
+	std::string match = vol.quicksearch(query);
+	if (match != "") return http::redirect(http::mkpath({"view", vol.id(), match}));
+	//else return http::redirect(http::mkpath({"titles", vol.id(), query}));
+	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret = resource("html/search.html");
 	std::vector<std::string> sects = docsplit(ret.content());
@@ -146,7 +150,7 @@ http::doc search(Volume &vol, const std::string &query)
 		for (const Result &res : vol.search(query, prefs::get("results"), prefs::get("preview")))
 		{
 			std::unordered_map<std::string, std::string> qtoks = tokens;
-			qtoks["url"] = res.url;
+			qtoks["url"] = http::mkpath({"view", vol.id(), res.url});
 			qtoks["match"] = util::t2s(res.relevance);
 			qtoks["title"] = res.title;
 			qtoks["preview"] = res.preview;
@@ -156,11 +160,7 @@ http::doc search(Volume &vol, const std::string &query)
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
 	buf << token_replace(sects[2], tokens);
 	ret.content(buf.str());
-	return ret;*/
-
-	std::string match = vol.quicksearch(query);
-	if (match != "") return http::redirect(http::mkpath({"view", vol.id(), match}));
-	else return http::redirect(http::mkpath({"titles", vol.id(), query}));
+	return ret;
 }
 
 http::doc complete(Volume &vol, const std::string &query)

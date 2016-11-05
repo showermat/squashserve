@@ -37,25 +37,6 @@ namespace http
 		return match[1];
 	}
 
-	std::string strings(const std::string &content)
-	{
-		//std::regex bodyre{"(<body[^>]*>([\\w\\W]*)</body>)"}; // This doesn't work because of group length limit in C++ regex library
-		std::regex bodyopen{"<body[^>]*>"};
-		std::regex bodyclose{"</body>"};
-		std::smatch bodymatch{};
-		if (! std::regex_search(content, bodymatch, bodyopen)) return content; // TODO Need to escape HTML special characters
-		std::string::size_type startidx = bodymatch.position() + bodymatch.length();
-		if (! std::regex_search(content, bodymatch, bodyclose)) return content;
-		std::string::size_type endidx = bodymatch.position();
-		if (endidx < startidx) return content;
-		std::string body = content.substr(startidx, endidx - startidx);
-		body = std::regex_replace(body, std::regex{"<style>[\\w\\W]*</style>"}, ""); // FIXME  Will wipe out anything between two script or style blocks
-		body = std::regex_replace(body, std::regex{"<script>[\\w\\W]*</script>"}, "");
-		body = std::regex_replace(body, std::regex{"<[^>]+>"}, "");
-		body = std::regex_replace(body, std::regex{"[\\s\\n]+"}, " ");
-		return body;
-	}
-
 	ipfilter::ipfilter(const std::string &accept)
 	{
 		if (accept == "") whitelist[0] = 0;

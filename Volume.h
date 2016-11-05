@@ -1,5 +1,5 @@
-#ifndef VOLUME_H
-#define VOLUME_H
+#ifndef ZSR_VOLUME_H
+#define ZSR_VOLUME_H
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -9,24 +9,61 @@
 #include <unordered_set>
 #include <set>
 #include <regex>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "util/util.h"
 #include "zsr.h"
 #include "search.h"
+#ifdef ZSR_USE_XAPIAN
+#include <xapian.h>
+#endif
+
+namespace htmlutil
+{
+	std::string strings(const std::string &content);
+
+	std::string words(const std::string &content);
+
+	std::string title(const std::string &content, const std::string &def, const std::string &encoding = "", const std::regex &process = std::regex{});
+}
 
 class Volwriter
 {
 private:
+#ifdef ZSR_USE_XAPIAN
+	class Xapwriter
+	{
+	private:
+		const static std::string xaptmpd;
+		const static std::string xaptmpf;
+		Xapian::WritableDatabase db;
+		Xapian::TermGenerator indexer;
+	public:
+		static std::string getlang(const std::unordered_map<std::string, std::string> &meta);
+		void xapian_rethrow(Xapian::Error &e);
+		Xapwriter() : db{}, indexer{} { }
+		void init(const std::string &lang = "english");
+		void add(const std::string &content, const std::string &title, zsr::filecount id);
+		void write(std::ostream &out);
+	};
+#endif
 	const std::string indir;
 	zsr::writer archwriter;
 	rsearch::disktree_writer searchwriter;
 	std::string encoding;
 	std::regex process;
-
-	static std::string html_title(const std::string &content, const std::string &def, const std::string &encoding = "", const std::regex &process = std::regex{});
+	std::unordered_map<std::string, std::string> volmeta;
+#ifdef ZSR_USE_XAPIAN
+	Xapwriter xap;
+#endif
 	static std::unordered_map<std::string, std::string> gmeta(const std::string &path);
 	std::vector<std::string> meta(const zsr::writer::filenode &n);
 public:
 	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol);
+	Volwriter(const Volwriter &orig) = delete;
+	Volwriter(Volwriter &&orig) = delete;
 	void write(std::ofstream &out);
 };
 
@@ -56,24 +93,35 @@ private:
 	std::string id_;
 	std::unique_ptr<zsr::archive> archive_;
 	std::unordered_map<std::string, std::string> info_;
-	bool indexed_;
 	rsearch::disktree titles_;
+#ifdef ZSR_USE_XAPIAN
+	Xapian::Database index_;
+	int xapfd_;
+#endif
 public:
 	static void create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info);
 	Volume(const std::string &fname, const std::string &id = "");
 	Volume(const Volume &orig) = delete;
-	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{std::move(orig.info_)}, indexed_{orig.indexed_}, titles_{std::move(orig.titles_)} { orig.indexed_ = false; }
+	Volume(Volume &&orig) : id_{orig.id_}, archive_{std::move(orig.archive_)}, info_{std::move(orig.info_)}, titles_{std::move(orig.titles_)}
+#ifdef ZSR_USE_XAPIAN
+	, index_{std::move(orig.index_)}, xapfd_{orig.xapfd_} { orig.xapfd_ = -1; }
+#else
+	{ }
+#endif
 	const std::string &id() const { return id_; }
 	const zsr::archive &archive() const { return *archive_; }
 	std::pair<std::string, std::string> get(std::string path);
 	std::string shuffle() const;
-	bool indexed() { return indexed_; }
 	std::vector<Result> search(const std::string &query, int nres, int prevlen);
 	std::unordered_map<std::string, std::string> complete(const std::string &query);
 	std::string quicksearch(std::string query);
 	std::string info(const std::string &key) const;
 	std::unordered_map<std::string, std::string> tokens(std::string member = "");
-	virtual ~Volume() { }
+	virtual ~Volume() {
+#ifdef ZSR_USE_XAPIAN
+		if (xapfd_ != -1) close(xapfd_);
+#endif
+	}
 };
 
 class Volmgr
@@ -103,4 +151,3 @@ public:
 };
 
 #endif
-

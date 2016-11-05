@@ -1,3 +1,5 @@
+#ifndef ZSR_COMPRESS_H
+#define ZSR_COMPRESS_H
 #include <streambuf>
 #include <iostream>
 #include <vector>
@@ -71,4 +73,6 @@ namespace lzma
 		void reset() { init(*file_, start_, size_, decomp_); }
 	};
 }
+
+#endif
 

@@ -104,6 +104,11 @@ table td.vcenter
 	vertical-align: middle;
 }
 
+table#search-results
+{
+	margin: 20px 0;
+}
+
 td.volume-icon, td.volume-info, td.volume-search
 {
 	white-space: nowrap;

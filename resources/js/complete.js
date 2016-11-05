@@ -20,7 +20,7 @@ function autocomplete(elem, volid, newtab = false)
 	elem.typeahead({
 		highlight : true,
 		hint : false,
-		minLength : 2,
+		minLength : 4,
 	}, {
 		displayKey : "title",
 		source : matcher.ttAdapter(),
