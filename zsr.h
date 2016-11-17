@@ -42,6 +42,9 @@ namespace zsr
 	//inline void loga(const std::string &msg) { if (verbose) std::cout << clrln << util::timestr() << ": " << msg << std::endl; }
 	//inline void logb(const std::string &msg) { if (verbose) std::cout << clrln << msg << std::flush; }
 
+	template<typename T> inline void serialize(std::ostream &out, const T &t) { out.write(reinterpret_cast<const char *>(&t), sizeof(t)); }
+	template<typename T> inline void deserialize(std::istream &in, T &t) { in.read(reinterpret_cast<char *>(&t), sizeof(t)); }
+
 	class archive;
 	class index;
 
@@ -147,7 +150,7 @@ namespace zsr
 		std::string path();
 		std::string dest() { return util::relreduce(util::dirname(path()), follow(1).path()); }
 		size_t size() { return follow().fullsize_; }
-		std::string meta(uint8_t key) { return follow().meta_[key]; }
+		std::string meta(const std::string &key);
 		std::unordered_map<std::string, filecount> children();
 		std::unique_ptr<node> getchild(const std::string &name); // Pending std::optional
 		std::streambuf *content();
@@ -155,7 +158,7 @@ namespace zsr
 		void extract(const std::string &path);
 	};
 
-	class iterator // TODO Make this actually inherit from std::iterator
+	class iterator
 	{
 	private:
 		archive &ar;
@@ -201,8 +204,7 @@ namespace zsr
 		node getnode(filecount idx) { return node{*this, idx}; }
 		std::unique_ptr<node> getnode(const std::string &path, bool except = false); // TODO Pending std::optional
 		unsigned int metaidx(const std::string &key) const;
-		friend class node; // TODO Ugh
-		friend class iterator;
+		friend class node;
 	public:
 		archive(const archive &orig) = delete;
 		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }

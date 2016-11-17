@@ -16,7 +16,9 @@
 #include "http.h"
 #include "prefs.h"
 
-/* 
+/* TODO:
+ * ...
+ *
  * Frame issues:
  * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
  * Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
@@ -137,7 +139,9 @@ http::doc search(Volume &vol, const std::string &query)
 {
 	std::string match = vol.quicksearch(query);
 	if (match != "") return http::redirect(http::mkpath({"view", vol.id(), match}));
-	//else return http::redirect(http::mkpath({"titles", vol.id(), query}));
+#ifndef ZSR_USE_XAPIAN
+	return http::redirect(http::mkpath({"titles", vol.id(), query}));
+#endif
 	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret = resource("html/search.html");

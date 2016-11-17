@@ -36,26 +36,26 @@ namespace rsearch
 		if (n->m_children.count("") && n->m_children[""]->m_value) nval = n->m_children[""]->m_value->second.size();
 		treesize nchild = 0;
 		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children) if (child.first != "" && child.second) nchild++; // TODO Probably a faster way?
-		out.write(reinterpret_cast<const char *>(&nchild), sizeof(treesize));
+		zsr::serialize(out, nchild);
 		std::deque<zsr::offset> childpos{};
 		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
 			treesize namelen = child.first.size();
-			out.write(reinterpret_cast<const char *>(&namelen), sizeof(treesize));
+			zsr::serialize(out, namelen);
 			out.write(&child.first[0], namelen);
 			childpos.push_back(static_cast<zsr::offset>(out.tellp()));
-			out.write(reinterpret_cast<const char *>(&ptrfill), sizeof(zsr::offset));
+			zsr::serialize(out, ptrfill);
 		}
-		out.write(reinterpret_cast<const char *>(&nval), sizeof(treesize));
+		zsr::serialize(out, nval);
 		if (n->m_children.count("") && n->m_children[""]->m_value)
-			for (const zsr::filecount &i : n->m_children[""]->m_value->second) out.write(reinterpret_cast<const char *>(&i), sizeof(zsr::filecount));
+			for (const zsr::filecount &i : n->m_children[""]->m_value->second) zsr::serialize(out, i);
 		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
 			zsr::offset childstart = static_cast<zsr::offset>(out.tellp()) - treestart;
 			out.seekp(childpos.front());
-			out.write(reinterpret_cast<const char *>(&childstart), sizeof(zsr::offset));
+			zsr::serialize(out, childstart);
 			out.seekp(0, std::ios_base::end);
 			recursive_treewrite(out, child.second, treestart);
 			childpos.pop_front();
@@ -68,7 +68,7 @@ namespace rsearch
 		if (! stree_.m_root)
 		{
 			constexpr treesize fill{0};
-			for (int i = 0; i < 2; i++) out.write(reinterpret_cast<const char *>(&fill), sizeof(treesize));
+			for (int i = 0; i < 2; i++) zsr::serialize(out, fill);
 			return;
 		}
 		recursive_treewrite(out, stree_.m_root, static_cast<zsr::offset>(out.tellp()));
@@ -94,16 +94,16 @@ namespace rsearch
 	{
 		std::unordered_map<std::string, zsr::offset> ret{};
 		treesize nchild;
-		in_->read(reinterpret_cast<char *>(&nchild), sizeof(treesize));
+		zsr::deserialize(*in_, nchild);
 		for (treesize i = 0; i < nchild; i++)
 		{
 			treesize namelen;
-			in_->read(reinterpret_cast<char *>(&namelen), sizeof(treesize));
+			zsr::deserialize(*in_, namelen);
 			std::string name{};
 			name.resize(namelen);
 			in_->read(reinterpret_cast<char *>(&name[0]), namelen);
 			zsr::offset loc;
-			in_->read(reinterpret_cast<char *>(&loc), sizeof(zsr::offset));
+			zsr::deserialize(*in_, loc);
 			ret[name] = loc;
 		}
 		return ret;
@@ -113,11 +113,11 @@ namespace rsearch
 	{
 		std::unordered_set<zsr::filecount> ret{};
 		treesize nval;
-		in_->read(reinterpret_cast<char *>(&nval), sizeof(treesize));
+		zsr::deserialize(*in_, nval);
 		for (treesize i = 0; i < nval; i++)
 		{
 			zsr::filecount curval;
-			in_->read(reinterpret_cast<char *>(&curval), sizeof(zsr::filecount));
+			zsr::deserialize(*in_, curval);
 			ret.insert(curval);
 		}
 		return ret;

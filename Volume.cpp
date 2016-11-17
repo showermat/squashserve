@@ -97,7 +97,7 @@ void Volwriter::Xapwriter::init(const std::string &lang)
 void Volwriter::Xapwriter::add(const std::string &content, const std::string &title, zsr::filecount id) try
 {
 	Xapian::Document doc{};
-	doc.add_value(1, std::string{reinterpret_cast<char *>(&id), sizeof(zsr::filecount)});
+	doc.add_value(1, std::string{reinterpret_cast<char *>(&id), sizeof(id)});
 	indexer.set_document(doc);
 	indexer.index_text_without_positions(htmlutil::strings(content));
 	//for (const std::string &word : util::strsplit(htmlutil::strings(content), ' ')) if (word.size() > 0 && word.size() < 32) doc.add_term(word);
@@ -175,7 +175,7 @@ void Volwriter::write(std::ofstream &out)
 	std::ofstream searchout{searchtmpf};
 #ifdef ZSR_USE_XAPIAN
 	zsr::offset xapstart{0};
-	searchout.write(reinterpret_cast<char *>(&xapstart), sizeof(zsr::offset));
+	zsr::serialize(searchout, xapstart);
 #endif
 	searchwriter.write(searchout);
 #ifdef ZSR_USE_XAPIAN
@@ -183,7 +183,7 @@ void Volwriter::write(std::ofstream &out)
 	loga("Writing search index");
 	xap.write(searchout);
 	searchout.seekp(0);
-	searchout.write(reinterpret_cast<char *>(&xapstart), sizeof(zsr::offset));
+	zsr::serialize(searchout, xapstart);
 #endif
 	searchout.close();
 	std::ifstream searchin{searchtmpf};
@@ -227,7 +227,7 @@ Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archi
 	titles_.init(userd, 0);
 #ifdef ZSR_USE_XAPIAN
 	zsr::offset xapstart;
-	userd.read(reinterpret_cast<char *>(&xapstart), sizeof(zsr::offset));
+	zsr::deserialize(userd, xapstart);
 	titles_.init(userd, sizeof(zsr::offset));
 	xapstart += dynamic_cast<util::rangebuf *>(userd.rdbuf())->offset();
 	xapfd_ = ::open(fname.c_str(), O_RDONLY);
@@ -255,7 +255,7 @@ std::string Volume::shuffle() const
 	for (int i = 0; i < tries; i++)
 	{
 		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size() - 1));
-		if (n.isdir() || n.meta("title") == "") continue;
+		if (! n.isreg() || n.meta("title") == "") continue;
 		return n.path();
 	}
 	std::vector<zsr::filecount> files{};
@@ -301,8 +301,13 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 
 std::unordered_map<std::string, std::string> Volume::complete(const std::string &query) // FIXME For short queries to large volumes, this requires getting the titles of hundreds or thousands of articles, which can take many seconds.  This is not a common use case, but is something that needs consideration.
 {
-	std::unordered_map<std::string, std::string> ret;
-	for (const zsr::filecount &idx : titles_.search(util::utf8lower(query)))
+	std::unordered_map<std::string, std::string> ret{};
+	if (! query.size()) return ret;
+	std::vector<std::string> words = util::strsplit(util::utf8lower(query), ' ');
+	std::unordered_set<zsr::filecount> matches = titles_.search(words.back());
+	words.pop_back();
+	for (const std::string &word : words) matches = util::intersection(matches, titles_.search(word));
+	for (const zsr::filecount &idx : matches)
 	{
 		zsr::iterator n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();

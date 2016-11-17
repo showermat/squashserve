@@ -5,7 +5,7 @@ namespace zsr
 	void writer::writestring(const std::string &s, std::ostream &out)
 	{
 		uint16_t len = s.size();
-		out.write(reinterpret_cast<const char *>(&len), sizeof(uint16_t));
+		serialize(out, len);
 		out.write(reinterpret_cast<const char *>(&s[0]), len);
 	}
 
@@ -52,9 +52,9 @@ namespace zsr
 		//std::cout << "File " << id << " path " << path << " parent " << parent << "\n";
 		if (linkpol_ == linkpolicy::process) links_.handle_dest(fullpath, id);
 		offset mypos = contout.tellp();
-		idxout.write(reinterpret_cast<const char *>(&mypos), sizeof(offset));
-		contout.write(reinterpret_cast<const char *>(&parent), sizeof(filecount));
-		contout.write(reinterpret_cast<const char *>(&type), sizeof(node::ntype));
+		serialize(idxout, mypos);
+		serialize(contout, parent);
+		serialize(contout, type);
 		writestring(util::basename(path), contout);
 		if (type == node::ntype::reg)
 		{
@@ -62,23 +62,23 @@ namespace zsr
 			const std::vector<std::string> metad = metagen_(filenode(*this, id, path));
 			if (metad.size() != nodemeta_.size()) throw std::runtime_error{"Number of generated metadata does not match number of file metadata keys"};
 			for (const std::string &val : metad) writestring(val, contout);
-			contout.write(reinterpret_cast<const char *>(&fullsize), sizeof(offset));
+			serialize(contout, fullsize);
 			std::streampos sizepos = contout.tellp();
-			contout.write(reinterpret_cast<const char *>(&ptrfill), sizeof(offset)); // Placeholder for length
+			serialize(contout, ptrfill); // Placeholder for length
 			lzma::wrbuf compressor{in};
 			contout << &compressor;
 			if (! contout) throw std::runtime_error{"Bad output stream when writing archive content for file " + path};
 			offset len = static_cast<offset>(contout.tellp() - sizepos - sizeof(offset));
 			std::streampos end = contout.tellp();
 			contout.seekp(sizepos);
-			contout.write(reinterpret_cast<const char *>(&len), sizeof(offset));
+			serialize(contout, len);
 			contout.seekp(end);
 		}
 		if (type == node::ntype::link)
 		{
 			links_.handle_src(fullpath, contout.tellp());
 			constexpr filecount fcfill{0}; // To fill in later
-			contout.write(reinterpret_cast<const char *>(&fcfill), sizeof(filecount));
+			serialize(contout, fcfill);
 		}
 		if (type == node::ntype::dir)
 		{
@@ -162,7 +162,7 @@ namespace zsr
 			logb(++done << "/" << total);
 			if (! link.second->resolved) throw std::runtime_error{"Link " + link.first + " was not resolved"};
 			out.seekp(link.second->destpos);
-			out.write(reinterpret_cast<char *>(&link.second->destid), sizeof(filecount));
+			serialize(out, link.second->destid);
 		}
 	}
 
@@ -198,14 +198,14 @@ namespace zsr
 		std::string fileheader = archive::magic_number + std::string(sizeof(offset), '\0');
 		out.write(fileheader.c_str(), fileheader.size());
 		uint8_t msize = volmeta_.size();
-		out.write(reinterpret_cast<char *>(&msize), sizeof(uint8_t));
+		serialize(out, msize);
 		for (const std::pair<const std::string, std::string> &pair : volmeta_)
 		{
 			writestring(pair.first, out);
 			writestring(pair.second, out);
 		}
 		msize = nodemeta_.size();
-		out.write(reinterpret_cast<char *>(&msize), sizeof(uint8_t));
+		serialize(out, msize);
 		for (const std::string &mkey : nodemeta_) writestring(mkey, out);
 	}
 
@@ -220,9 +220,9 @@ namespace zsr
 		out << content.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
 		out.seekp(archive::magic_number.size());
-		out.write(reinterpret_cast<char *>(&idxstart), sizeof(offset)); // FIXME Endianness problems?
+		serialize(out, idxstart); // FIXME Endianness problems?
 		out.seekp(0, std::ios_base::end);
-		out.write(reinterpret_cast<char *>(&nfile_), sizeof(filecount));
+		serialize(out, nfile_);
 		out << index.rdbuf();
 		if (userdata_) out << userdata_->rdbuf();
 		loga("Done writing archive");
@@ -251,7 +251,7 @@ namespace zsr
 	std::string node::readstring()
 	{
 		uint16_t len;
-		container_.in_.read(reinterpret_cast<char *>(&len), sizeof(uint16_t));
+		deserialize(container_.in_, len);
 		std::string ret{};
 		ret.resize(len);
 		container_.in_.read(reinterpret_cast<char *>(&ret[0]), len);
@@ -264,17 +264,17 @@ namespace zsr
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
 		in.seekg(container_.idxstart_ + idx * sizeof(offset));
 		offset start;
-		in.read(reinterpret_cast<char *>(&start), sizeof(offset));
+		deserialize(in, start);
 		in.seekg(container_.datastart_ + start);
-		in.read(reinterpret_cast<char *>(&parent_), sizeof(filecount));
-		in.read(reinterpret_cast<char *>(&type_), sizeof(ntype));
+		deserialize(in, parent_);
+		deserialize(in, type_);
 		name_ = readstring();
-		if (type_ == ntype::link) in.read(reinterpret_cast<char *>(&redirect_), sizeof(filecount));
+		if (type_ == ntype::link) deserialize(in, redirect_);
 		else if (type_ == ntype::reg)
 		{
 			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(readstring());
-			in.read(reinterpret_cast<char *>(&fullsize_), sizeof(offset));
-			in.read(reinterpret_cast<char *>(&len_), sizeof(offset));
+			deserialize(in, fullsize_);
+			deserialize(in, len_);
 		}
 		datastart_ = in.tellg();
 		//std::cerr << "Node " << id_ << ": " << name_ << "@" << std::hex << start << "[" << std::dec << len_ << "]" << "\n";
@@ -309,6 +309,11 @@ namespace zsr
 		std::string ppath = parent()->path();
 		if (ppath != "") ppath += "/";
 		return ppath + name();
+	}
+
+	std::string node::meta(const std::string &key)
+	{
+		return follow().meta_[container_.metaidx(key)];
 	}
 
 	std::unordered_map<std::string, filecount> node::children()
@@ -375,7 +380,7 @@ namespace zsr
 
 	std::string iterator::meta(const std::string &key) const
 	{
-		return getnode().meta(ar.metaidx(key));
+		return getnode().meta(key);
 	}
 
 	std::unordered_map<std::string, filecount> iterator::children() const
@@ -463,38 +468,38 @@ namespace zsr
 		in_.read(reinterpret_cast<char *>(&magic[0]), magic_number.size());
 		if (magic != magic_number) throw badzsr{"File identifier incorrect"};
 		offset idxstart{};
-		in_.read(reinterpret_cast<char *>(&idxstart), sizeof(offset));
+		deserialize(in_, idxstart);
 		if (! in_) throw badzsr{"Premature end of file in header"};
 		uint8_t nmeta;
-		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
+		deserialize(in_, nmeta);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
 			uint16_t ksize, vsize;
 			std::string k{}, v{};
-			in_.read(reinterpret_cast<char *>(&ksize), sizeof(uint16_t));
+			deserialize(in_, ksize);
 			k.resize(ksize);
 			in_.read(reinterpret_cast<char *>(&k[0]), ksize);
-			in_.read(reinterpret_cast<char *>(&vsize), sizeof(uint16_t));
+			deserialize(in_, vsize);
 			v.resize(vsize);
 			in_.read(reinterpret_cast<char *>(&v[0]), vsize);
 			archive_meta_[k] = v;
 		}
-		in_.read(reinterpret_cast<char *>(&nmeta), sizeof(uint8_t));
+		deserialize(in_, nmeta);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
 			uint16_t msize;
 			std::string mval{};
-			in_.read(reinterpret_cast<char *>(&msize), sizeof(uint16_t));
+			deserialize(in_, msize);
 			mval.resize(msize);
 			in_.read(reinterpret_cast<char *>(&mval[0]), msize);
 			node_meta_.push_back(mval);
 		}
 		datastart_ = in_.tellg();
 		in_.seekg(idxstart);
-		in_.read(reinterpret_cast<char *>(&size_), sizeof(filecount));
+		deserialize(in_, size_);
 		idxstart_ = in_.tellg();
 		offset test;
-		in_.read(reinterpret_cast<char *>(&test), sizeof(offset));
+		deserialize(in_, test);
 		std::streampos userdstart = idxstart_ + static_cast<std::streampos>(size_ * sizeof(filecount));
 		in_.seekg(0, std::ios_base::end);
 		userdbuf_.reset(new util::rangebuf{in_, userdstart, in_.tellg() - userdstart});

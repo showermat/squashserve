@@ -9,7 +9,9 @@ function match(id)
 
 function clearform(volid)
 {
-	$("form.search[data-volid=" + volid + "] input.search-input").typeahead("val", ""); // Is this the best way to do it?
+	var elem = $("form.search[data-volid=" + volid + "] input.search-input")
+	elem.typeahead("val", "");
+	elem.blur();
 	return true;
 }
 

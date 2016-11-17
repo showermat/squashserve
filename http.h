@@ -40,24 +40,33 @@ namespace http
 		bool check(uint32_t addr);
 	};
 
+	class error : public std::runtime_error
+	{
+	private:
+		static const std::unordered_map<int, std::pair<std::string, std::string>> messages;
+		static const std::string msg_template;
+		int status_;
+	public:
+		error(int status) : std::runtime_error{"HTTP " + util::t2s(status_)}, status_{status} { }
+		void send(struct mg_connection *conn);
+	};
+
 	class server
 	{
 	private:
 		struct mg_mgr mgr;
 		std::function<doc(std::string, std::string, uint32_t)> callback;
 		ipfilter filter;
-		static std::string denied_msg;
 		static void handle(struct mg_connection *conn, int ev, void *data);
 	public:
 		server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};
-	
+
 	doc redirect(const std::string &url);
 	std::string mkpath(const std::vector<std::string> &items);
 	std::string title(const std::string &content, const std::string def = "");
 }
 
 #endif
-

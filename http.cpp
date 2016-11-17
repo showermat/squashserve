@@ -2,7 +2,6 @@
 
 namespace http
 {
-	
 	doc::doc(const std::string &path, const std::unordered_map<std::string, std::string> &headers) : type_{util::mimetype(path)}, content_{}, headers_{headers}
 	{
 		std::ifstream in{path};
@@ -60,30 +59,42 @@ namespace http
 		return false;
 	}
 
-	std::string server::denied_msg{"HTTP/1.1 403 Forbidden\r\nContent-type: text/html\r\nContent-length: 122\r\n\r\n<html><head><title>Forbidden</title></head><body><h1>Forbidden</h1>You are not authorized to view this page.</body></html>"};
+	const std::unordered_map<int, std::pair<std::string, std::string>> error::messages{
+		{400, {"Bad Request", "The request you made is not valid"}},
+		{403, {"Forbidden", "You are not authorized to view this page"}},
+		{405, {"Method Not Allowed", "Only GET requests are supported by this server"}},
+		{500, {"Internal Server Error", "An error occurred while processing your request"}}
+	};
 
-	void server::handle(struct mg_connection *conn, int ev, void *data)
+	const std::string error::msg_template = "HTTP/1.1 %d %s\r\nContent-type: text/html\r\nContent-length: %d\r\n\r\n<html><head><title>%s</title></head><body><h1>%s</h1><p>%s.</p></body></html>";
+
+	void error::send(struct mg_connection *conn)
 	{
+		if (! messages.count(status_)) status_ = 500;
+		const std::pair<const std::string, std::string> &msg = messages.at(status_);
+		const char *title = msg.first.c_str();
+		int bodylen = 71 + 2 * msg.first.size() + msg.second.size();
+		mg_printf(conn, msg_template.c_str(), status_, title, bodylen, title, title, msg.second.c_str());
+	}
+
+	void server::handle(struct mg_connection *conn, int ev, void *data) try
+	{
+		if (ev != MG_EV_HTTP_REQUEST) return;
 		server *srv = static_cast<server *>(conn->mgr->user_data);
 		uint32_t remoteip = conn->sa.sin.sin_addr.s_addr;
-		if (! srv->filter.check(remoteip))
-		{
-			mg_printf(conn, denied_msg.c_str(), denied_msg.size());
-			return;
-		}
-		switch (ev)
-		{
-		case MG_EV_HTTP_REQUEST:
-			struct http_message *msg = static_cast<struct http_message *>(data);
-			doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len}, remoteip);
-			std::ostringstream head{};
-			head << "HTTP/1.1 200 OK\r\n";
-			for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
-			head << "\r\n";
-			mg_printf(conn, "%s", head.str().c_str());
-			mg_send(conn, d.content().data(), d.size());
-		}
+		if (! srv->filter.check(remoteip)) throw error{403};
+		struct http_message *msg = static_cast<struct http_message *>(data);
+		if (std::string{msg->method.p, msg->method.len} != "GET") throw error{405};
+		doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len}, remoteip);
+		std::ostringstream head{};
+		head << "HTTP/1.1 200 OK\r\n";
+		for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
+		head << "\r\n";
+		mg_printf(conn, "%s", head.str().c_str());
+		mg_send(conn, d.content().data(), d.size());
 	}
+	catch (error &e) { e.send(conn); }
+	catch (std::exception &e) { error{500}.send(conn); }
 
 	server::server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
 	{
