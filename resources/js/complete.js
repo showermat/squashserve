@@ -28,7 +28,7 @@ function autocomplete(elem, volid, newtab = false)
 		source : matcher.ttAdapter(),
 		limit : 100,
 		templates : {
-			suggestion : function(data) { return "<p><a href='" + data.url + "' onclick='clearform(\"" + volid + "\")' " + (newtab ? " target='_blank'" : "") + ">" + data.title + "</a></p>"; },
+			suggestion : function(data) { return "<p><a href=\"" + data.url + "\" onclick='clearform(\"" + volid + "\")' " + (newtab ? " target='_blank'" : "") + ">" + data.title + "</a></p>"; },
 			//footer : "<p class='tt-footer'><a href='/titles/" + volid + "/'>See all</a></p>"
 		}
 	});
