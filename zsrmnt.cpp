@@ -14,7 +14,7 @@
 
 std::unique_ptr<zsr::archive> ar{};
 std::unordered_map<std::string, int> openf{};
-std::mutex readlock{}, openlock{};
+std::mutex accesslock{};
 
 void help_exit()
 {
@@ -25,17 +25,17 @@ void help_exit()
 int fs_open(const char *path, struct fuse_file_info *info)
 {
 	if ((info->flags & 3) != O_RDONLY) return -EACCES;
-	std::lock_guard<std::mutex> openguard{openlock};
+	std::lock_guard<std::mutex> guard{accesslock};
 	openf[std::string{path}]++;
 	return 0;
 }
 
 int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *info)
 {
+	std::lock_guard<std::mutex> guard{accesslock};
 	if (! ar->check(std::string(path))) return -ENOENT;
 	try
 	{
-		std::lock_guard<std::mutex> readguard{readlock};
 		std::istream read{ar->get(std::string{path}).open()};
 		read.seekg(offset);
 		read.read(buf, size);
@@ -46,8 +46,8 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 
 int fs_release(const char *path, struct fuse_file_info *info)
 {
+	std::lock_guard<std::mutex> guard{accesslock};
 	const std::string pathstr{path};
-	std::lock_guard<std::mutex> closeguard{openlock};
 	openf[pathstr]--;
 	if (openf[pathstr] == 0)
 	{
@@ -59,6 +59,7 @@ int fs_release(const char *path, struct fuse_file_info *info)
 
 int fs_readlink(const char *path, char *buf, size_t size)
 {
+	std::lock_guard<std::mutex> guard{accesslock};
 	zsr::iterator n = ar->get(std::string{path});
 	if (n.type() != zsr::node::ntype::link) return -EINVAL;
 	strncpy(buf, n.dest().c_str(), size - 1);
@@ -71,6 +72,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	std::vector<dirent> ls{};
 	try
 	{
+		std::lock_guard<std::mutex> guard{accesslock};
 		for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
 		{
 			dirent dir;
@@ -95,6 +97,7 @@ int fs_getattr(const char *path, struct stat *stat)
 	stat->st_nlink = 1;
 	try
 	{
+		std::lock_guard<std::mutex> guard{accesslock};
 		zsr::iterator n = ar->get(std::string{path});
 		if (n.type() == zsr::node::ntype::dir) stat->st_mode = S_IFDIR;
 		else if (n.type() == zsr::node::ntype::reg)

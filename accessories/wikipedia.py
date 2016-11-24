@@ -23,7 +23,12 @@ import queue;
 # Links to anchors in other pages are based on section name, whereas the anchors themselves are randomized names -- so the link doesn't work
 # Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions
 # Table of contents only if there's more than one section (or more than two?)
+# Multi-level bulleted lists have the same left margin at all levels
 # Remove gratuitous metadata from HTML to decrease output size
+#
+# Problem pages:
+# Persimmon: gallery image positioning
+# Alpha Centauri: not handling srcset in observational history section; escaped span in citation needed in theoretical planets
 
 concurrency = 32;
 origin_root = "https://en.wikipedia.org";

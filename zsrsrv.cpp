@@ -196,7 +196,7 @@ http::doc titles(Volume &vol, const std::string &query)
 	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
 	buf << token_replace(sects[0], titletokens);
-	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // TODO Sort
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // Is sorting worth the time consumption?
 	buf << token_replace(sects[2], titletokens);
 	ret.content(buf.str());
 	return ret;
