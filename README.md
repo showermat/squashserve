@@ -130,6 +130,8 @@ The encoder can also be used as a library in other C++ programs by including the
     }
     ar.reap(); // Clean up file descriptors opened by zsr::iterator.open().
 
+For the time being, none of the classes guarantee safety in multi-threading.  All accesses to methods should be sequentialized.
+
 
 ## Creating Volumes
 
@@ -170,7 +172,7 @@ The first 40 results of the search are placed in a typeahead box below the searc
 
 ## So, What about Wikipedia?
 
-Of course, the holy grail of website archiving, and possibly the most useful site to have, is Wikipedia.  A goal of this project was to enable efficient offline Wikipedia browsing suitable for replacing OpenZIM.  With a couple of catches, ZSR scales up to handle Wikipedia pretty well.  I tested this with an October 2016 dump of Wikipedia, consisting of 5.45 M thumbnail images, 5.28 M HTML pages, and 7.58 M redirection links, which occupied 312 GB on disk prior to compression.  `mkvol` archived this in 8300 minutes using up to nearly 10 GB of memory, and resulting in a ZSR archive occupying 115.6 GB.  This is far from optimal, and I plan to devote more energy to decreasing the memory usage of the archiving process and the size of the resulting archive.  However, from my laptop's SSD, the archive proved quite usable, with pages consistently loading in under a second and typeahead search results for queries at least four characters long loading similarly quickly.  When loading from an external USB-3 hard drive, media-heavy pages took up to four or five seconds to load.  Overall, the experience is quite reasonable, and I expect this to improve as I work on finding better ways of doing things.
+Of course, the holy grail of website archiving, and possibly the most useful site to have, is Wikipedia.  A goal of this project was to enable efficient offline Wikipedia browsing suitable for replacing OpenZIM.  With a couple of catches, ZSR scales up to handle Wikipedia pretty well.  I tested this with an October 2016 dump of Wikipedia, consisting of 5.45 M thumbnail images, 5.28 M HTML articles, and 7.58 M redirection links, which occupied 312 GB on disk prior to compression.  `mkvol` archived this in 8300 minutes using up to nearly 10 GB of memory, and resulting in a ZSR archive occupying 115.6 GB.  This is far from optimal, and I plan to devote more energy to decreasing the memory usage of the archiving process and the size of the resulting archive.  However, from my laptop's SSD, the archive proved quite usable, with pages consistently loading in under a second and typeahead search results for queries at least four characters long loading similarly quickly.  When loading from an external USB-3 hard drive, media-heavy pages took up to four or five seconds to load.  Overall, the experience is quite reasonable, and I expect this to improve as I work on finding better ways of doing things.
 
 The biggest issue I encountered on the journey to my offline Wikipedia was obtaining a complete copy of the wiki's data for archiving.  It seems strange, but none of the options I have been able to find provide a fast, simple way to get a complete copy of all HTML and thumbnail images on the site.  Here is a summary of the methods I tried and how they worked out:
 
@@ -178,20 +180,20 @@ The biggest issue I encountered on the journey to my offline Wikipedia was obtai
 
   - Wikipedia provides periodic **database dumps** for download at <https://dumps.wikimedia.org/enwiki/>. This is a quick way to get an internally consistent dump of all the articles, and it's updated often.  Unfortunately, the dump is wikitext, not HTML, and the conversion process is not trivial.  I played around with [Parsoid](https://www.mediawiki.org/wiki/Parsoid), but found that for things like templates the parser was making many requests to the Wikipedia server and was taking many seconds to convert each page.  Parsoid is meant for rendering documents from one's own MediaWiki installation, and I judged that asking anyone who wanted to make their own archive to set up a server and load Wikipedia onto it would be going too far.  Other wikitext parsers I tried did not have full support for Wikipedia's format, so the results were very poor.  Additionally, all article images would need to be downloaded separately.  There may be a way to make parsing a workable solution, but I gave up there.
 
-    The database dump pages on Wikimedia offer tantalizing links for static HTML dumps and image archives, but these have not been updated in ages, and I assume that I will never be able to count on their revival.
+    The database dump pages on Wikimedia offer tantalizing links to static HTML dumps and image archives, but these have not been updated in ages, and I assume that I will never be able to count on their revival.
 
   - Extraction from **ZIM files**.  The guys over at OpenZIM go to all the hard work of archiving Wikipedia to a file for us already, so why can't I just dump the ZIM file and re-archive it as ZSR?  This is actually how I got my first semi-complete Wikipedia archive.  There are a few drawbacks: releases of new archives are rare, a significant number of pages were missing or poorly rendered in the May 2016 edition, and all of the files have to be renamed so that they are actually where the internal links are pointing.  This approach also has a lot of potential because of its ease and relative speed, but these drawbacks, coupled with the dependence on OpenZIM, prompted me to put it aside for the time being.
 
   - MediaWiki's new **[public API](https://en.wikipedia.org/api/rest_v1/)** gives the user the ability to iterate over article titles and dump their content.  I wrote a Python script that would do just that, converting links to be suitable for local viewing and fetching images as well.  It achieves a fairly good rate on my Internet connection, downloading all articles in about three weeks.  It has the additional benefit that it gives the downloader very precise control over the downloading and conversion process.  Unfortunately, the archive is not totally self-consistent, as a lot can change during the three weeks of downloading, and some pages fail to download for various reasons.  Additionally, some small cases are not handled correctly for image retrieval and link conversion, so until those are worked out, the resulting archive will not be perfect.  This is the strategy I am currently pursuing, with the resulting ZSR archive described above.  I plan to continue refining this approach, although I will also keep trying the other approaches listed here in case one shows more merit.
 
-    If you want to download your own copy of Wikipedia with this script, it should be as easy as running `accessories/wikipedia.py` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia` folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.  To be on the safe side, any computer you use for this should have, say, 500 GB free hard disk space and 16 GB RAM.
+    If you want to download your own copy of Wikipedia with this script, it should be as easy as running `accessories/wikimedia.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia` folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.  To be on the safe side, any computer you use for this should have, say, 500 GB free hard disk space and 16 GB RAM.
 
 
 ## Accessory Tools
 
 ### Wikidump
 
-While this project is more concerned with converting file trees to browsable archives than with creating the file trees in the first place, it does include a utility for copying Wikimedia sites (with plans to eventually support Wikia) to local storage.  It's only been tested on a couple of sites, so it's quite likely that it will do stupid things when applied to wikis that aren't similar enough to my test sites.  If it gives you problems on a certain site, please let me know and I'll look into fixing it.
+While this project is more concerned with converting file trees to browsable archives than with creating the file trees in the first place, it does include a utility for copying Mediawiki sites (with the possibility of eventually supporting Wikia) to local storage.  It's only been tested on a couple of sites, so it's quite likely that it will do stupid things when applied to wikis that aren't similar enough to my test sites.  If it gives you problems on a certain site, please let me know and I'll look into fixing it.
 
 Usage is as follows:
 
@@ -200,14 +202,14 @@ Usage is as follows:
 With no verbosity arguments, Wikidump will just display a continuously updating count of the number of items in its queue, which can be misleading because the program eliminates duplicates on removal rather than insertion.  I like the output with a verbosity level of 2; you can increase this further to get debugging output.  *Please* ask the program to sleep between retrievals (`-s` option) to reduce server load if you aren't dumping your own installation.
 
 
-### Wikipedia dump
+### Wikimedia dump
 
-As mentioned above, the `wikipedia.py` script does much the same thing as Wikidump, but it's tailored to Wikipedia and won't take years to finish mirroring.
+As mentioned above, the `wikimedia.py` script does much the same thing as Wikidump, but it's designed to use the new REST API on new Mediawiki sites and works much more quickly.  I've tried it out successfully with Wikipedia and Wiktionary, and it should work for other Wikimedia installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.  I don't know how widely the new API will be adopted by other sites on Mediawiki, especially ones that don't want to be bulk-downloaded, but it may supplant Wikidump at some point in the future.
 
 
 ### Linkcheck
 
-Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` element is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
+Mirroring a website rarely goes perfectly, so along with Wikidump I've provided a small script called `linkcheck.py` that will check for missing links in an HTML tree.  Just provide the root of the tree as the first argument, and it will recursively check links to make sure that the `href` of every `a` element is reachable (only if it is a local link) and otherwise print out the file with the bad link and the link destination.  It also checks that all `img`s with a local `src` attribute are reachable.  Of course, it's far from perfect -- it doesn't (yet) verify links included through the `link` tag or local `script`s, and it will never be able to process, for example, links programmatically generated in JavaScript.  Still, for checking the output of Wikidump, at least, it can be useful.
 
 
 ## Credits

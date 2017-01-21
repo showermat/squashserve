@@ -60,7 +60,7 @@ int fs_release(const char *path, struct fuse_file_info *info)
 int fs_readlink(const char *path, char *buf, size_t size)
 {
 	std::lock_guard<std::mutex> guard{accesslock};
-	zsr::iterator n = ar->get(std::string{path});
+	const zsr::iterator n = ar->get(std::string{path});
 	if (n.type() != zsr::node::ntype::link) return -EINVAL;
 	strncpy(buf, n.dest().c_str(), size - 1);
 	buf[size - 1] = 0;
@@ -98,7 +98,7 @@ int fs_getattr(const char *path, struct stat *stat)
 	try
 	{
 		std::lock_guard<std::mutex> guard{accesslock};
-		zsr::iterator n = ar->get(std::string{path});
+		const zsr::iterator n = ar->get(std::string{path});
 		if (n.type() == zsr::node::ntype::dir) stat->st_mode = S_IFDIR;
 		else if (n.type() == zsr::node::ntype::reg)
 		{

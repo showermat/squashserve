@@ -505,6 +505,5 @@ namespace zsr
 		userdbuf_.reset(new util::rangebuf{in_, userdstart, in_.tellg() - userdstart});
 		userd_.rdbuf(&*userdbuf_);
 	}
-
 }
 

@@ -372,7 +372,11 @@
 }
 
 .thumb > div {
-	width: 200px;
+	/*width: 200px;*/
+}
+
+.thumb > div.overflowbugx {
+	width: 100%;
 }
 
 .thumbcaption, figcaption {
@@ -401,6 +405,15 @@
 	min-width: 100px;
 	padding: 3px;
 	text-align: center;
+}
+
+.gallerybox .thumb span:nth-of-type(2) { /* Ick */
+	width: 100%;
+}
+
+.gallerybox .thumb span img {
+	display: block;
+	margin: 0px auto;
 }
 
 .tright, figure.mw-halign-right, figure, div.floatright {
@@ -490,6 +503,11 @@ div.plainlist ul {
 	list-style-image: none;
 	list-style-type: none;
 	margin-top: 0.3em;
+}
+
+.plainlinks.toc {
+	float: none;
+	margin: 10px;
 }
 
 dl {
@@ -757,3 +775,8 @@ table.wikitable > tr > th, table.wikitable > tr > td, table.wikitable > * > tr >
     border: 1px solid #aaa;
     padding: 0.2em 0.4em;
 }
+
+div.transborder {
+    border: solid transparent;
+}
+

@@ -20,8 +20,10 @@ def dirname(path):
 def queryparse(query):
 	ret = dict();
 	for kvpair in query.split("&"):
-		(key, val) = kvpair.split("=");
-		ret[unquote_plus(key)] = unquote_plus(val);
+		try:
+			(key, val) = kvpair.split("=");
+			ret[unquote_plus(key)] = unquote_plus(val);
+		except Exception: continue;
 	return ret;
 
 # Get arguments
@@ -40,7 +42,7 @@ default_metapages = ["Special", "Portal", "File", "Talk", "User", "Template", "U
 info = dict();
 info["created"] = time.strftime("%Y-%m-%d");
 info["refer"] = args.home;
-recursive = False; # Set to false to prevent queueing of HTML pages for debug
+recursive = True; # Set to false to prevent queueing of HTML pages for debug
 
 # Determine site name
 base = urlsplit(args.home);
@@ -148,13 +150,13 @@ while not urls.empty():
 				if recursive: urls.put(("wiki", urlunsplit(hrefurl)));
 			elif re.search("^/load.php", hrefurl.path):
 				if args.verbose >= 4: print("Loaded resource: %s" % (href)); # Make the poor assumption that it is CSS
-				fhash = hashlib.md5(urlunsplit(hreful).encode("UTF-8")).hexdigest();
+				fhash = hashlib.md5(urlunsplit(hrefurl).encode("UTF-8")).hexdigest();
 				ahref["href"] = prefix + "../rsrc/" + fhash + ".css";
 				urls.put(("css", urlunsplit(hrefurl)));
 			elif re.search("^/index.php", hrefurl.path):
 				if args.verbose >= 4: print("Index link: %s" % (href));
 				if not hrefurl.query:
-					if args.verbose >= f: print("Index link with no query treated as passthrough");
+					if args.verbose >= 4: print("Index link with no query treated as passthrough");
 					ahref["href"] = urlunsplit(hrefurl);
 				else:
 					query = queryparse(urlsplit(urljoin(url, ahref["href"])).query);

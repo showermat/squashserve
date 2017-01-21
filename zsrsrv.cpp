@@ -171,7 +171,7 @@ http::doc complete(Volume &vol, const std::string &query)
 {
 	constexpr int limit = 40;
 	std::function<bool(const std::string &, const std::string &)> strlencomp = [](const std::string &a, const std::string &b) { return a.size() < b.size(); };
-	std::unordered_map<std::string, std::string> res = vol.complete(query);
+	std::unordered_map<std::string, std::string> res = vol.complete(query, limit * 2);
 	std::vector<std::string> names{};
 	names.reserve(res.size());
 	for (const std::pair<const std::string, std::string> &pair : res) names.push_back(pair.first);

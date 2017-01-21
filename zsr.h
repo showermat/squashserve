@@ -210,7 +210,7 @@ namespace zsr
 		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_} { orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
 		archive(std::ifstream &&in);
 		filecount size() const { return size_; }
-		std::unordered_map<std::string, std::string> &gmeta() { return archive_meta_; }
+		const std::unordered_map<std::string, std::string> &gmeta() const { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
 		bool check(const std::string &path);
 		iterator get(const std::string &path) { return iterator{*this, getnode(path, true)->id()}; }

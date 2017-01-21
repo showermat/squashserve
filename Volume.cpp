@@ -138,6 +138,7 @@ std::unordered_map<std::string, std::string> Volwriter::gmeta(const std::string 
 
 std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 {
+	// TODO This doesn't catch redirects or alternate titles.  Is there any way to manage that for Wikipedia, etc.?
 	std::string path = n.path();
 	if (util::mimetype(path) != "text/html") return {""}; // TODO Support other types, such as plain text?
 	std::ostringstream contentss{};
@@ -299,7 +300,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 
 }
 
-std::unordered_map<std::string, std::string> Volume::complete(const std::string &query) // FIXME For short queries to large volumes, this requires getting the titles of hundreds or thousands of articles, which can take many seconds.  This is not a common use case, but is something that needs consideration.
+std::unordered_map<std::string, std::string> Volume::complete(const std::string &query, int max)
 {
 	std::unordered_map<std::string, std::string> ret{};
 	if (! query.size()) return ret;
@@ -307,8 +308,10 @@ std::unordered_map<std::string, std::string> Volume::complete(const std::string 
 	std::unordered_set<zsr::filecount> matches = titles_.search(words.back());
 	words.pop_back();
 	for (const std::string &word : words) matches = util::intersection(matches, titles_.search(word));
+	int cnt = 0;
 	for (const zsr::filecount &idx : matches)
 	{
+		if (max > 0 && cnt++ >= max) break;
 		zsr::iterator n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
 	}
