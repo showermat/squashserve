@@ -47,6 +47,7 @@ namespace zsr
 
 	class archive;
 	class index;
+	class iterator;
 
 	class badzsr : public std::runtime_error
 	{
@@ -107,7 +108,7 @@ namespace zsr
 		void writestring(const std::string &s, std::ostream &out);
 		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
-		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::resolve(std::string{getenv("PWD")}, root_)}, linkpol_{links}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_} { }
+		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{}, nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_} { }
 		void userdata(std::istream &data) { userdata_ = &data; }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
@@ -152,12 +153,33 @@ namespace zsr
 		size_t size() { return follow().fullsize_; }
 		std::string meta(const std::string &key);
 		std::unordered_map<std::string, filecount> children();
-		std::unique_ptr<node> getchild(const std::string &name); // Pending std::optional
+		filecount nchild() { return childmap().size(); }
+		filecount childid(filecount idx) { return childmap()[idx]; }
+		std::unique_ptr<node> child(const std::string &name); // TODO Pending std::optional
 		std::streambuf *content();
 		void close();
 		void extract(const std::string &path);
 	};
 
+	class childiter
+	{
+	private:
+		archive &ar;
+		node n;
+		filecount idx;
+	public:
+		childiter(archive &a, node nd) : ar{a}, n{nd}, idx{0} { }
+		std::unordered_map<std::string, filecount> all();
+		iterator get();
+		void reset() { idx = 0; }
+		void operator ++(int i) { idx++; }
+		void operator --(int i) { idx--; }
+		void operator +=(int i) { idx += i; }
+		void operator -=(int i) { idx -= i; }
+		bool operator ==(const childiter &other) const { return &n == &other.n && idx == other.idx; }
+		operator bool() { return idx >= 0 && idx < n.nchild(); }
+	};
+	
 	class iterator
 	{
 	private:
@@ -173,11 +195,12 @@ namespace zsr
 		bool isreg() const { return getnode().isreg(); }
 		node::ntype type() const { return getnode().type(); }
 		std::string meta(const std::string &key) const;
-		std::unordered_map<std::string, filecount> children() const;
+		childiter children() const { return childiter(ar, getnode()); }
 		std::string dest() const { return getnode().dest(); }
 		size_t size() const { return getnode().size(); }
 		std::streambuf *open();
 		void close() { getnode().close(); }
+		void reset() { idx = 0; }
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
 		void operator +=(int i) { idx += i; }

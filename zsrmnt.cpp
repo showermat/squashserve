@@ -73,11 +73,13 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	try
 	{
 		std::lock_guard<std::mutex> guard{accesslock};
-		for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
+		//for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
+		for (zsr::childiter children = ar->get(std::string{path}).children(); children; children++)
 		{
+			zsr::iterator child = children.get();
 			dirent dir;
-			strncpy(dir.d_name, child.first.c_str(), 256); // TODO Path name length limit?
-			zsr::node::ntype type = ar->index(child.second).type();
+			strncpy(dir.d_name, child.name().c_str(), 256); // TODO Path name length limit?
+			zsr::node::ntype type = child.type();
 			if (type == zsr::node::ntype::reg) dir.d_type = DT_REG;
 			else if (type == zsr::node::ntype::dir) dir.d_type = DT_DIR;
 			else if (type == zsr::node::ntype::link) dir.d_type = DT_LNK;

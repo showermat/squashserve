@@ -12,7 +12,7 @@ namespace zsr
 	filecount writer::recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout) // TODO Needs a little refactoring
 	{
 		constexpr offset ptrfill{0};
-		std::string fullpath = util::resolve(std::string{getenv("PWD")}, path);
+		std::string fullpath = util::resolve(util::dirname(fullroot_), path); // TODO Inefficient
 		struct stat s;
 		node::ntype type = node::ntype::reg;
 		DIR *dir = nullptr;
@@ -67,7 +67,7 @@ namespace zsr
 			serialize(contout, ptrfill); // Placeholder for length
 			lzma::wrbuf compressor{in};
 			contout << &compressor;
-			if (! contout) throw std::runtime_error{"Bad output stream when writing archive content for file " + path};
+			if (! contout) throw std::runtime_error{"Bad output stream while writing archive content for file " + path};
 			offset len = static_cast<offset>(contout.tellp() - sizepos - sizeof(offset));
 			std::streampos end = contout.tellp();
 			contout.seekp(sizepos);
@@ -170,9 +170,9 @@ namespace zsr
 	{
 		if (linkpol_ == linkpolicy::process)
 		{
-			loga("Finding links");
+			logb("Finding links");
 			links_.search();
-			logb(links_.size() << " links found");
+			loga(links_.size() << " links found");
 		}
 		loga("Writing archive body");
 		contf_ = contname;
@@ -225,6 +225,7 @@ namespace zsr
 		serialize(out, nfile_);
 		out << index.rdbuf();
 		if (userdata_) out << userdata_->rdbuf();
+		if (! out) throw std::runtime_error{"Bad output stream while writing archive output file"};
 		loga("Done writing archive");
 		for (const std::string &file : {headf_, contf_, idxf_}) util::rm(file);
 	}
@@ -316,19 +317,7 @@ namespace zsr
 		return follow().meta_[container_.metaidx(key)];
 	}
 
-	std::unordered_map<std::string, filecount> node::children()
-	{
-		std::unordered_map<std::string, filecount> ret{};
-		diskmap::map<std::string, filecount> cont = childmap();
-		for (filecount i = 0; i < cont.size(); i++)
-		{
-			filecount fileid = cont[i];
-			ret[node{container_, fileid}.name()] = fileid;
-		}
-		return ret;
-	}
-
-	std::unique_ptr<node> node::getchild(const std::string &name)
+	std::unique_ptr<node> node::child(const std::string &name)
 	{
 		std::pair<bool, filecount> childid = childmap().get(name);
 		if (! childid.first) return std::unique_ptr<node>{};
@@ -372,6 +361,18 @@ namespace zsr
 		}
 	}
 
+	std::unordered_map<std::string, filecount> childiter::all()
+	{
+		std::unordered_map<std::string, filecount> ret{};
+		for (filecount i = 0; i < n.nchild(); i++) ret[ar.index(i).name()] = i;
+		return ret;
+	}
+
+	iterator childiter::get()
+	{
+		return iterator{ar, n.childid(idx)};
+	}
+
 	node iterator::getnode() const
 	{
 		if (idx >= ar.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(ar.size()) + ")");
@@ -381,12 +382,6 @@ namespace zsr
 	std::string iterator::meta(const std::string &key) const
 	{
 		return getnode().meta(key);
-	}
-
-	std::unordered_map<std::string, filecount> iterator::children() const
-	{
-		if (! isdir()) throw std::runtime_error{"Can't list contents of non-directory"};
-		return getnode().children();
 	}
 
 	std::streambuf *iterator::open()
@@ -427,7 +422,7 @@ namespace zsr
 				if (n->id() > 0) n = n->parent();
 				continue;
 			}
-			n = n->getchild(item);
+			n = n->child(item);
 			if (! n)
 			{
 				if (except) throw std::runtime_error{"Tried to access nonexistent path " + path};

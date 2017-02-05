@@ -224,5 +224,3 @@ Mirroring a website rarely goes perfectly, so along with Wikidump I've provided 
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.  The original can be obtained from <https://github.com/jquery/jquery>.
 
-  - `resources/icon/loading.gif` is retrieved from <https://commons.wikimedia.org/wiki/File:Ajax-loader.gif> and can be freely reused under the terms of the [WTFPL](http://www.wtfpl.net/).
-

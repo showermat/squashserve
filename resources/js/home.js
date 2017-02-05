@@ -18,7 +18,7 @@ $(document).ready(function() {
 	});
 	$("div.category-container a.category-title").on("click", function() {
 		var anchor = $(this);
-		anchor.find("img.category-loading").show();
+		anchor.find(".category-loading").show();
 		var target = anchor.parent().find("table.volume-list");
 		var url = "/load/";
 		if (anchor.parent().hasClass("loaded")) url = "/unload/";
@@ -27,7 +27,7 @@ $(document).ready(function() {
 			target.html(data);
 			target.parent().toggleClass("loaded unloaded");
 			search_setup();
-			anchor.find("img.category-loading").hide();
+			anchor.find(".category-loading").hide();
 		});
 		return false;
 	});

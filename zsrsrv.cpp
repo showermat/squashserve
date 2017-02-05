@@ -20,9 +20,10 @@
  * ...
  *
  * Frame issues:
- * Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
- * Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
- * Browser doesn't remember your position on the page if you e.g. go back
+ *     Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
+ *     Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
+ *     Browser doesn't remember your position on the page if you e.g. go back
+ * Threadsafe libzsr
  */
 
 class handle_error : public std::runtime_error
