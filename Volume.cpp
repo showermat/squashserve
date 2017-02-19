@@ -117,34 +117,58 @@ void Volwriter::Xapwriter::write(std::ostream &out) try
 catch (Xapian::Error &e) { xapian_rethrow(e); }
 #endif
 
-std::unordered_map<std::string, std::string> Volwriter::gmeta(const std::string &path)
-{
-	std::unordered_map<std::string, std::string> ret{};
-	std::ostringstream infoss{};
-	infoss << std::ifstream{util::pathjoin({path, Volume::metadir, "info.txt"})}.rdbuf();
-	std::string info = infoss.str();
-	for (const std::string &line : util::strsplit(info, '\n'))
-	{
-		if (line.size() == 0 || line[0] == '#') continue;
-		unsigned int splitloc = line.find(":");
-		if (splitloc == line.npos) continue;
-		ret[line.substr(0, splitloc)] = line.substr(splitloc + 1);
-	}
-#ifdef ZSR_USE_XAPIAN
-	if (! ret.count("stem_lang")) ret["stem_lang"] = Xapwriter::getlang(ret);
-#endif
-	return ret;
-}
+std::string Volwriter::lua_preamble{R"!!(
+T_UNK = 0; T_DIR = 1; T_REG = 2; T_LNK = 3
+
+function basename(path)
+	local match = path:match(".*/([^/]*)$")
+	local fname
+	if match then fname = match else fname = path end
+	local match = fname:match("^(.*)%.")
+	local base
+	if match then base = match else base = fname end
+	return base
+end
+
+function extension(path)
+	local match = path:match(".*%.(.-)$")
+	if match then return match else return path end
+end
+
+function is_html(path)
+	return extension(path) == "html" or extension(path) == "htm"
+end
+
+function html_title(path)
+	local f = io.open(path)
+	if not f then return basename(path) else f:close() end
+	for line in io.lines(path) do
+		local match = line:match("<[Tt][Ii][Tt][Ll][Ee]>(.*)</[Tt][Ii][Tt][Ll][Ee]>")
+		if match then return match end
+	end
+	return basename(path)
+end
+)!!"};
+// TODO Add an `iconv` function here that will convert encodings (by calling back to C++).  That way we can deprecate the `encoding` parameter
+
+std::string Volwriter::default_indexer{"function index(path, ftype) if ftype == T_REG and is_html(path) then return html_title(path) else return '' end end"};
 
 std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 {
-	// TODO This doesn't catch redirects or alternate titles.  Is there any way to manage that for Wikipedia, etc.?
-	std::string path = n.path();
-	if (util::mimetype(path) != "text/html") return {""}; // TODO Support other types, such as plain text?
-	std::ostringstream contentss{};
-	contentss << std::ifstream{path}.rdbuf();
-	std::string content = contentss.str();
-	std::string title = htmlutil::title(content, util::basename(path), encoding, process);
+	int ftype = 0;
+	if ((n.stat().st_mode & S_IFMT) == S_IFDIR) ftype = 1;
+	else if ((n.stat().st_mode & S_IFMT) == S_IFREG) ftype = 2;
+	else if((n.stat().st_mode & S_IFMT) == S_IFLNK) ftype = 3;
+	std::string title = info.call<std::string>("index", n.path(), ftype);
+	if (volmeta.count("encoding"))
+	{
+		try { title = util::conv(title, volmeta.at("encoding"), "UTF-8"); }
+		catch (std::runtime_error &e)
+		{
+			std::cout << clrln << "Could not convert title for file " << n.path() << "\n";
+			title = util::basename(n.path());
+		}
+	}
 	searchwriter.add(title, n.id());
 #ifdef ZSR_USE_XAPIAN
 	xap.add(content, title, n.id());
@@ -152,18 +176,21 @@ std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 	return {title};
 }
 
-Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, encoding{}, process{}, volmeta{}
+Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, info{}, volmeta{}
 #ifdef ZSR_USE_XAPIAN
 , xap{}
 #endif
 {
-	volmeta = gmeta(indir);
-	if (volmeta.count("encoding")) encoding = volmeta["encoding"];
-	if (volmeta.count("title_filter")) process = std::regex{volmeta["title_filter"]};
+	info.loadstr(lua_preamble);
+	info.load(util::pathjoin({indir, Volume::metadir, "info.lua"}));
+	if (! info.exists("index")) info.loadstr(default_indexer);
+	lua::iter params = info.table_iter("params");
+	while (params.next()) volmeta.insert(params.get<std::string, std::string>());
 	archwriter.volume_meta(volmeta);
 	std::function<std::vector<std::string>(const zsr::writer::filenode &)> meta_callback = [this](const zsr::writer::filenode &n) { return this->meta(n); };
 	archwriter.node_meta({"title"}, meta_callback);
 #ifdef ZSR_USE_XAPIAN
+	if (! volmeta.count("stem_lang")) volmeta["stem_lang"] = Xapwriter::getlang(volmeta);
 	xap.init(volmeta["stem_lang"]);
 #endif
 }
@@ -203,13 +230,16 @@ void Volume::create(const std::string &srcdir, const std::string &destdir, const
 	if (! util::isdir(util::pathjoin({srcdir, metadir})))
 	{
 		util::mkdir(util::pathjoin({srcdir, metadir}));
-		std::ofstream infofile{util::pathjoin({srcdir, metadir, "info.txt"})};
-		if (! infofile) throw std::runtime_error{"Could not open information file " + util::pathjoin({srcdir, metadir, "info.txt"}) + " for writing"};
+		std::string infofname{util::pathjoin({srcdir, metadir, "info.lua"})};
+		std::ofstream infofile{infofname};
+		if (! infofile) throw std::runtime_error{"Could not open information file " + infofname + " for writing"};
+		infofile << "params = {\n";
 		for (const std::pair<const std::string, std::string> &item : info)
 		{
 			if (! std::regex_match(item.first, validmeta)) throw std::runtime_error{"Metadata name “" + item.first + "” contains invalid characters"};
-			infofile << item.first << ":" << item.second << "\n";
+			infofile << "\t" << item.first << " = \"" << util::gsub(item.second, "\"", "\\\"") << "\",\n";
 		}
+		infofile << "}\n";
 		if (info.count("favicon")) util::cp(info.at("favicon"), util::pathjoin({srcdir, metadir, "favicon.png"}));
 	}
 	std::string outpath = util::pathjoin({destdir, id + ".zsr"});

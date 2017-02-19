@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "util/util.h"
+#include "util/lua.h"
 #include "zsr.h"
 #include "search.h"
 #ifdef ZSR_USE_XAPIAN
@@ -52,13 +53,12 @@ private:
 	const std::string indir;
 	zsr::writer archwriter;
 	rsearch::disktree_writer searchwriter;
-	std::string encoding;
-	std::regex process;
+	lua::exec info;
 	std::unordered_map<std::string, std::string> volmeta;
+	static std::string lua_preamble, default_indexer;
 #ifdef ZSR_USE_XAPIAN
 	Xapwriter xap;
 #endif
-	static std::unordered_map<std::string, std::string> gmeta(const std::string &path);
 	std::vector<std::string> meta(const zsr::writer::filenode &n);
 public:
 	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol);

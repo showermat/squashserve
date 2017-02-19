@@ -56,10 +56,10 @@ namespace zsr
 		serialize(contout, parent);
 		serialize(contout, type);
 		writestring(util::basename(path), contout);
+		const std::vector<std::string> metad = metagen_(filenode(*this, id, path, s));
 		if (type == node::ntype::reg)
 		{
 			offset fullsize = static_cast<offset>(util::fsize(path));
-			const std::vector<std::string> metad = metagen_(filenode(*this, id, path));
 			if (metad.size() != nodemeta_.size()) throw std::runtime_error{"Number of generated metadata does not match number of file metadata keys"};
 			for (const std::string &val : metad) writestring(val, contout);
 			serialize(contout, fullsize);
@@ -123,7 +123,7 @@ namespace zsr
 		linkmgr *caller = (linkmgr *) arg;
 		if ((st->st_mode & S_IFMT) == S_IFLNK)
 		{
-			std::string target = util::linktarget(path);
+			std::string target = util::realpath(util::linktarget(path));
 			if (! util::fexists(target)) return false;
 			if (util::is_under(caller->root_, target)) caller->add(path, target);
 			else return true;

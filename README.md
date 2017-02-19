@@ -38,7 +38,7 @@ Build requirements are as follows:
 
   - The following libraries should be on most systems already: pthread, magic, lzma, iconv
 
-  - The following library might need to be installed: [Mongoose](https://github.com/cesanta/mongoose) (`mongoose` in AUR)
+  - The following libraries might need to be installed: Lua, [Mongoose](https://github.com/cesanta/mongoose) (`mongoose` in AUR)
 
 Building should be as simple as:
 
@@ -137,13 +137,22 @@ For the time being, none of the classes guarantee safety in multi-threading.  Al
 
 To browse an archived site, you need to create a "volume", which is just a ZSR archive of the HTML source tree with some metadata.  To begin with, all links to internal resources must be relative, because HTML pages are passed by the ZSR server to the user's web browser without modification.  There are plenty of tools that will rewrite links for you, so I decided it would be redundant to incorporate rewriting capabilities into this project.  If all internal links in the source tree are sound, they should also work in the final volume.
 
-The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.txt`, which contains metadata about the archive.  These metadata  are in the format `key:value`, where `key` is composed of lower-case letters and `value` is any string that does not contain a newline.  Arbitrary metadata can be specified; ones actually used by ZSR include "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.txt` file with only the line `home:index.html`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
+The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.lua`, a Lua script that generates metadata about the archive.  These metadata are defined in a Lua table called `params`; keys must be strings consisting only of letters and underscores and values must be convertible to strings.  Arbitrary metadata can be specified; ones actually used by ZSR include "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.lua` file with only the line `params = { home = "index.html" }`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
+
+By default, `mkvol` extracts the `<title>` tag from each HTML file and tokenizes it for the search index (described further below).  The creator can override this behavior by providing a function `index(path, ftype)` in `info.lua` that returns a string to tokenize.  `path` is the full path to the file being indexed, and `ftype` is `T_DIR` for directories, `T_REG` for regular files, `T_LNK` for symbolic links, or `T_UNK` for other types.  To aid the writing of this function, the following helpers are provided:
+
+  - `basename(path)`:  Returns the name of the file at `path` without extension.
+  - `extension(path)`:  Returns the extension of the file at `path`.
+  - `is_html(path)`:  Heuristically determines whether the file is an HTML file by extansion.
+  - `html_title(path)`:  Extracts the contents of the `<title>` tag of an HTML file.
+
+This functionality will become more flexible and complete in future versions.
+
+If the `encoding` key is present in the `params` table in `info.lua`, it will be interpreted as the encoding of the HTML pages in the source tree.  This is used to convert page titles to UTF-8 for search indexing, as other encodings are not supported internally.  If no `encoding` key is present, `mkvol` will assume UTF-8; any file that cannot be interpreted will be indexed by the name of the HTML file instead, and a warning will be printed.
 
 Once the `_meta` directory has been filled with the appropriate material, the creation of a volume archive can be automated by running the `mkvol` binary:
 
     $ mkvol /data/wikipedia /data/volumes/wikipedia.zsr
-
-`mkvol` will make use of two special metadata values, if they are present.  Because it extracts the titles from HTML pages to create the search index, it needs to know the encoding of the HTML files.  The `encoding` datum in `info.txt` can be used to set this encoding.  If it is not present, `mkvol` will assume UTF-8; any file that cannot be converted will be indexed by the name of the HTML file instead.  The `title_filter` metadatum allows the user to specify a regular expression to use to process the title before indexing.  The contents of the first regex group will be used as the title.  For example, supplying the title filter `^(.*) - Wikipedia` will cause the page titled `Douglas Adams - Wikipedia` to be indexed as just `Douglas Adams`.
 
 
 ## Web Server and FUSE Mounter

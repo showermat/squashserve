@@ -19,15 +19,11 @@ import concurrent.futures;
 import queue;
 
 # TODO
-# IMPORTANT: vet namespaces and allow some to be included per site: (appendix, wikisaurus, wiktionary, category) in Wiktionary, possibly (category) in Wikipedia?
+# Vet namespaces and allow some to be included per site: (appendix, wikisaurus, wiktionary, category) in Wiktionary, possibly (category) in Wikipedia?
 # Don't download redirects to pages that we're not downloading, like links to pages in namespaces
-# Links to anchors in other pages are based on section name, whereas the anchors themselves are randomized names -- so the link doesn't work
 # Links in footnotes to where they were cited are broken
-# Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions
-# Table of contents only if there's more than one section (or more than two?)
-# Multi-level bulleted lists have the same left margin at all levels
-# Remove gratuitous metadata from HTML to decrease output size
-# 
+# Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions (adds an extra GET and requires moving images; probably no faster)
+#
 # Problem pages:
 # Interpleader: bulleted lists in infobox at right
 
@@ -45,7 +41,7 @@ imgdir = "img";
 oldimgdir = "img_old";
 htmldir = "wiki";
 metadir = "_meta";
-infoname = "info.txt";
+infoname = "info.lua";
 faviconname = "favicon.png";
 cssname = "wikistyle.css";
 logfname = os.path.join(rootdir, "dump.log");
@@ -77,13 +73,15 @@ def outline(html): # FIXME In the current state, this does not preserve HTML sub
 
 def addtoc(html):
 	if not html.h2: return;
+	contents = outline(html);
+	if len(contents) <= 1: return;
 	toc = html.new_tag("div", id="toc");
 	toc["class"] = "plainlist";
 	toctitle = html.new_tag("h2")
 	toctitle.string = "Contents";
 	toc.append(toctitle);
 	toclist = html.new_tag("ul");
-	for h2 in outline(html):
+	for h2 in contents:
 		a = html.new_tag("a", href = "#" + h2[0]);
 		a.string = h2[1];
 		li = html.new_tag("li");
@@ -100,6 +98,24 @@ def addtoc(html):
 		toclist.append(li);
 	toc.append(toclist);
 	html.h2.insert_before(toc);
+
+def resolve_styles(html):
+	styles = {};
+	for tag in html.find_all(True):
+		if "style" not in tag.attrs: continue;
+		stmtlist = [ stmt.strip() for stmt in tag["style"].split(";") if len(stmt.strip()) > 0 ];
+		if len(stmtlist) <= 1: continue;
+		styledef = ";".join(sorted(stmtlist));
+		if styledef not in styles: styles[styledef] = "mwis%s" % (len(styles));
+		if "class" in tag.attrs: tag["class"].append(styles[styledef]);
+		else: tag["class"] = styles[styledef];
+		del tag["style"];
+	css = "";
+	for (style, cls) in styles.items():
+		css += ".%s { %s; } " % (cls, style);
+	styleblock = html.new_tag("style");
+	styleblock.string = css;
+	html.head.append(styleblock);
 
 def writeout(title, content):
 	if not content: return;
@@ -148,6 +164,13 @@ def writeout(title, content):
 		out.write(reply.content);
 		out.close();
 		img["src"] = os.path.join("..", imgdir, fname);
+
+	for tag in html.find_all(True):
+		for attr in ["srcset", "data-mw", "about"]:
+			if attr in tag.attrs: del tag[attr];
+	for comment in html.find_all(string = lambda text: isinstance(text, bs4.Comment)):
+		comment.extract();
+	#resolve_styles(html); # Too much effort for negligible space savings
 
 	out = open(os.path.join(rootdir, htmldir, friendlyname(title)), "w");
 	out.write(str(html));
@@ -256,8 +279,8 @@ if os.path.isfile(resfpath):
 	start = resf.read();
 	resf.close();
 logfile = open(logfname, "a");
-# for page in ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes"]: getpage(page);
-# for page in ["Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)"]: getpage(page);
+# for page in ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal"]: getpage(page);
+# for page in ["Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China"]: getpage(page);
 # print();
 # exit(0);
 
@@ -272,14 +295,22 @@ logfile.close();
 if os.path.isfile(resfpath) and not interrupt: os.unlink(resfpath);
 if interrupt: exit(0);
 
-info = """
-title:%s
-description:%s
-language:eng
-created:%s
-refer:%s
-origin:%s;^/(.*).html$;\$1
-home:%s/Main_Page.html
+info = """params = {
+	title = "%s",
+	description = "%s",
+	language = "eng",
+	created = "%s",
+	refer = "%s",
+	origin = "%s;^(.*).html$;$1",
+	home = "%s/Main_Page.html",
+}
+
+function index(path, ftype)
+	if not is_html(path) then return "" end
+	if ftype == T_REG then return html_title(path) end
+	if ftype == T_LNK then return basename(path):gsub("_", " ") end
+	return ""
+end
 """ % (site_name, site_description, datetime.date.today().strftime("%Y-%m-%d"), origin_root, origin_root, htmldir);
 infofile = open(os.path.join(rootdir, metadir, infoname), "w");
 infofile.write(info);

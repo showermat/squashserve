@@ -64,10 +64,12 @@ namespace zsr
 			writer &owner_;
 			const filecount id_;
 			const std::string path_;
+			const struct stat &stat_;
 		public:
-			filenode(writer &owner, const filecount id, const std::string &path) : owner_{owner}, id_{id}, path_{path} { }
+			filenode(writer &owner, const filecount id, const std::string &path, const struct stat &s) : owner_{owner}, id_{id}, path_{path}, stat_{s} { }
 			filecount id() const { return id_; }
-			std::string path() const { return path_; }
+			const std::string &path() const { return path_; }
+			const struct stat &stat() const { return stat_; }
 		};
 		enum class linkpolicy { process, follow, skip };
 	private:
