@@ -2,6 +2,10 @@
 
 namespace lzma
 {
+	const int chunksize = 32 * 1024;
+	static lzma_options_lzma options{LZMA_DICT_SIZE_DEFAULT, nullptr, 0, LZMA_LC_DEFAULT, LZMA_LP_DEFAULT, LZMA_PB_DEFAULT, LZMA_MODE_NORMAL, 128, LZMA_MF_HC4, 0};
+	static lzma_filter default_filters[2] = {{LZMA_FILTER_LZMA2, &options}, {LZMA_VLI_UNKNOWN}};
+
 	void code(lzma_stream &stream, std::istream &in, std::ostream &out)
 	{
 		std::vector<char> inbuf(chunksize, 0), outbuf(chunksize, 0);
@@ -25,7 +29,7 @@ namespace lzma
 					lzma_end(&stream);
 					return;
 				}
-				if (retval != LZMA_OK) throw compress_error{"(De)compression failed"};
+				if (retval != LZMA_OK) throw compress_error{"Stream encoding failed"};
 				//std::cout << "Retrieved " << stream.total_in << " bytes and output " << stream.total_out << " bytes\n";
 				out.write(&outbuf[0], stream.total_out);
 			}
@@ -36,14 +40,14 @@ namespace lzma
 	void compress(std::istream &in, std::ostream &out)
 	{
 		lzma_stream stream = LZMA_STREAM_INIT;
-		if (lzma_easy_encoder(&stream, compression, LZMA_CHECK_CRC64) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
+		if (lzma_raw_encoder(&stream, default_filters) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
 		code(stream, in, out);
 	}
 
 	void decompress(std::istream &in, std::ostream &out)
 	{
 		lzma_stream stream = LZMA_STREAM_INIT;
-		if (lzma_stream_decoder(&stream, memlimit, LZMA_CONCATENATED) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
+		if (lzma_raw_decoder(&stream, default_filters) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
 		code(stream, in, out);
 	}
 
@@ -109,7 +113,7 @@ namespace lzma
 	void wrbuf::init(std::istream &file)
 	{
 		buf_base::init(file);
-		if (lzma_easy_encoder(&lzma_, compression, LZMA_CHECK_CRC64) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
+		if (lzma_raw_encoder(&lzma_, default_filters) != LZMA_OK) throw compress_error{"Stream encoder setup failed"};
 	}
 
 	std::streamsize wrbuf::fill()
@@ -147,7 +151,7 @@ namespace lzma
 		start_ = start;
 		size_ = size;
 		decomp_ = decomp;
-		if (lzma_stream_decoder(&lzma_, memlimit, LZMA_CONCATENATED) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
+		if (lzma_raw_decoder(&lzma_, default_filters) != LZMA_OK) throw compress_error{"Stream decoder setup failed"};
 	}
 
 	std::streamsize rdbuf::fill()

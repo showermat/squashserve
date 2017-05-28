@@ -370,7 +370,7 @@ int main(int argc, char **argv)
 	if (! rsrcfile) throw std::runtime_error{"Couldn't open resource archive at " + rsrcpath + "\n"};
 	resources.reset(new zsr::archive{std::move(rsrcfile)});
 	volumes.init(prefs::get("basedir"));
-	http::server{static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
+	http::server{prefs::get("localonly") ? "127.0.0.1" : "0.0.0.0", static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
 	return 0;
 }
 

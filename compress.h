@@ -10,10 +10,6 @@
 
 namespace lzma
 {
-	const int compression = 6;
-	const int memlimit = 1 * 1024 * 1024 * 1024;
-	const int chunksize = 32 * 1024;
-
 	void compress(std::istream &in, std::ostream &out);
 
 	void decompress(std::istream &in, std::ostream &out);

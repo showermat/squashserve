@@ -96,10 +96,10 @@ namespace http
 	catch (error &e) { e.send(conn); }
 	catch (std::exception &e) { error{500}.send(conn); }
 
-	server::server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
+	server::server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
 	{
 		mg_mgr_init(&mgr, this);
-		mg_connection *conn = mg_bind(&mgr, util::t2s(port).c_str(), handle);
+		mg_connection *conn = mg_bind(&mgr, (addr + ":" + util::t2s(port)).c_str(), handle);
 		if (! conn) throw std::runtime_error{"Unable to create socket connection"};
 		mg_set_protocol_http_websocket(conn);
 	}

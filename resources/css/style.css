@@ -8,13 +8,13 @@ body
 main.normal
 {
 	width: 800px;
-	margin: 0 auto;
+	margin: 20px auto;
 }
 
 main.narrow
 {
 	width: 400px;
-	margin: 0 auto;
+	margin: 20px auto;
 }
 
 span.code
@@ -251,39 +251,58 @@ div#topbar
 	position: absolute;
 	top: 0;
 	left: 0;
+	right: 0;
+	margin: auto;
 	width: 100%;
-	height: 16px;
-	padding: 8px 0;
-	background: rgba(192, 192, 192, 0.6);
+	max-width: 800px;
 }
 
 div#toolbar
 {
-	max-width: 800px;
-	height: 100%;
-	margin: 0 auto;
+	width: 100%;
+	height: 32px;
+	margin-top: -28px;
+	background: rgba(192, 192, 192, 0.6);
+	display: flex;
+	flex-flow: row nowrap;
+	justify-content: space-between;
+	align-items: center;
 }
 
-div#toolbar-inner
+div#toolbar:hover
+{
+	margin-top: 0px;
+}
+
+div.toolbar-expand
+{
+	flex: 1 1 auto;
+}
+
+div.toolbar-spacer
+{
+	width: 8px;
+}
+
+a.toolbar-button
+{
+	display: block;
+	height: 16px;
+	margin: 0px 12px;
+}
+
+a.close-button
+{
+	display: block;
+	width: 12px;
+	height: 12px;
+	padding: 0px 16px;
+}
+
+a.close-button img
 {
 	width: 100%;
 	height: 100%;
-}
-
-div#toolbar-left
-{
-	float: left;
-}
-
-div#toolbar-right
-{
-	float: right;
-}
-
-a.toolbar-button i
-{
-	height: 16px;
-	margin: 0px 8px;
 }
 
 iframe#page

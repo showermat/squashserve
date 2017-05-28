@@ -59,7 +59,7 @@ namespace http
 		ipfilter filter;
 		static void handle(struct mg_connection *conn, int ev, void *data);
 	public:
-		server(uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept = "");
+		server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};

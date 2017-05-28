@@ -22,6 +22,10 @@ namespace prefs
 			"desc": "ZSR archive of server resources, or “resources.zsr” in the executable directory if empty",
 			"default": ""
 		}, {
+			"name": "localonly",
+			"desc": "Listen only to requests coming from localhost",
+			"default": true
+		}, {
 			"name": "accept",
 			"desc": "Comma-delimited list of CIDR blocks and IP addresses to accept, or all if empty",
 			"default": "127.0.0.1"
@@ -35,6 +39,7 @@ namespace prefs
 			"default": 400
 		}
 	])"); // TODO Maybe generate this in C++?
+	// TODO Specialize the template line in prefs.html so that bool params like localonly get a checkbox rather than needing "true" typed in
 
 	const std::string preffname = "zsrsrv.conf";
 	std::vector<std::string> preflocs;

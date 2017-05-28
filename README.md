@@ -77,7 +77,7 @@ The ZSR format is fairly simple.  It consists of:
               - The two-byte length of the value and the value itself
           - The eight-byte size of the file when decompressed
           - The length of the file's compressed data
-          - The file's data, compressed in XZ format
+          - The file's data, as a raw XZ stream
       - If the entry is a *link*:
           - The eight-byte ID of the entry to which this link points
       - If the entry is a *directory*:

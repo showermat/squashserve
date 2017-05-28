@@ -9,7 +9,7 @@ $(document).ready(function() {
 	}
 	$("#page").on('load', function() {
 		var page = $("#page").contents();
-		page.find("head").append('<style>body { position: relative; top: 32px; }</style>'); //('<link rel="stylesheet" href="/rsrc/client.css">');
+		//page.find("head").append('<style>body { position: relative; top: 32px; }</style>'); //('<link rel="stylesheet" href="/rsrc/client.css">');
 		document.title = page.find("title").text();
 		$(window).trigger('hashchange');
 		$("#page")[0].contentWindow.focus();

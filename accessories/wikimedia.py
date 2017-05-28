@@ -23,15 +23,23 @@ import queue;
 # Don't download redirects to pages that we're not downloading, like links to pages in namespaces
 # Links in footnotes to where they were cited are broken
 # Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions (adds an extra GET and requires moving images; probably no faster)
+# Eventually: postprocessing for redlinks?
 #
 # Problem pages:
-# Interpleader: bulleted lists in infobox at right
+# ...
+
+debug = True;
+debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
+	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China"];
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg"),
 	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/0/06/Wiktionary-logo-v2.svg"),
-}
+};
 rootdir = sys.argv[1];
+if rootdir == "debug":
+	debug = True;
+	rootdir = "wikipedia";
 (site_name, site_description, origin_root, faviconsrc) = sites[rootdir];
 
 concurrency = 32;
@@ -46,6 +54,7 @@ faviconname = "favicon.png";
 cssname = "wikistyle.css";
 logfname = os.path.join(rootdir, "dump.log");
 resfpath = os.path.join(rootdir, "resume.txt");
+today = datetime.date.today().strftime("%Y-%m-%d");
 useragent = "wikidump/0.3 contact:matthew.schauer.x@gmail.com (Please block temporarily and send email if bandwidth limit exceeded)"
 
 def friendlyname(fname):
@@ -211,7 +220,7 @@ def getpage(title):
 				time.sleep(4);
 				continue;
 			print("\r\033[2K%d %s: %s" % (cnt, title, str(e)));
-			logfile.write(title + ": " + str(e) + "\n");
+			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ": " + str(e) + "\n");
 			logfile.flush();
 			break;
 
@@ -279,17 +288,16 @@ if os.path.isfile(resfpath):
 	start = resf.read();
 	resf.close();
 logfile = open(logfname, "a");
-# for page in ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal"]: getpage(page);
-# for page in ["Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China"]: getpage(page);
-# print();
-# exit(0);
-
-artq = queue.Queue(2048);
-signal.signal(signal.SIGINT, sigint);
-pool = concurrent.futures.ThreadPoolExecutor(concurrency + 1);
-pool.submit(articles, artq, start);
-for i in range(concurrency): pool.submit(process, artq);
-pool.shutdown();
+logfile.write("\n== %s %s ==\n" % (site_name, today));
+if debug:
+	for page in debug_pages: getpage(page);
+else:
+	artq = queue.Queue(2048);
+	signal.signal(signal.SIGINT, sigint);
+	pool = concurrent.futures.ThreadPoolExecutor(concurrency + 1);
+	pool.submit(articles, artq, start);
+	for i in range(concurrency): pool.submit(process, artq);
+	pool.shutdown();
 print();
 logfile.close();
 if os.path.isfile(resfpath) and not interrupt: os.unlink(resfpath);
@@ -311,7 +319,7 @@ function index(path, ftype)
 	if ftype == T_LNK then return basename(path):gsub("_", " ") end
 	return ""
 end
-""" % (site_name, site_description, datetime.date.today().strftime("%Y-%m-%d"), origin_root, origin_root, htmldir);
+""" % (site_name, site_description, today, origin_root, origin_root, htmldir);
 infofile = open(os.path.join(rootdir, metadir, infoname), "w");
 infofile.write(info);
 infofile.close();

@@ -15,18 +15,20 @@ html { height: 100%; }
 <script src="/rsrc/js/view.js"></script>
 </head>
 <body data-volid="%ID" style="margin: 0px;">
-<div id="topbar"><div id="toolbar"><div id="toolbar-inner"><div id="toolbar-left">
+<div id="topbar"><div id="toolbar">
+	<div class="toolbar-spacer"></div>
 	<a href="/" class="toolbar-button" target="_top"><i class="fa fa-lg fa-th-list" title="Library"></i></a>
 	<a href="/view/%ID/%HOME" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
-	<a href="/content/%ID/%MEMBER" class="toolbar-button" target="_top"><i class="fa fa-lg fa-toggle-up" title="Remove toolbar"></i></a>
 	<a href="%LIVE" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
 	<a href="/shuffle/%ID" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
-</div><div id="toolbar-right">
+	<div class="toolbar-expand"></div>
 	<form id="search">
 	<input id="search-input" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
 	<button type="submit">Go</button>
 	</form>
-</div></div></div></div>
+	<div class="toolbar-spacer"></div>
+	<a href="/content/%ID/%MEMBER" class="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
+</div></div>
 <iframe id="page" name="page" src="/content/%ID/%MEMBER"></iframe>
 </body>
 </html>

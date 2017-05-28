@@ -516,7 +516,7 @@ div.plainlinks {
 	width: 228px;
 }
 
-div.plainlist ul {
+.plainlist ul {
 	line-height: inherit;
 	list-style-image: none;
 	list-style-type: none;
@@ -662,13 +662,13 @@ table.navbox .navbox-title {
 	padding-top: 0.25em;
 }
 
-td.plainlist li {
+.plainlist li {
 	-webkit-column-break-inside: avoid;
 	margin-bottom: 0px;
 	page-break-inside: avoid;
 }
 
-td.plainlist ul {
+.plainlist ul {
 	line-height: inherit;
 	list-style-image: none;
 	list-style-type: none;
