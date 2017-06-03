@@ -41,26 +41,6 @@ namespace htmlutil
 		for (const std::string &word : words) ret << word << " ";
 		return ret.str();
 	}
-
-	std::string title(const std::string &content, const std::string &def, const std::string &encoding, const std::regex &process)
-	{
-		std::regex titlere{"<title>(.*?)</title>", std::regex_constants::ECMAScript | std::regex_constants::icase};
-		std::smatch match{};
-		if (! std::regex_search(content, match, titlere)) return def;
-		std::string title = match[1];
-		if (encoding.size())
-		{
-			try { title = util::conv(title, encoding, "UTF-8"); }
-			catch (std::runtime_error &e)
-			{
-				std::cout << clrln << "Could not convert title for file " << def << "\n";
-				return def;
-			}
-		}
-		std::string ret = util::from_htmlent(title);
-		if (! std::regex_search(ret, match, process)) return ret;
-		return match[1];
-	}
 }
 
 #ifdef ZSR_USE_XAPIAN
@@ -117,41 +97,9 @@ void Volwriter::Xapwriter::write(std::ostream &out) try
 catch (Xapian::Error &e) { xapian_rethrow(e); }
 #endif
 
-std::string Volwriter::lua_preamble{R"!!(
-T_UNK = 0; T_DIR = 1; T_REG = 2; T_LNK = 3
+const std::string &Volwriter::lua_preamble{fileinclude::loaded_file("vollib.lua")};
 
-function basename(path)
-	local match = path:match(".*/([^/]*)$")
-	local fname
-	if match then fname = match else fname = path end
-	local match = fname:match("^(.*)%.")
-	local base
-	if match then base = match else base = fname end
-	return base
-end
-
-function extension(path)
-	local match = path:match(".*%.(.-)$")
-	if match then return match else return path end
-end
-
-function is_html(path)
-	return extension(path) == "html" or extension(path) == "htm"
-end
-
-function html_title(path)
-	local f = io.open(path)
-	if not f then return basename(path) else f:close() end
-	for line in io.lines(path) do
-		local match = line:match("<[Tt][Ii][Tt][Ll][Ee]>(.*)</[Tt][Ii][Tt][Ll][Ee]>")
-		if match then return match end
-	end
-	return basename(path)
-end
-)!!"};
-// TODO Add an `iconv` function here that will convert encodings (by calling back to C++).  That way we can deprecate the `encoding` parameter
-
-std::string Volwriter::default_indexer{"function index(path, ftype) if ftype == T_REG and is_html(path) then return html_title(path) else return '' end end"};
+const std::string Volwriter::default_indexer{"function index(path, ftype) if ftype == T_REG and is_html(path) then return html_title(path) else return '' end end"};
 
 std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 {

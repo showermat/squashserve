@@ -14,29 +14,28 @@
 <body>
 <main class="normal">
 <div id="utils">
-%?PRIV 	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
-%?PRIV 	<a href="/add"><i class="fa fa-2x fa-plus"></i></a>
-%?PRIV 	<a href="/pref"><i class="fa fa-2x fa-gear"></i></a>
-%?PRIV 	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
+	 {{#priv?}}
+ 	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
+ 	<a href="/add"><i class="fa fa-2x fa-plus"></i></a>
+ 	<a href="/pref"><i class="fa fa-2x fa-gear"></i></a>
+ 	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
+	 {{/}}
 </div>
 <h1>Library</h1>
 %
-<div class="category-container unloaded">
-<a href="/load/%ID" class="category-title" data-catname="%ID">%NAME <i class="category-loading fa fa-pulse fa-spinner"></i></a>
-%
-<div class="category-container loaded">
-<a href="/unload/%ID" class="category-title" data-catname="%ID">%NAME<i class="category-loading fa fa-pulse fa-spinner"></i></a>
+<div class="category-container {{loaded?loaded:unloaded}}">
+<a href="/{{loaded?unload:load}}/{{id}}" class="category-title" data-catname="{{id}}">{{name}} <i class="category-loading fa fa-pulse fa-spinner"></i></a>
 %
 <table class="volume-list">
 %
 <tr>
-<td class="volume-icon"><img class="favicon" src="%ICON"></td>
+<td class="volume-icon"><img class="favicon" src="{{icon}}"></td>
 <td class="volume-info">
-	<a href="/view/%ID/%HOME" class="item-title" target="_blank">%TITLE</a>
-	<span class="volume-desc">%DESCRIPTION</span>
+	<a href="/view/{{id}}/{{home}}" class="item-title" target="_blank">{{title}}</a>
+	<span class="volume-desc">{{description}}</span>
 </td>
 <td class="volume-search vcenter">
-	<form class="search" data-volid="%ID">
+	<form class="search" data-volid="{{id}}">
 	<input class="search-input typeahead" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
 	<button type="submit" >Go</button>
 	</form>

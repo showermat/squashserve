@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include "lib/json/json.hpp" // Thanks to github/nlohmann
 #include "util/util.h"
+#include "util/template.h"
 #include "zsr.h"
 #include "Volume.h"
 #include "http.h"
@@ -43,64 +44,22 @@ http::doc resource(const std::string &path, const std::unordered_map<std::string
 	return http::doc(util::mimetype(path, ret.str()), ret.str(), headers);
 }
 
-std::vector<std::string> docsplit(const std::string &doc, const std::unordered_map<std::string, std::string> &vars = {}, const std::string &delim = "%")
-{
-	std::vector<std::string> ret{};
-	std::vector<std::string> lines = util::strsplit(doc, '\n');
-	std::stringstream buf{};
-	const std::regex varname{"^%\\?([A-Z]+)\\s(.*)$"};
-	std::smatch match{};
-	for (const std::string &line : lines)
-	{
-		if (line == delim)
-		{
-			ret.push_back(buf.str());
-			buf.str(std::string{});
-		}
-		else if (std::regex_match(line, match, varname))
-		{
-			if (vars.count(util::utf8lower(match[1]))) buf << match[2] << "\n";
-		}
-		else buf << line << "\n";
-	}
-	ret.push_back(buf.str());
-	return ret;
-}
-
-std::string token_replace(const std::string &in, const std::unordered_map<std::string, std::string> &tokens)
-{
-	const std::string percent_token{"#__TOKEN_PERCENT#"};
-	std::stringstream ret{};
-	std::string str = std::regex_replace(in, std::regex{"%%"}, percent_token); // Hacky!
-	std::regex tokenre{"%[A-Z]+"};
-	std::string::size_type lastend = 0;
-	for (std::sregex_iterator iter{str.begin(), str.end(), tokenre}; iter != std::sregex_iterator{}; iter++)
-	{
-		std::string tok = util::utf8lower(iter->str().substr(1));
-		ret << str.substr(lastend, iter->position() - lastend);
-		if (tokens.count(tok)) ret << tokens.at(tok);
-		lastend = iter->position() + iter->length();
-	}
-	ret << str.substr(lastend);
-	return std::regex_replace(ret.str(), std::regex{percent_token}, "%"); // Doesn't need to use regex (here or above)
-}
-
 http::doc error(const std::string &header, const std::string &body)
 {
 	http::doc ret = resource("html/error.html");
-	ret.content(token_replace(ret.content(), {{"header", header}, {"message", body}}));
+	ret.content(templ::render(ret.content(), {{"header", header}, {"message", body}}));
 	return ret;
 }
 
 http::doc loadcat(const std::string &name)
 {
 	http::doc ret = resource("html/home.html");
-	std::vector<std::string> sects = docsplit(ret.content());
+	std::vector<std::string> sects = templ::split(ret.content());
 	std::stringstream buf{};
 	std::unordered_set<std::string> volnames = volumes.load(name);
 	std::set<std::string> volsort{volnames.begin(), volnames.end()};
 	for (const std::string &vol : volsort)
-		buf << token_replace(sects[4], volumes.get(vol).tokens());
+		buf << templ::render(sects[3], volumes.get(vol).tokens());
 	ret.content(buf.str());
 	return ret;
 }
@@ -115,23 +74,20 @@ http::doc home(bool privileged)
 {
 	http::doc ret = resource("html/home.html");
 	std::stringstream buf{};
-	std::unordered_map<std::string, std::string> docvars{};
-	if (privileged) docvars["priv"] = "";
-	std::vector<std::string> sects = docsplit(ret.content(), docvars);
-	if (sects.size() < 8) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
-	buf << sects[0] << sects[3] << loadcat("").content() << sects[5];
+	std::vector<std::string> sects = templ::split(ret.content());
+	if (sects.size() < 7) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
+	std::unordered_map<std::string, std::string> doctokens{};
+	if (privileged) doctokens["priv"] = "";
+	buf << templ::render(sects[0], doctokens) << sects[2] << loadcat("").content() << sects[4];
 	for (const std::string &cat : volumes.categories())
 	{
-		if (volumes.loaded(cat))
-		{
-			buf << token_replace(sects[2], volumes.tokens(cat));
-			buf << sects[3];
-			buf << loadcat(cat).content();
-		}
-		else buf << token_replace(sects[1], volumes.tokens(cat)) << sects[3];
-		buf << sects[5] << token_replace(sects[6], volumes.tokens(cat));
+		std::unordered_map<std::string, std::string> curtokens = volumes.tokens(cat);
+		if (volumes.loaded(cat)) curtokens["loaded"] = "";
+ 		buf << templ::render(sects[1], curtokens) << sects[2];
+		if (volumes.loaded(cat)) buf << loadcat(cat).content();
+		buf << sects[4] << templ::render(sects[5], curtokens);
 	}
-	buf << sects[7];
+	buf << sects[6];
 	ret.content(buf.str());
 	return ret;
 }
@@ -146,10 +102,10 @@ http::doc search(Volume &vol, const std::string &query)
 	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret = resource("html/search.html");
-	std::vector<std::string> sects = docsplit(ret.content());
+	std::vector<std::string> sects = templ::split(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/search.html");
 	std::stringstream buf{};
-	buf << token_replace(sects[0], tokens);
+	buf << templ::render(sects[0], tokens);
 	try
 	{
 		for (const Result &res : vol.search(query, prefs::get("results"), prefs::get("preview")))
@@ -159,11 +115,11 @@ http::doc search(Volume &vol, const std::string &query)
 			qtoks["match"] = util::t2s(res.relevance);
 			qtoks["title"] = res.title;
 			qtoks["preview"] = res.preview;
-			buf << token_replace(sects[1], qtoks);
+			buf << templ::render(sects[1], qtoks);
 		}
 	}
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
-	buf << token_replace(sects[2], tokens);
+	buf << templ::render(sects[2], tokens);
 	ret.content(buf.str());
 	return ret;
 }
@@ -192,13 +148,13 @@ http::doc titles(Volume &vol, const std::string &query)
 {
 	http::doc ret = resource("html/titles.html");
 	std::stringstream buf{};
-	std::vector<std::string> sects = docsplit(ret.content());
+	std::vector<std::string> sects = templ::split(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
 	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
-	buf << token_replace(sects[0], titletokens);
-	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << token_replace(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // Is sorting worth the time consumption?
-	buf << token_replace(sects[2], titletokens);
+	buf << templ::render(sects[0], titletokens);
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << templ::render(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // Is sorting worth the time consumption?
+	buf << templ::render(sects[2], titletokens);
 	ret.content(buf.str());
 	return ret;
 }
@@ -212,7 +168,7 @@ http::doc view(Volume &vol, const std::string &path)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
 	http::doc ret = resource("html/view.html");
-	ret.content(token_replace(ret.content(), vol.tokens(path)));
+	ret.content(templ::render(ret.content(), vol.tokens(path)));
 	return ret;
 }
 
@@ -230,13 +186,13 @@ http::doc content(Volume &vol, const std::string &path)
 http::doc pref()
 {
 	http::doc ret = resource("html/pref.html");
-	std::vector<std::string> sects = docsplit(ret.content());
+	std::vector<std::string> sects = templ::split(ret.content());
 	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/pref.html");
 	std::stringstream buf{};
 	buf << sects[0];
 	for (const std::string &prefname : prefs::list())
 	{
-		buf << token_replace(sects[1], {{"name", prefs::desc(prefname)}, {"key", prefname}, {"value", prefs::getstr(prefname)}});
+		buf << templ::render(sects[1], {{"name", prefs::desc(prefname)}, {"key", prefname}, {"value", prefs::getstr(prefname)}, {"type", prefs::type(prefname)}});
 	}
 	buf << sects[2];
 	ret.content(buf.str());
@@ -315,7 +271,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 	}
 	try
 	{
-		if (path.size() == 0) return home(remoteip == localip);
+		if (path.size() == 0 || path[0] == "") return home(remoteip == localip);
 		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles" || path[0] == "shuffle")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");

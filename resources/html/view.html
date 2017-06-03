@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>%TITLE</title>
+<title>{{title}}</title>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
-<link rel="icon" href="%ICON">
+<link rel="icon" href="{{icon}}">
 <style>
 html { height: 100%; }
 </style>
@@ -14,21 +14,22 @@ html { height: 100%; }
 <script src="/rsrc/js/complete.js"></script>
 <script src="/rsrc/js/view.js"></script>
 </head>
-<body data-volid="%ID" style="margin: 0px;">
+<body data-volid="{{id}}" style="margin: 0px;">
 <div id="topbar"><div id="toolbar">
 	<div class="toolbar-spacer"></div>
 	<a href="/" class="toolbar-button" target="_top"><i class="fa fa-lg fa-th-list" title="Library"></i></a>
-	<a href="/view/%ID/%HOME" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
-	<a href="%LIVE" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
-	<a href="/shuffle/%ID" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
+	<a href="/view/{{id}}/{{home}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
+	<a href="{{live}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
+	<a href="/shuffle/{{id}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
 	<div class="toolbar-expand"></div>
 	<form id="search">
 	<input id="search-input" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
 	<button type="submit">Go</button>
 	</form>
 	<div class="toolbar-spacer"></div>
-	<a href="/content/%ID/%MEMBER" class="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
+	<a href="/content/{{id}}/{{member}}" class="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
 </div></div>
-<iframe id="page" name="page" src="/content/%ID/%MEMBER"></iframe>
+<iframe id="page" name="page" src="/content/{{id}}/{{member}}"></iframe>
 </body>
 </html>
+

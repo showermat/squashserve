@@ -17,6 +17,7 @@
 #include "util/lua.h"
 #include "zsr.h"
 #include "search.h"
+#include "build/fileinclude.h"
 #ifdef ZSR_USE_XAPIAN
 #include <xapian.h>
 #endif
@@ -55,7 +56,7 @@ private:
 	rsearch::disktree_writer searchwriter;
 	lua::exec info;
 	std::unordered_map<std::string, std::string> volmeta;
-	static std::string lua_preamble, default_indexer;
+	static const std::string &lua_preamble, default_indexer;
 #ifdef ZSR_USE_XAPIAN
 	Xapwriter xap;
 #endif

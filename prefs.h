@@ -4,42 +4,12 @@
 #include <map>
 #include <fstream>
 #include "util/util.h"
+#include "build/fileinclude.h"
 #include "lib/json/json.hpp" // Thanks to github/nlohmann
 
 namespace prefs
 {
-	const nlohmann::json schema = nlohmann::json::parse(R"([
-		{
-			"name": "basedir",
-			"desc": "Directory for ZSR files",
-			"default": "."
-		}, {
-			"name": "port",
-			"desc": "Server port",
-			"default": 2234
-		}, {
-			"name": "resources",
-			"desc": "ZSR archive of server resources, or “resources.zsr” in the executable directory if empty",
-			"default": ""
-		}, {
-			"name": "localonly",
-			"desc": "Listen only to requests coming from localhost",
-			"default": true
-		}, {
-			"name": "accept",
-			"desc": "Comma-delimited list of CIDR blocks and IP addresses to accept, or all if empty",
-			"default": "127.0.0.1"
-		}, {
-			"name": "results",
-			"desc": "Number of search results to display",
-			"default": 20
-		}, {
-			"name": "preview",
-			"desc": "Search result preview length",
-			"default": 400
-		}
-	])"); // TODO Maybe generate this in C++?
-	// TODO Specialize the template line in prefs.html so that bool params like localonly get a checkbox rather than needing "true" typed in
+	const nlohmann::json schema = nlohmann::json::parse(fileinclude::loaded_file("prefs.json"));
 
 	const std::string preffname = "zsrsrv.conf";
 	std::vector<std::string> preflocs;
@@ -102,6 +72,17 @@ namespace prefs
 		if (def.is_boolean()) userp[pref] = util::s2t<bool>(val);
 		else if (def.is_number()) userp[pref] = util::s2t<int>(val); // FIXME No float support
 		else userp[pref] = val;
+	}
+
+	std::string type(const std::string &pref)
+	{
+		auto def = defaults[pref]["default"];
+		if (def.is_string()) return "str";
+		if (def.is_number()) return "num";
+		if (def.is_boolean()) return "bool";
+		if (def.is_object()) return "obj";
+		if (def.is_array()) return "arr";
+		return "null";
 	}
 
 	std::vector<std::string> list()

@@ -15,7 +15,14 @@
 <form method="get" action="/action/pref">
 <table>
 %
-<tr><td><span class="form-key">%NAME</span></td><td><input type="text" name="%KEY" value="%VALUE" class="form-value"></td></tr>
+<tr>
+	<td><span class="form-key">{{name}}</span></td>
+	<td>
+		{{#type=str?}}<input type="text" name="{{key}}" value="{{value}}" class="form-value">{{/}}
+		{{#type=num?}}<input type="number" name="{{key}}" value="{{value}}" class="form-value">{{/}}
+		{{#type=bool?}}<input type="hidden" name="{{key}}" value="false"><input type="checkbox" name="{{key}}" value="true" {{value=true?checked:}} class="form-value">{{/}}
+	</td>
+</tr>
 %
 </table>
 <div class="form-sub">
@@ -26,3 +33,4 @@
 </main>
 </body>
 </html>
+

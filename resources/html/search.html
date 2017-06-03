@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>%TITLE: %QUERY</title>
+<title>{{title}}: {{query}}</title>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
@@ -14,20 +14,20 @@
 <main class="normal">
 <div id="utils">
 	<a href="/"><i class="fa fa-2x fa-th-list" title="Library"></i></a>
-	<a href="/view/%ID/%HOME"><i class="fa fa-2x fa-home" title="Home page"></i></a>
+	<a href="/view/{{id}}/{{home}}"><i class="fa fa-2x fa-home" title="Home page"></i></a>
 </div>
-<h1>Search Results for “%QUERY” in %TITLE</h1>
-<form id="search" data-volid="%ID">
+<h1>Search Results for “{{query}}” in {{title}}</h1>
+<form id="search" data-volid="{{id}}">
 <input id="search-input" type="search" placeholder="Search again" autocomplete="off" spellcheck="false">
 <button type="submit">Go</button>
 </form>
 <table id="search-results">
 %
 <tr>
-<td class="search-percent">%MATCH%%</td>
+<td class="search-percent">{{match}}%</td>
 <td>
-	<a href="%URL" class="item-title">%TITLE</a>
-	<p class="search-preview">%PREVIEW</p>
+	<a href="%URL" class="item-title">{{title}}</a>
+	<p class="search-preview">{{preview}}</p>
 </td>
 </tr>
 %
@@ -35,3 +35,4 @@
 </main>
 </body>
 </html>
+
