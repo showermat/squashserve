@@ -4,7 +4,7 @@
 #include <map>
 #include <fstream>
 #include "util/util.h"
-#include "build/fileinclude.h"
+#include "fileinclude.h"
 #include "lib/json/json.hpp" // Thanks to github/nlohmann
 
 namespace prefs

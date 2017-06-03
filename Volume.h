@@ -17,7 +17,7 @@
 #include "util/lua.h"
 #include "zsr.h"
 #include "search.h"
-#include "build/fileinclude.h"
+#include "fileinclude.h"
 #ifdef ZSR_USE_XAPIAN
 #include <xapian.h>
 #endif
