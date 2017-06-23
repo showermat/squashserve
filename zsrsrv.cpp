@@ -54,7 +54,7 @@ http::doc error(const std::string &header, const std::string &body)
 http::doc loadcat(const std::string &name)
 {
 	http::doc ret = resource("html/home.html");
-	std::vector<std::string> sects = templ::split(ret.content());
+	std::vector<std::string> sects = templ::split(ret.content(), 7, "home.html");
 	std::stringstream buf{};
 	std::unordered_set<std::string> volnames = volumes.load(name);
 	std::set<std::string> volsort{volnames.begin(), volnames.end()};
@@ -74,8 +74,7 @@ http::doc home(bool privileged)
 {
 	http::doc ret = resource("html/home.html");
 	std::stringstream buf{};
-	std::vector<std::string> sects = templ::split(ret.content());
-	if (sects.size() < 7) return error("Resource Error", "Not enough sections in HTML template at html/home.html");
+	std::vector<std::string> sects = templ::split(ret.content(), 7, "home.html");
 	std::unordered_map<std::string, std::string> doctokens{};
 	if (privileged) doctokens["priv"] = "";
 	buf << templ::render(sects[0], doctokens) << sects[2] << loadcat("").content() << sects[4];
@@ -102,8 +101,7 @@ http::doc search(Volume &vol, const std::string &query)
 	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
 	http::doc ret = resource("html/search.html");
-	std::vector<std::string> sects = templ::split(ret.content());
-	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/search.html");
+	std::vector<std::string> sects = templ::split(ret.content(), 3, "search.html");
 	std::stringstream buf{};
 	buf << templ::render(sects[0], tokens);
 	try
@@ -148,8 +146,7 @@ http::doc titles(Volume &vol, const std::string &query)
 {
 	http::doc ret = resource("html/titles.html");
 	std::stringstream buf{};
-	std::vector<std::string> sects = templ::split(ret.content());
-	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/titles.html");
+	std::vector<std::string> sects = templ::split(ret.content(), 3, "titles.html");
 	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
 	buf << templ::render(sects[0], titletokens);
@@ -186,8 +183,7 @@ http::doc content(Volume &vol, const std::string &path)
 http::doc pref()
 {
 	http::doc ret = resource("html/pref.html");
-	std::vector<std::string> sects = templ::split(ret.content());
-	if (sects.size() < 3) return error("Resource Error", "Not enough sections in HTML template at html/pref.html");
+	std::vector<std::string> sects = templ::split(ret.content(), 3, "pref.html");
 	std::stringstream buf{};
 	buf << sects[0];
 	for (const std::string &prefname : prefs::list())

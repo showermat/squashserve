@@ -17,7 +17,7 @@ namespace htmlutil
 		std::string::size_type endidx = bodymatch.position();
 		if (endidx < startidx) return content;
 		std::string body = content.substr(startidx, endidx - startidx);
-		body = std::regex_replace(body, std::regex{"<style>[\\w\\W]*</style>", std::regex_constants::icase}, ""); // FIXME  Will wipe out anything between two script or style blocks
+		body = std::regex_replace(body, std::regex{"<style>[\\w\\W]*</style>", std::regex_constants::icase}, ""); // FIXME Will wipe out anything between two script or style blocks
 		body = std::regex_replace(body, std::regex{"<script>[\\w\\W]*</script>", std::regex_constants::icase}, "");
 		body = std::regex_replace(body, std::regex{"<[^>]+>"}, "");
 		body = std::regex_replace(body, std::regex{"[\\s\\n]+"}, " ");
@@ -99,14 +99,14 @@ catch (Xapian::Error &e) { xapian_rethrow(e); }
 
 const std::string &Volwriter::lua_preamble{fileinclude::loaded_file("vollib.lua")};
 
-const std::string Volwriter::default_indexer{"function index(path, ftype) if ftype == T_REG and is_html(path) then return html_title(path) else return '' end end"};
+const std::string Volwriter::default_indexer{"function index(path, ftype) return default_index(path, ftype) end"};
 
 std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 {
 	int ftype = 0;
 	if ((n.stat().st_mode & S_IFMT) == S_IFDIR) ftype = 1;
 	else if ((n.stat().st_mode & S_IFMT) == S_IFREG) ftype = 2;
-	else if((n.stat().st_mode & S_IFMT) == S_IFLNK) ftype = 3;
+	else if ((n.stat().st_mode & S_IFMT) == S_IFLNK) ftype = 3;
 	std::string title = info.call<std::string>("index", n.path(), ftype);
 	if (volmeta.count("encoding"))
 	{
@@ -130,6 +130,11 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 #endif
 {
 	info.loadstr(lua_preamble);
+	std::function<std::string(std::string, std::string, std::string)> iconv = [](std::string in, std::string from, std::string to) {
+		try { return util::conv(in, from, to); }
+		catch(std::runtime_error &e) { std::cout << "\n" << e.what() << "\n"; return std::string{}; }
+	};
+	info.expose(iconv, "iconv");
 	info.load(util::pathjoin({indir, Volume::metadir, "info.lua"}));
 	if (! info.exists("index")) info.loadstr(default_indexer);
 	lua::iter params = info.table_iter("params");

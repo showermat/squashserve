@@ -134,7 +134,7 @@ The encoder can also be used as a library in other C++ programs by including the
     }
     ar.reap(); // Clean up file descriptors opened by zsr::iterator.open().
 
-For the time being, none of the classes guarantee safety in multi-threading.  All accesses to methods should be sequentialized.
+The ZSR library does not provide a threadsafe interface, because C++ I/O streams are not threadsafe.  `zsr::archive` provides the user `std::istream`s and `std::streambuf`s for accessing archive data that all ultimately share the open archive file's single `std::istream`.  There is no way for `libzsr` to force these streams to be be used in a threadsafe way.  Rather than implementing some other interface for getting data from the archive, thread safety is left up to the user.  All accesses to the library must be serialized.
 
 
 ## Creating Volumes

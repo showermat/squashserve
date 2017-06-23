@@ -29,4 +29,13 @@ function html_title(path)
 	return basename(path)
 end
 
--- TODO Add an `iconv` function here that will convert encodings (by calling back to C++).  That way we can deprecate the `encoding` parameter
+-- Functions registered from C++:
+--     iconv(in, from, to): Convert the encoding of a string
+
+function default_index(path, ftype)
+	if ftype == T_REG and is_html(path)
+		then return html_title(path)
+		else return ''
+	end
+end
+
