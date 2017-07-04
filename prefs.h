@@ -29,9 +29,9 @@ namespace prefs
 		std::string homedir = util::env_or("HOME", "");
 		preflocs = {
 			util::env_or("ZSRSRV_CONF", ""),
+			util::pathjoin({util::dirname(util::exepath()), preffname}),
 			util::pathjoin({util::env_or("XDG_CONFIG_HOME", util::pathjoin({homedir, ".config"})), preffname}),
 			util::pathjoin({homedir, "." + preffname}),
-			util::pathjoin({util::dirname(util::exepath()), preffname})
 		};
 		for (const std::string &loc : preflocs) if (loc != "" && util::fexists(loc) && ! util::isdir(loc))
 		{

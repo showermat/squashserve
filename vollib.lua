@@ -31,11 +31,14 @@ end
 
 -- Functions registered from C++:
 --     iconv(in, from, to): Convert the encoding of a string
+--     mimetype(path): Return the MIME type of a file using its extension if possible or libmagic otherwise
 
-function default_index(path, ftype)
-	if ftype == T_REG and is_html(path)
-		then return html_title(path)
-		else return ''
+function default_meta(path, ftype)
+	ret = {}
+	if ftype == T_REG then
+		if is_html(path) then ret["title"] = html_title(path) end
+		ret["type"] = mimetype(path)
 	end
+	return ret
 end
 

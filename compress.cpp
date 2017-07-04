@@ -2,7 +2,7 @@
 
 namespace lzma
 {
-	const int chunksize = 32 * 1024;
+	const int chunksize = 2 * 1024 * 1024;
 	static lzma_options_lzma options{LZMA_DICT_SIZE_DEFAULT, nullptr, 0, LZMA_LC_DEFAULT, LZMA_LP_DEFAULT, LZMA_PB_DEFAULT, LZMA_MODE_NORMAL, 128, LZMA_MF_HC4, 0};
 	static lzma_filter default_filters[2] = {{LZMA_FILTER_LZMA2, &options}, {LZMA_VLI_UNKNOWN}};
 

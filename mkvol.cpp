@@ -13,7 +13,7 @@ void help_exit()
 }
 
 
-int main(int argc, char **argv)
+int main(int argc, char **argv) try
 {
 	std::unordered_map<std::string, std::vector<std::string>> flags{};
 	std::vector<std::string> args{};
@@ -41,5 +41,10 @@ int main(int argc, char **argv)
 	if (! out) throw std::runtime_error{"Couldn't open output file"};
 	Volwriter{args[0], linkpol}.write(out);
 	return 0;
+}
+catch (std::exception &e)
+{
+	std::cerr << "Error: " << e.what() << "\n";
+	return 1;
 }
 

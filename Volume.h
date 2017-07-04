@@ -56,7 +56,8 @@ private:
 	rsearch::disktree_writer searchwriter;
 	lua::exec info;
 	std::unordered_map<std::string, std::string> volmeta;
-	static const std::string &lua_preamble, default_indexer;
+	std::vector<std::string> metanames;
+	static const std::string &lua_preamble, default_metagen, default_metanames;
 #ifdef ZSR_USE_XAPIAN
 	Xapwriter xap;
 #endif

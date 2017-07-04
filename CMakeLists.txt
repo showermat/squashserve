@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.3)
 project(zsr-utils)
 set(VERSION 0.2)
-set(CMAKE_CXX_FLAGS "-std=gnu++14 -Wall -Og -g")
+set(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Og -g")
 include_directories(".")
 add_subdirectory(util)
 add_library(zsr zsr.cpp compress.cpp)
@@ -21,7 +21,7 @@ target_link_libraries(mkvol zsr)
 add_custom_command(
 	OUTPUT ${CMAKE_BINARY_DIR}/resources.zsr
 	DEPENDS zsrutil
-	COMMAND zsrutil c ${CMAKE_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources.zsr)
+	COMMAND zsrutil c ${CMAKE_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources.zsr ${CMAKE_SOURCE_DIR}/resources/info.lua)
 add_custom_target(resources DEPENDS ${CMAKE_BINARY_DIR}/resources.zsr)
 add_executable(zsrsrv zsrsrv.cpp search.cpp Volume.cpp http.cpp ${CMAKE_SOURCE_DIR}/fileinclude.cpp)
 add_dependencies(zsrsrv resources)

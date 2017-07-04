@@ -153,6 +153,18 @@ namespace zsr
 			iter->second->resolved = true;
 		}
 	}
+
+	void writer::node_meta(const std::vector<std::string> keys, std::function<std::unordered_map<std::string, std::string>(const filenode &)> generator)
+	{
+		nodemeta_ = keys;
+		metagen_ = [keys, generator](const filenode &file) {
+			std::unordered_map<std::string, std::string> metamap = generator(file);
+			std::vector<std::string> ret{};
+			for (const std::string &key : keys) ret.push_back(metamap.count(key) ? metamap.at(key) : "");
+			return ret;
+		};
+	}
+
 	void writer::linkmgr::write(std::ostream &out)
 	{
 		size_t total = by_src_.size();
@@ -314,7 +326,10 @@ namespace zsr
 
 	std::string node::meta(const std::string &key)
 	{
-		return follow().meta_[container_.metaidx(key)];
+		// TODO We should either give links metadata or follow them when retrieving
+		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get metadata of a non-regular file"};
+		return meta_[container_.metaidx(key)];
+		//return follow().meta_[container_.metaidx(key)];
 	}
 
 	std::unique_ptr<node> node::child(const std::string &name)

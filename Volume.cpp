@@ -52,7 +52,12 @@ std::string Volwriter::Xapwriter::getlang(const std::unordered_map<std::string, 
 	const std::string deflang = "english";
 	const std::vector<std::string> supvec = util::strsplit(Xapian::Stem::get_available_languages(), ' ');
 	const std::set<std::string> supported{supvec.begin(), supvec.end()};
-	const std::unordered_map<std::string, std::string> iso639_1{{"hy", "armenian"}, {"eu", "basque"}, {"ca", "catalan"}, {"da", "danish"}, {"nl", "dutch"}, {"en", "english"}, {"fi", "finnish"}, {"fr", "french"}, {"de", "german"}, {"hu", "hungarian"}, {"it", "italian"}, {"nb", "norwegian"}, {"nn", "norwegian"}, {"no", "norwegian"}, {"pt", "portugese"}, {"ro", "romanian"}, {"ru", "russian"}, {"es", "spanish"}, {"sv", "swedish"}, {"tr", "turkish"}}, iso639_2{{"eng", "english"}, {"arm", "armenian"}, {"hye", "armenian"}, {"baq", "basque"}, {"eus", "basque"}, {"cat", "catalan"}, {"dan", "danish"}, {"dut", "dutch"}, {"nld", "dutch"}, {"fin", "finnish"}, {"fre", "french"}, {"fra", "french"}, {"ger", "german"}, {"deu", "german"}, {"hun", "hungarian"}, {"ita", "italian"}, {"nno", "norwegian"}, {"nob", "norwegian"}, {"nor", "norwegian"}, {"por", "portugese"}, {"rum", "romanian"}, {"ron", "romanian"}, {"rus", "russian"}, {"spa", "spanish"}, {"swe", "swedish"}, {"tur", "turkish"}};
+	const std::unordered_map<std::string, std::string> iso639_1{{"hy", "armenian"}, {"eu", "basque"}, {"ca", "catalan"}, {"da", "danish"}, {"nl", "dutch"}, {"en", "english"}, {"fi", "finnish"},
+		{"fr", "french"}, {"de", "german"}, {"hu", "hungarian"}, {"it", "italian"}, {"nb", "norwegian"}, {"nn", "norwegian"}, {"no", "norwegian"}, {"pt", "portugese"}, {"ro", "romanian"},
+		{"ru", "russian"}, {"es", "spanish"}, {"sv", "swedish"}, {"tr", "turkish"}}, iso639_2{{"eng", "english"}, {"arm", "armenian"}, {"hye", "armenian"}, {"baq", "basque"}, {"eus", "basque"},
+		{"cat", "catalan"}, {"dan", "danish"}, {"dut", "dutch"}, {"nld", "dutch"}, {"fin", "finnish"}, {"fre", "french"}, {"fra", "french"}, {"ger", "german"}, {"deu", "german"},
+		{"hun", "hungarian"}, {"ita", "italian"}, {"nno", "norwegian"}, {"nob", "norwegian"}, {"nor", "norwegian"}, {"por", "portugese"}, {"rum", "romanian"}, {"ron", "romanian"},
+		{"rus", "russian"}, {"spa", "spanish"}, {"swe", "swedish"}, {"tur", "turkish"}};
 	if (! meta.count("language")) return deflang;
 	std::string lang = util::utf8lower(meta.at("language"));
 	if (supported.count(lang)) return lang;
@@ -99,7 +104,9 @@ catch (Xapian::Error &e) { xapian_rethrow(e); }
 
 const std::string &Volwriter::lua_preamble{fileinclude::loaded_file("vollib.lua")};
 
-const std::string Volwriter::default_indexer{"function index(path, ftype) return default_index(path, ftype) end"};
+const std::string Volwriter::default_metagen{"function meta(path, ftype) return default_meta(path, ftype) end"};
+
+const std::string Volwriter::default_metanames{"metanames = {\"title\", \"type\"}"};
 
 std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 {
@@ -107,24 +114,34 @@ std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
 	if ((n.stat().st_mode & S_IFMT) == S_IFDIR) ftype = 1;
 	else if ((n.stat().st_mode & S_IFMT) == S_IFREG) ftype = 2;
 	else if ((n.stat().st_mode & S_IFMT) == S_IFLNK) ftype = 3;
-	std::string title = info.call<std::string>("index", n.path(), ftype);
-	if (volmeta.count("encoding"))
+	std::unordered_map<std::string, std::string> values = info.calltbl("meta", n.path(), ftype).tomap<std::string, std::string>();
+	if (ftype == 2 || ftype == 3)
 	{
-		try { title = util::conv(title, volmeta.at("encoding"), "UTF-8"); }
-		catch (std::runtime_error &e)
+		if (values.count("title") && values.at("title") != "")
 		{
-			std::cout << clrln << "Could not convert title for file " << n.path() << "\n";
-			title = util::basename(n.path());
+			if (volmeta.count("encoding"))
+			{
+				try { values["title"] = util::conv(values.at("title"), volmeta.at("encoding"), "UTF-8"); }
+				catch (std::runtime_error &e)
+				{
+					std::cout << clrln << "Could not convert title for file " << n.path() << "\n";
+					values["title"] = util::basename(n.path());
+				}
+			}
+			searchwriter.add(values.at("title"), n.id());
+#ifdef ZSR_USE_XAPIAN
+			xap.add(content, values.at("title"), n.id());
+#endif
 		}
 	}
-	searchwriter.add(title, n.id());
-#ifdef ZSR_USE_XAPIAN
-	xap.add(content, title, n.id());
-#endif
-	return {title};
+	std::vector<std::string> ret{};
+	if (ftype != 2) return ret; // The return value is currently only used if the file is a regular file...we may update this to include links
+	if (! values.count("type")) values["type"] = util::mimetype(n.path());
+	for (const std::string &item : metanames) ret.push_back(values.count(item) ? values.at(item) : "");
+	return ret;
 }
 
-Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, info{}, volmeta{}
+Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, info{}, volmeta{}, metanames{}
 #ifdef ZSR_USE_XAPIAN
 , xap{}
 #endif
@@ -135,13 +152,18 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 		catch(std::runtime_error &e) { std::cout << "\n" << e.what() << "\n"; return std::string{}; }
 	};
 	info.expose(iconv, "iconv");
+	std::function<std::string(std::string)> mimetype = [](std::string path) {
+		return util::mimetype(path);
+	};
+	info.expose(mimetype, "mimetype");
 	info.load(util::pathjoin({indir, Volume::metadir, "info.lua"}));
-	if (! info.exists("index")) info.loadstr(default_indexer);
-	lua::iter params = info.table_iter("params");
-	while (params.next()) volmeta.insert(params.get<std::string, std::string>());
+	if (! info.exists("meta")) info.loadstr(default_metagen);
+	if (! info.exists("metanames")) info.loadstr(default_metanames);
+	volmeta = info.table_iter("params").tomap<std::string, std::string>();
 	archwriter.volume_meta(volmeta);
 	std::function<std::vector<std::string>(const zsr::writer::filenode &)> meta_callback = [this](const zsr::writer::filenode &n) { return this->meta(n); };
-	archwriter.node_meta({"title"}, meta_callback);
+	metanames = info.table_iter("metanames").tovec<std::string>();
+	archwriter.node_meta(metanames, meta_callback);
 #ifdef ZSR_USE_XAPIAN
 	if (! volmeta.count("stem_lang")) volmeta["stem_lang"] = Xapwriter::getlang(volmeta);
 	xap.init(volmeta["stem_lang"]);
@@ -227,10 +249,11 @@ std::pair<std::string, std::string> Volume::get(std::string path)
 {
 	if (! archive_->check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
-	contentss << archive_->get(path).open(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
+	zsr::iterator file = archive_->get(path);
+	contentss << file.open(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
-	archive_->reap();
-	return std::make_pair(util::mimetype(path, content), content);
+	file.close();
+	return std::make_pair(file.meta("type"), content);
 }
 
 std::string Volume::shuffle() const

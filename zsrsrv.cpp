@@ -24,7 +24,6 @@
  *     Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
  *     Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
  *     Browser doesn't remember your position on the page if you e.g. go back
- * Threadsafe libzsr
  */
 
 class handle_error : public std::runtime_error
@@ -39,9 +38,10 @@ Volmgr volumes{};
 http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})
 {
 	std::ostringstream ret{};
-	ret << resources->get(path).open(); // Not checking if resources is null because it is set at program launch
-	resources->close(path);
-	return http::doc(util::mimetype(path, ret.str()), ret.str(), headers);
+	zsr::iterator file = resources->get(path); // Not checking if resources is null because it is set at program launch
+	ret << file.open();
+	file.close();
+	return http::doc(file.meta("type"), ret.str(), headers);
 }
 
 http::doc error(const std::string &header, const std::string &body)
@@ -313,7 +313,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 	}
 }
 
-int main(int argc, char **argv)
+int main(int argc, char **argv) try
 {
 	prefs::init();
 	std::string rsrcpath = prefs::get("resources");
@@ -324,5 +324,10 @@ int main(int argc, char **argv)
 	volumes.init(prefs::get("basedir"));
 	http::server{prefs::get("localonly") ? "127.0.0.1" : "0.0.0.0", static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
 	return 0;
+}
+catch (std::exception &e)
+{
+	std::cerr << "Error: " << e.what() << "\n";
+	return 1;
 }
 

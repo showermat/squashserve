@@ -1,14 +1,15 @@
 #include <iostream>
 #include <iomanip>
 #include "zsr.h"
+#include "util/lua.h"
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    zsrutil c src dest.zsr\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]"; // TODO Improve
+	std::cerr << "Usage:\n    zsrutil c src dest.zsr [info.lua]\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]"; // TODO Improve
 	exit(1);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char **argv) try
 {
 	std::vector<std::string> args = util::argvec(argc, argv);
 	if (args.size() < 2) help_exit();
@@ -16,6 +17,13 @@ int main(int argc, char **argv)
 	{
 		if (args.size() < 4) help_exit();
 		zsr::writer ar{args[2]};
+		lua::exec info{};
+		if (args.size() > 4)
+		{
+			info.load(args[4]);
+			ar.volume_meta(info.table_iter("params").tomap<std::string, std::string>());
+			ar.node_meta(info.table_iter("metanames").tovec<std::string>(), [&info](const zsr::writer::filenode &file) { return info.calltbl("meta", file.path()).tomap<std::string, std::string>(); });
+		}
 		std::ofstream out{args[3]};
 		ar.write(out);
 	}
@@ -35,7 +43,7 @@ int main(int argc, char **argv)
 		{
 			zsr::iterator n = ar.get(args[3]);
 			for (const std::string &key : ar.nodemeta()) if (key.size() > maxwidth) maxwidth = key.size();
-			for (const std::string &key : ar.nodemeta()) std::cout << std::setw(maxwidth) << key << ":  " << n.meta(key) << "\n";
+			for (const std::string &key : ar.nodemeta()) if (n.meta(key).size()) std::cout << std::setw(maxwidth) << key << ":  " << n.meta(key) << "\n";
 			return 0;
 		}
 		std::cout << "Archive metadata:\n";
@@ -61,5 +69,10 @@ int main(int argc, char **argv)
 	}
 	else help_exit();
 	return 0;
+}
+catch (std::exception &e)
+{
+	std::cerr << "Error: " << e.what() << "\n";
+	return 1;
 }
 

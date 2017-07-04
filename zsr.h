@@ -115,6 +115,7 @@ namespace zsr
 		void userdata(std::istream &data) { userdata_ = &data; }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
+		void node_meta(const std::vector<std::string> keys, std::function<std::unordered_map<std::string, std::string>(const filenode &)> generator);
 		void write_body(const std::string &contname = "content.zsr.tmp", const std::string &idxname = "index.zsr.tmp");
 		void write_header(const std::string &tmpfname = "header.zsr.tmp");
 		void combine(std::ofstream &out);
