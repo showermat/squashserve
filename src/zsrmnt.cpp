@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <string.h>
+#include <attr/xattr.h>
 #include <vector>
 #include <unordered_map>
 #include <stdexcept>
@@ -25,18 +26,21 @@ void help_exit()
 int fs_open(const char *path, struct fuse_file_info *info)
 {
 	if ((info->flags & 3) != O_RDONLY) return -EACCES;
+	std::string pathstr{path};
 	std::lock_guard<std::mutex> guard{accesslock};
-	openf[std::string{path}]++;
+	if (! ar->check(pathstr)) return -ENOENT;
+	openf[pathstr]++;
 	return 0;
 }
 
 int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *info)
 {
+	std::string pathstr{path};
 	std::lock_guard<std::mutex> guard{accesslock};
-	if (! ar->check(std::string(path))) return -ENOENT;
+	if (! ar->check(pathstr)) return -ENOENT;
 	try
 	{
-		std::istream read{ar->get(std::string{path}).open()};
+		std::istream read{ar->get(pathstr).open()};
 		read.seekg(offset);
 		read.read(buf, size);
 		return read.gcount();
@@ -48,6 +52,7 @@ int fs_release(const char *path, struct fuse_file_info *info)
 {
 	std::lock_guard<std::mutex> guard{accesslock};
 	const std::string pathstr{path};
+	if (! openf.count(pathstr)) return 0; // I think the return value is ignored, anyway
 	openf[pathstr]--;
 	if (openf[pathstr] == 0)
 	{
@@ -63,7 +68,7 @@ int fs_readlink(const char *path, char *buf, size_t size)
 	const zsr::iterator n = ar->get(std::string{path});
 	if (n.type() != zsr::node::ntype::link) return -EINVAL;
 	strncpy(buf, n.dest().c_str(), size - 1);
-	buf[size - 1] = 0;
+	buf[size - 1] = 0; // This isn't the behvaior described in the manpage....
 	return 0;
 }
 
@@ -118,6 +123,80 @@ int fs_getattr(const char *path, struct stat *stat)
 	return 0;
 }
 
+//#ifdef HAVE_SETXATTR // ?
+int fs_listxattr(const char *path, char *list, size_t size) // TODO Metadata could theoretically contain nulls, causing problems
+{
+	std::string pathstr{path};
+	std::ostringstream buf{};
+	try
+	{
+		std::lock_guard<std::mutex> guard{accesslock};
+		if (path == std::string{"/"})
+		{
+			for (const std::pair<std::string, std::string> &entry : ar->gmeta()) buf << "user." << entry.first << '\0';
+		}
+		else
+		{
+			const zsr::iterator n = ar->get(pathstr);
+			if (n.isdir()) return 0;
+			for (const std::string &key : ar->nodemeta())
+			{
+				std::string value = n.meta(key);
+				if (value.size()) buf << "user." << key << '\0';
+			}
+		}
+	}
+	catch (std::runtime_error &e) { return -ENOENT; }
+	std::string ret = buf.str();
+	if (size)
+	{
+		if (ret.size() > size) return -ERANGE;
+		memcpy(list, &ret[0], ret.size());
+	}
+	return ret.size();
+}
+
+int fs_getxattr(const char *path, const char *name, char *value, size_t size)
+{
+	std::string pathstr{path}, namestr{name}, val{};
+	std::ostringstream buf{};
+	if (namestr.substr(0, 5) != "user.") return -ENOATTR;
+	std::string attrname = namestr.substr(5);
+	try
+	{
+		std::lock_guard<std::mutex> guard{accesslock};
+		if (path == std::string{"/"})
+		{
+			if (! ar->gmeta().count(attrname)) return -ENOATTR;
+			val = ar->gmeta().at(attrname);
+		}
+		else
+		{
+			const zsr::iterator n = ar->get(pathstr);
+			try { val = n.meta(attrname); }
+			catch (std::runtime_error &e) { return -ENOATTR; }
+			if (! val.size()) return -ENOATTR;
+		}
+	}
+	catch (std::runtime_error &e) { return -ENOENT; }
+	if (size)
+	{
+		if (val.size() > size) return -ERANGE;
+		memcpy(value, &val[0], val.size());
+	}
+	return val.size();
+}
+
+int fs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags)
+{
+	return -EACCES;
+}
+
+int fs_removexattr(const char *path, const char *name)
+{
+	return -EACCES;
+}
+
 struct fuse_operations ops;
 
 int main(int argc, char **argv)
@@ -132,6 +211,10 @@ int main(int argc, char **argv)
 	ops.readdir = fs_readdir;
 	ops.getattr = fs_getattr;
 	ops.release = fs_release;
+	ops.listxattr = fs_listxattr;
+	ops.getxattr = fs_getxattr;
+	ops.setxattr = fs_setxattr;
+	ops.removexattr = fs_removexattr;
 	return fuse_main(argc, argv, &ops, nullptr);
 }
 
