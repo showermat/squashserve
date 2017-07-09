@@ -11,24 +11,26 @@ ZSR is designed to facilitate browsing archived websites with existing web brows
 
 The following files are included in this project:
 
-  - `util/*`: Miscellaneous utility functionality
-  - `http.cpp` and `http.h`: Various abstractions for HTTP and HTML used by zsrsrv
-  - `compress.cpp` and `compress.h`: Wrappers around liblzma for stream compression and decompression
-  - `zsr.cpp` and `zsr.h`: ZSR file format library
-  - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary for use with zsrsrv
-  - `search.cpp` and `search.h`: On-disk radix tree library for fast title search
-  - `diskmap.h`: On-disk hash map variant for storing directory contents
-  - `prefs.h`: User preference management
-  - `prefs.json`: Schema of available settings for zsrsrv
-  - `zsrutil.cpp`: ZSR command-line utility
-  - `Volume.cpp` and `Volume.h`: Class representing one volume for zsrsrv
-  - `vollib.lua`: Lua function library for use in `info.lua` files
-  - `zsrsrv.cpp`: ZSR HTTP server
-  - `zsrmnt.cpp`: Permits mounting ZSR archives as read-only FUSE filesystems
+  - `src`: Source code
+      - `util/*`: Miscellaneous utility functionality
+      - `http.cpp` and `http.h`: Various abstractions for HTTP and HTML used by zsrsrv
+      - `compress.cpp` and `compress.h`: Wrappers around liblzma for stream compression and decompression
+      - `zsr.cpp` and `zsr.h`: ZSR file format library
+      - `mkvol.cpp`: Utility to create ZSR archives with the additional metadata necessary for use with zsrsrv
+      - `search.cpp` and `search.h`: On-disk radix tree library for fast title search
+      - `diskmap.h`: On-disk hash map variant for storing directory contents
+      - `prefs.h`: User preference management
+      - `prefs.json`: Schema of available settings for zsrsrv
+      - `zsrutil.cpp`: ZSR command-line utility
+      - `Volume.cpp` and `Volume.h`: Class representing one volume for zsrsrv
+      - `vollib.lua`: Lua function library for use in `info.lua` files
+      - `zsrsrv.cpp`: ZSR HTTP server
+      - `zsrmnt.cpp`: Permits mounting ZSR archives as read-only FUSE filesystems
+      - `zsrload`: Python script to load external ZSR files
+      - `CMakeLists.txt`: Configuration for CMake
   - `accessories/wikidump.py` and `accessories/linkcheck.py`: Accessory programs to aid in the creation of ZSR files from wikis
   - `lib/*`: Third-party libraries
   - `resources/*`: Web resources for zsrsrv
-  - `CMakeLists.txt`: Configuration for CMake
   - `LICENSE` and `README.md`: User information
 
 Build requirements are as follows:
@@ -46,7 +48,7 @@ Build requirements are as follows:
 Building should be as simple as:
 
 	$ git submodule update --init
-    $ cmake .
+    $ cmake src
     $ make
 
 
@@ -143,14 +145,19 @@ To browse an archived site, you need to create a "volume", which is just a ZSR a
 
 The only special attribute of a browsable ZSR volume is an additional directory named `_meta` in the root of the source tree.  (Woe be to that person who has to deal with a mirrored site that already has a directory called `_meta` in the root -- this directory name may be configurable in the future.)  This directory can contain arbitrary files related to the site -- for example, I like to include a `readme.txt` with personal notes on how I mirrored and prepared the site for archiving and an `update.sh` that will automatically mirror the latest version of the site.  The only files in `_meta` that are used by ZSR are `favicon.png`, a PNG image at least 48 by 48 pixels in size that is displayed in the volume list, and `info.lua`, a Lua script that generates metadata about the archive.  These metadata are defined in a Lua table called `params`; keys must be strings consisting only of letters and underscores and values must be convertible to strings.  Arbitrary metadata can be specified; ones actually used by ZSR include "title", "description", and "home".  "home" is the relative path within the archive to the HTML file that is to serve as the volume's "home page".  This is the only key that is required.  Therefore, a minimal working ZSR volume might consist of the source tree plus a `_meta` directory containing an `info.lua` file with only the line `params = { home = "index.html" }`.  All metadata are made available as tokens to the HTML templates for the site, so it is really up to the user to decide what metadata the volumes should contain and then to modify the HTML templates to use those data.
 
-By default, `mkvol` extracts the `<title>` tag from each HTML file and tokenizes it for the search index (described further below).  The creator can override this behavior by providing a function `index(path, ftype)` in `info.lua` that returns a string to tokenize.  `path` is the full path to the file being indexed, and `ftype` is `T_DIR` for directories, `T_REG` for regular files, `T_LNK` for symbolic links, or `T_UNK` for other types.  To aid the writing of this function, the following helpers are provided:
+Some metadata are calculated for each file in the tree and stored in the volume to aid retrieval.  The user can override these data by providing a function `meta(path, ftype)` in `info.lua` that returns a table of metadata for the provided path.  `path` is the full path to the file being processed, and `ftype` is `T_DIR` for directories, `T_REG` for regular files, `T_LNK` for symbolic links, or `T_UNK` for other types.  By default, the following data are calculated:
 
-  - `basename(path)`:  Returns the name of the file at `path` without extension.
-  - `extension(path)`:  Returns the extension of the file at `path`.
-  - `is_html(path)`:  Heuristically determines whether the file is an HTML file by extansion.
-  - `html_title(path)`:  Extracts the contents of the `<title>` tag of an HTML file.
+  - `type`:  The MIME type of the file, necessary for serving over HTTP.  If not provided, `mkvol` will calculate it itself
+  - `title`:  The HTML title of the file if it is an HTML file.  This value is also tokenized and used in the search index (described further below).  If not provided, this file will not be indexed
 
-This functionality will become more flexible and complete in future versions.
+  To aid the writing of this function, the following helpers are provided:
+
+  - `basename(path)`:  Returns the name of the file at `path` without extension
+  - `extension(path)`:  Returns the extension of the file at `path`
+  - `is_html(path)`:  Heuristically determines whether the file is an HTML file by extansion
+  - `html_title(path)`:  Extracts the contents of the `<title>` tag of an HTML file
+  - `iconv(string, from to)`: Converts `string` from one encoding to another
+  - `mimetype(path)`: Uses file extension or libmagic to determine the MIME type of the file at `path`
 
 If the `encoding` key is present in the `params` table in `info.lua`, it will be interpreted as the encoding of the HTML pages in the source tree.  This is used to convert page titles to UTF-8 for search indexing, as other encodings are not supported internally.  If no `encoding` key is present, `mkvol` will assume UTF-8; any file that cannot be interpreted will be indexed by the name of the HTML file instead, and a warning will be printed.
 
