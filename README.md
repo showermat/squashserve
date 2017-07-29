@@ -93,6 +93,7 @@ well.  The file format was designed with these aims:
 The ZSR format is fairly simple.  It consists of:
 
   - Header: the four ASCII bytes `!ZSR` followed by an eight-byte integer specifying the start byte of the index
+  - The two-byte version of the ZSR file, incremented each time an incompatible change is introduced
   - Volume metadata: the one-byte number of volume metadata, followed by the following for each datum:
       - The two-byte length of the key and the key itself
       - The two-byte length of the value and the value itself

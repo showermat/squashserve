@@ -6,7 +6,7 @@ namespace zsr
 	{
 		uint16_t len = s.size();
 		serialize(out, len);
-		out.write(reinterpret_cast<const char *>(&s[0]), len);
+		serialize(out, s);
 	}
 
 	filecount writer::recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout) // TODO Needs a little refactoring
@@ -207,8 +207,9 @@ namespace zsr
 		headf_ = tmpfname;
 		std::ofstream out{tmpfname};
 		if (! out) throw std::runtime_error{"Couldn't open " + tmpfname + " for writing"};
-		std::string fileheader = archive::magic_number + std::string(sizeof(offset), '\0');
-		out.write(fileheader.c_str(), fileheader.size());
+		serialize(out, archive::magic_number);
+		serialize(out, version);
+		serialize(out, std::string(sizeof(offset), '\0'));
 		uint8_t msize = volmeta_.size();
 		serialize(out, msize);
 		for (const std::pair<const std::string, std::string> &pair : volmeta_)
@@ -231,7 +232,7 @@ namespace zsr
 		out << header.rdbuf();
 		out << content.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
-		out.seekp(archive::magic_number.size());
+		out.seekp(archive::magic_number.size() + sizeof(version));
 		serialize(out, idxstart); // FIXME Endianness problems?
 		out.seekp(0, std::ios_base::end);
 		serialize(out, nfile_);
@@ -261,16 +262,6 @@ namespace zsr
 		for (const std::string &file : {headf_, contf_, idxf_}) if (util::fexists(file)) util::rm(file);
 	}
 
-	std::string node::readstring()
-	{
-		uint16_t len;
-		deserialize(container_.in_, len);
-		std::string ret{};
-		ret.resize(len);
-		container_.in_.read(reinterpret_cast<char *>(&ret[0]), len);
-		return ret;
-	}
-
 	node::node(archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
 		std::istream &in = container_.in_;
@@ -281,11 +272,11 @@ namespace zsr
 		in.seekg(container_.datastart_ + start);
 		deserialize(in, parent_);
 		deserialize(in, type_);
-		name_ = readstring();
+		name_ = container_.readstring();
 		if (type_ == ntype::link) deserialize(in, redirect_);
 		else if (type_ == ntype::reg)
 		{
-			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(readstring());
+			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(container_.readstring());
 			deserialize(in, fullsize_);
 			deserialize(in, len_);
 		}
@@ -415,6 +406,16 @@ namespace zsr
 
 	std::ifstream archive::default_istream_{};
 
+	std::string archive::readstring()
+	{
+		uint16_t len;
+		deserialize(in_, len);
+		std::string ret{};
+		ret.resize(len);
+		deserialize(in_, ret);
+		return ret;
+	}
+
 	std::unique_ptr<node> archive::getnode(const std::string &path, bool except)
 	{
 		if (! size_)
@@ -475,8 +476,11 @@ namespace zsr
 		if (! in_) throw badzsr{"Couldn't open archive input stream"};
 		in_.seekg(0);
 		std::string magic(magic_number.size(), '\0');
-		in_.read(reinterpret_cast<char *>(&magic[0]), magic_number.size());
-		if (magic != magic_number) throw badzsr{"File identifier incorrect"};
+		deserialize(in_, magic);
+		if (magic != magic_number) throw badzsr{"Not a ZSR file"};
+		uint16_t vers{};
+		deserialize(in_, vers);
+		if (vers != version) throw badzsr{"ZSR version " + util::t2s(version) + " cannot read files of version " + util::t2s(vers)};
 		offset idxstart{};
 		deserialize(in_, idxstart);
 		if (! in_) throw badzsr{"Premature end of file in header"};
@@ -484,24 +488,14 @@ namespace zsr
 		deserialize(in_, nmeta);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
-			uint16_t ksize, vsize;
-			std::string k{}, v{};
-			deserialize(in_, ksize);
-			k.resize(ksize);
-			in_.read(reinterpret_cast<char *>(&k[0]), ksize);
-			deserialize(in_, vsize);
-			v.resize(vsize);
-			in_.read(reinterpret_cast<char *>(&v[0]), vsize);
+			std::string k = readstring();
+			std::string v = readstring();
 			archive_meta_[k] = v;
 		}
 		deserialize(in_, nmeta);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
-			uint16_t msize;
-			std::string mval{};
-			deserialize(in_, msize);
-			mval.resize(msize);
-			in_.read(reinterpret_cast<char *>(&mval[0]), msize);
+			std::string mval = readstring();
 			node_meta_.push_back(mval);
 		}
 		datastart_ = in_.tellg();

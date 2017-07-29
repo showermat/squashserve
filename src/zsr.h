@@ -34,6 +34,8 @@ const std::string clrln{"\r\033[K"};
 
 namespace zsr
 {
+	const uint16_t version = 1;
+
 	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
 	typedef uint64_t offset; // Constrains the size of the archive and individual files
 
@@ -43,7 +45,9 @@ namespace zsr
 	//inline void logb(const std::string &msg) { if (verbose) std::cout << clrln << msg << std::flush; }
 
 	template<typename T> inline void serialize(std::ostream &out, const T &t) { out.write(reinterpret_cast<const char *>(&t), sizeof(t)); }
+	template <> inline void serialize<std::string>(std::ostream &out, const std::string &t) { out.write(reinterpret_cast<const char *>(&t[0]), t.size()); }
 	template<typename T> inline void deserialize(std::istream &in, T &t) { in.read(reinterpret_cast<char *>(&t), sizeof(t)); }
+	template <> inline void deserialize<std::string>(std::istream &in, std::string &t) { in.read(reinterpret_cast<char *>(&t[0]), t.size()); }
 
 	class archive;
 	class index;
@@ -139,7 +143,6 @@ namespace zsr
 		offset len_;
 		size_t fullsize_;
 		offset datastart_;
-		std::string readstring();
 		diskmap::map<std::string, filecount> childmap();
 		node follow(unsigned int limit = 0, unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
 	public:
@@ -228,6 +231,7 @@ namespace zsr
 		std::unordered_map<filecount, lzma::rdbuf> open_;
 		std::unique_ptr<util::rangebuf> userdbuf_;
 		std::istream userd_;
+		std::string readstring();
 		node getnode(filecount idx) { return node{*this, idx}; }
 		std::unique_ptr<node> getnode(const std::string &path, bool except = false); // TODO Pending std::optional
 		unsigned int metaidx(const std::string &key) const;
