@@ -9,6 +9,7 @@
 #include <chrono>
 #include <ctime>
 #include <streambuf>
+#include <string_view>
 #include <algorithm>
 #include <functional>
 #include <regex>
@@ -251,6 +252,35 @@ namespace util
 		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
 		std::streampos offset() { return start_; }
 		std::streampos size() { return size_; }
+	};
+
+	class membuf : public std::streambuf
+	{
+	public:
+		membuf(char *base, size_t len) { setg(base, base, base + len); }
+		membuf(const membuf &orig) { setg(orig.eback(), orig.gptr(), orig.egptr()); }
+		membuf(membuf &&orig) { setg(orig.eback(), orig.gptr(), orig.egptr()); }
+		std::streampos offset() { return gptr() - eback(); }
+		std::streampos size() { return egptr() - eback(); }
+	protected:
+		std::streampos seekpos(std::streampos pos, std::ios_base::openmode mode) { setg(eback(), eback() + pos, egptr()); return pos; }
+		std::streampos seekoff(std::streamoff off, std::ios_base::seekdir dir, std::ios_base::openmode mode) { throw std::runtime_error{"AAAAAAAH"}; } // TODO Remove
+	};
+
+	class imemstream : public std::istream
+	{
+	private:
+		membuf buf_;
+	public:
+		// I guess istreams only read from their buffers, so this const_cast is okay.  I wish we could just make membuf a
+		// "read-only streambuf".
+		imemstream(const std::string_view &buf) : buf_{const_cast<char *>(&buf[0]), buf.size()} { rdbuf(&buf_); }
+		imemstream(const imemstream &orig) = delete;
+		imemstream(imemstream &&orig) : buf_{std::move(orig.buf_)}
+		{
+			rdbuf(&buf_);
+			orig.rdbuf(nullptr);
+		}
 	};
 
 	std::streampos streamsize(std::istream &stream);

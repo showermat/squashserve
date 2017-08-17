@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.3)
 project(zsr-utils)
 set(VERSION 0.2)
-set(CMAKE_CXX_FLAGS "-std=c++14 -Wall -Og -g")
+set(CMAKE_CXX_FLAGS "-std=c++17 -Wall -Og -g")
 include_directories(".")
 add_subdirectory(util)
 add_library(zsr zsr.cpp compress.cpp)

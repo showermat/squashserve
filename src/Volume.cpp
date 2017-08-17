@@ -223,14 +223,13 @@ void Volume::create(const std::string &srcdir, const std::string &destdir, const
 	Volwriter{srcdir, zsr::writer::linkpolicy::process}.write(out);
 }
 
-Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{std::move(std::ifstream{fname})}}, info_{}, titles_{}
+Volume::Volume(const std::string &fname, const std::string &id) : id_{id}, archive_{new zsr::archive{fname}}, info_{}, titles_{}
 #ifdef ZSR_USE_XAPIAN
 , index_{}, xapfd_{-1}
 #endif
 {
 	if (! id_.size()) id_ = util::basename(fname).substr(0, util::basename(fname).size() - 4);
-	std::istream &userd = archive_->userdata();
-	titles_.init(userd, 0);
+	titles_.init(archive_->userdata());
 #ifdef ZSR_USE_XAPIAN
 	zsr::offset xapstart;
 	zsr::deserialize(userd, xapstart);
@@ -250,15 +249,14 @@ std::pair<std::string, std::string> Volume::get(std::string path)
 	if (! archive_->check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
 	zsr::iterator file = archive_->get(path);
-	contentss << file.open(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
+	contentss << file.content().rdbuf(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
-	file.close();
 	return std::make_pair(file.meta("type"), content);
 }
 
 std::string Volume::shuffle() const
 {
-	const static int tries = 32;
+	constexpr int tries = 32;
 	for (int i = 0; i < tries; i++)
 	{
 		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size() - 1));
@@ -292,13 +290,12 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		zsr::iterator node = archive_->index(*id);
 		r.url = node.path();
 		std::ostringstream raw{};
-		raw << node.open();
+		raw << node.content();
 		std::string content = raw.str();
 		r.title = node.meta("title");
 		r.preview = htmlutil::strings(content).substr(0, prevlen); // TODO Find and highlight search terms and display most relevant portions
 		ret.push_back(r);
 	}
-	archive_->reap();
 	return ret;
 #else
 	throw error{"Search Failed", "Content search is currently not implemented"};

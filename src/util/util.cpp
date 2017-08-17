@@ -648,13 +648,14 @@ namespace util
 		fsize = st.st_size;
 		fd = ::open(fname.c_str(), O_RDONLY);
 		if (fd < 0) throw std::runtime_error{"Could not open " + fname + ": " + std::string{::strerror(errno)}};
-		map = ::mmap(nullptr, fsize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+		map = ::mmap(nullptr, fsize, PROT_READ, MAP_SHARED, fd, 0);
 		if (map == MAP_FAILED)
 		{
 			::close(fd); // Ignore errors?
 			map = nullptr;
 			throw std::runtime_error{"Could not mmap " + fname + ": " + std::string{::strerror(errno)}};
 		}
+		if (madvise(map, fsize, MADV_RANDOM) != 0) throw std::runtime_error{"madvise failed: " + std::string{::strerror(errno)}};
 		return map;
 	}
 

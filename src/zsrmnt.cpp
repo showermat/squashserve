@@ -14,8 +14,6 @@
 #include "zsr.h"
 
 std::unique_ptr<zsr::archive> ar{};
-std::unordered_map<std::string, int> openf{};
-std::mutex accesslock{};
 
 void help_exit()
 {
@@ -27,20 +25,17 @@ int fs_open(const char *path, struct fuse_file_info *info)
 {
 	if ((info->flags & 3) != O_RDONLY) return -EACCES;
 	std::string pathstr{path};
-	std::lock_guard<std::mutex> guard{accesslock};
 	if (! ar->check(pathstr)) return -ENOENT;
-	openf[pathstr]++;
 	return 0;
 }
 
 int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *info)
 {
 	std::string pathstr{path};
-	std::lock_guard<std::mutex> guard{accesslock};
 	if (! ar->check(pathstr)) return -ENOENT;
 	try
 	{
-		std::istream read{ar->get(pathstr).open()};
+		zsr::stream read = ar->get(pathstr).content();
 		read.seekg(offset);
 		read.read(buf, size);
 		return read.gcount();
@@ -50,21 +45,11 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 
 int fs_release(const char *path, struct fuse_file_info *info)
 {
-	std::lock_guard<std::mutex> guard{accesslock};
-	const std::string pathstr{path};
-	if (! openf.count(pathstr)) return 0; // I think the return value is ignored, anyway
-	openf[pathstr]--;
-	if (openf[pathstr] == 0)
-	{
-		ar->close(pathstr);
-		openf.erase(pathstr);
-	}
 	return 0;
 }
 
 int fs_readlink(const char *path, char *buf, size_t size)
 {
-	std::lock_guard<std::mutex> guard{accesslock};
 	const zsr::iterator n = ar->get(std::string{path});
 	if (n.type() != zsr::node::ntype::link) return -EINVAL;
 	strncpy(buf, n.dest().c_str(), size - 1);
@@ -77,7 +62,6 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	std::vector<dirent> ls{};
 	try
 	{
-		std::lock_guard<std::mutex> guard{accesslock};
 		//for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
 		for (zsr::childiter children = ar->get(std::string{path}).children(); children; children++)
 		{
@@ -104,7 +88,6 @@ int fs_getattr(const char *path, struct stat *stat)
 	stat->st_nlink = 1;
 	try
 	{
-		std::lock_guard<std::mutex> guard{accesslock};
 		const zsr::iterator n = ar->get(std::string{path});
 		if (n.type() == zsr::node::ntype::dir) stat->st_mode = S_IFDIR;
 		else if (n.type() == zsr::node::ntype::reg)
@@ -124,13 +107,12 @@ int fs_getattr(const char *path, struct stat *stat)
 }
 
 //#ifdef HAVE_SETXATTR // ?
-int fs_listxattr(const char *path, char *list, size_t size) // TODO Metadata could theoretically contain nulls, causing problems
+int fs_listxattr(const char *path, char *list, size_t size) // FIXME Metadata could theoretically contain nulls, causing problems
 {
 	std::string pathstr{path};
 	std::ostringstream buf{};
 	try
 	{
-		std::lock_guard<std::mutex> guard{accesslock};
 		if (path == std::string{"/"})
 		{
 			for (const std::pair<std::string, std::string> &entry : ar->gmeta()) buf << "user." << entry.first << '\0';
@@ -164,7 +146,6 @@ int fs_getxattr(const char *path, const char *name, char *value, size_t size)
 	std::string attrname = namestr.substr(5);
 	try
 	{
-		std::lock_guard<std::mutex> guard{accesslock};
 		if (path == std::string{"/"})
 		{
 			if (! ar->gmeta().count(attrname)) return -ENOATTR;
@@ -204,7 +185,7 @@ int main(int argc, char **argv)
 	std::vector<std::string> args = util::argvec(argc, argv);
 	argc--; argv++;
 	if (args.size() < 2) help_exit();
-	ar.reset(new zsr::archive{std::ifstream{args[1]}});
+	ar.reset(new zsr::archive{args[1]});
 	ops.open = fs_open;
 	ops.read = fs_read;
 	ops.readlink = fs_readlink;

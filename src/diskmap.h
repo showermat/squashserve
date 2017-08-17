@@ -3,6 +3,7 @@
 #include <map>
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <stdexcept>
 
 namespace diskmap
@@ -31,60 +32,51 @@ namespace diskmap
 	{
 	private:
 		static constexpr size_t skipsize = sizeof(size_t) + sizeof(V);
-		std::istream &in_;
-		std::streampos start_;
+		const char *base_;
 		size_t size_;
 		std::function<K(const V &)> check_;
-		K safecheck(const V &v)
+		std::pair<size_t, V> readent(const char *&ptr)
 		{
-			std::streampos oldpos = in_.tellg();
-			K ret = check_(v);
-			if (oldpos != in_.tellg()) in_.seekg(oldpos);
+			std::pair<size_t, V> ret = std::make_pair(*reinterpret_cast<const size_t *>(ptr), *reinterpret_cast<const V *>(ptr + sizeof(size_t)));
+			ptr += skipsize;
 			return ret;
 		}
-		std::pair<size_t, V> readent()
-		{
-			std::pair<size_t, V> ret{};
-			in_.read(reinterpret_cast<char *>(&ret.first), sizeof(size_t));
-			in_.read(reinterpret_cast<char *>(&ret.second), sizeof(size_t));
-			return ret;
-		}
-		std::streampos binsearch(std::streampos start, size_t len, size_t qhash)
+		const char *binsearch(const char *start, size_t len, size_t qhash)
 		{
 			if (len <= 0) return 0;
-			in_.seekg(start + static_cast<std::streampos>((len / 2) * skipsize));
-			size_t testhash = readent().first;
-			if (qhash == testhash) return in_.tellg() - static_cast<std::streampos>(skipsize);
+			const char *inptr = start + (len / 2) * skipsize;
+			size_t testhash = readent(inptr).first;
+			if (qhash == testhash) return inptr - skipsize;
 			if (qhash < testhash) return binsearch(start, len / 2, qhash);
-			return binsearch(in_.tellg(), len / 2 - (len + 1) % 2, qhash);
+			return binsearch(inptr, len / 2 - (len + 1) % 2, qhash);
 		}
 	public:
-		map(std::istream &in, std::function<K(const V &)> check) : in_{in}, check_{check}
+		map(const char *in, std::function<K(const V &)> check) : check_{check}
 		{
-			in_.read(reinterpret_cast<char *>(&size_), sizeof(size_t));
-			start_ = in_.tellg();
+			size_ = *reinterpret_cast<const size_t *>(in);
+			base_ = in + sizeof(size_t);
 		}
 		size_t size() { return size_; }
-		std::pair<bool, V> get(const K &query) // Pending the existence of std::optional...
+		std::optional<V> get(const K &query)
 		{
 			size_t qhash = std::hash<K>{}(query);
-			in_.seekg(binsearch(start_, size_, qhash));
-			while (in_.tellg() >= start_ && readent().first == qhash) in_.seekg(-2 * static_cast<int>(skipsize), std::ios::cur);
-			if (in_.tellg() < start_) in_.seekg(start_);
-			while (in_.tellg() < start_ + static_cast<std::streampos>(size_ * skipsize))
+			const char *inptr = binsearch(base_, size_, qhash);
+			while (inptr >= base_ && readent(inptr).first == qhash) inptr -= 2 * skipsize;
+			if (inptr < base_) inptr = base_;
+			while (inptr < base_ + size_ * skipsize)
 			{
-				std::pair<size_t, V> ent = readent();
+				std::pair<size_t, V> ent = readent(inptr);
 				//std::cerr << qhash << " - " << ent.first << "\n";
-				if (ent.first != qhash) return std::make_pair(false, V{});
-				if (safecheck(ent.second) == query) return std::make_pair(true, ent.second);
+				if (ent.first != qhash) return std::nullopt;
+				if (check_(ent.second) == query) return ent.second;
 			}
-			return std::make_pair(false, V{});
+			return std::nullopt;
 		}
 		V operator[](size_t idx) // TODO Implement an actual iterator
 		{
 			if (idx >= size_) throw std::runtime_error{"Out of bounds"}; // TODO Throw a range_error
-			in_.seekg(start_ + static_cast<std::streampos>(idx * skipsize));
-			return readent().second;
+			const char *inptr = base_ + idx * skipsize;
+			return readent(inptr).second;
 		}
 	};
 }

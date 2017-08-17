@@ -262,37 +262,34 @@ namespace zsr
 		for (const std::string &file : {headf_, contf_, idxf_}) if (util::fexists(file)) util::rm(file);
 	}
 
-	node::node(archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
+	node::node(const archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
-		std::istream &in = container_.in_;
+		const char *inptr = container_.idxstart_ + idx * sizeof(offset);
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
-		in.seekg(container_.idxstart_ + idx * sizeof(offset));
-		offset start;
-		deserialize(in, start);
-		in.seekg(container_.datastart_ + start);
-		deserialize(in, parent_);
-		deserialize(in, type_);
-		name_ = container_.readstring();
-		if (type_ == ntype::link) deserialize(in, redirect_);
+		offset start = deser<offset>(inptr);
+		inptr = container_.datastart_ + start;
+		parent_ = deser<offset>(inptr);
+		type_ = deser<ntype>(inptr);
+		name_ = deser<std::string_view>(inptr);
+		if (type_ == ntype::link) redirect_ = deser<filecount>(inptr);
 		else if (type_ == ntype::reg)
 		{
-			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(container_.readstring());
-			deserialize(in, fullsize_);
-			deserialize(in, len_);
+			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(std::string{deser<std::string_view>(inptr)});
+			fullsize_ = deser<size_t>(inptr);
+			len_ = deser<offset>(inptr);
 		}
-		datastart_ = in.tellg();
+		data_ = inptr;
 		//std::cerr << "Node " << id_ << ": " << name_ << "@" << std::hex << start << "[" << std::dec << len_ << "]" << "\n";
 	}
 
-	diskmap::map<std::string, filecount> node::childmap()
+	diskmap::map<std::string, filecount> node::childmap() const
 	{
 		if (type_ == ntype::link) return follow().childmap();
 		if (type_ != ntype::dir) throw std::runtime_error{"Tried to get child of non-directory"};
-		container_.in_.seekg(datastart_);
-		return diskmap::map<std::string, filecount>{container_.in_, revcheck_};
+		return diskmap::map<std::string, filecount>{data_, revcheck_};
 	}
 
-	node node::follow(unsigned int limit, unsigned int depth)
+	node node::follow(unsigned int limit, unsigned int depth) const
 	{
 		constexpr unsigned int maxdepth = 255;
 		if (type_ != ntype::link) return *this;
@@ -301,13 +298,13 @@ namespace zsr
 		return node{container_, redirect_}.follow(limit, depth + 1);
 	}
 
-	std::unique_ptr<node> node::parent()
+	std::optional<node> node::parent() const
 	{
-		if (id_ == 0) return std::unique_ptr<node>{};
-		return std::unique_ptr<node>{new node{container_, parent_}};
+		if (id_ == 0) return std::nullopt;
+		return node{container_, parent_};
 	}
 
-	std::string node::path()
+	std::string node::path() const
 	{
 		if (id_ == 0) return "";
 		std::string ppath = parent()->path();
@@ -315,7 +312,7 @@ namespace zsr
 		return ppath + name();
 	}
 
-	std::string node::meta(const std::string &key)
+	std::string node::meta(const std::string &key) const
 	{
 		// TODO We should either give links metadata or follow them when retrieving
 		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get metadata of a non-regular file"};
@@ -323,27 +320,21 @@ namespace zsr
 		//return follow().meta_[container_.metaidx(key)];
 	}
 
-	std::unique_ptr<node> node::child(const std::string &name)
+	std::optional<node> node::child(const std::string &name) const
 	{
-		std::pair<bool, filecount> childid = childmap().get(name);
-		if (! childid.first) return std::unique_ptr<node>{};
-		return std::unique_ptr<node>{new node{container_, childid.second}};
+		std::optional<filecount> childid = childmap().get(name);
+		if (! childid) return std::nullopt;
+		return node{container_, *childid};
 	}
 
-	std::streambuf *node::content()
+	stream node::content() const
 	{
 		if (type_ == ntype::link) return follow().content();
 		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get content of non-regular file"};
-		if (! container_.open_.count(id_)) container_.open_[id_].init(container_.in_, datastart_, len_, fullsize_);
-		return &container_.open_[id_];
+		return stream{std::string_view{data_, len_}, fullsize_};
 	}
 
-	void node::close()
-	{
-		container_.open_.erase(follow().id_);
-	}
-
-	void node::extract(const std::string &location)
+	void node::extract(const std::string &location) const
 	{
 		std::string fullpath = util::pathjoin({location, name_});
 		if (type_ == ntype::dir)
@@ -357,9 +348,8 @@ namespace zsr
 		{
 			std::ofstream out{fullpath};
 			if (! out) throw std::runtime_error{"Could not create file " + fullpath};
-			out << content();
+			out << content().rdbuf();
 			out.close();
-			close();
 		}
 		else if (type_ == ntype::link)
 		{
@@ -367,14 +357,14 @@ namespace zsr
 		}
 	}
 
-	std::unordered_map<std::string, filecount> childiter::all()
+	std::unordered_map<std::string, filecount> childiter::all() const
 	{
 		std::unordered_map<std::string, filecount> ret{};
 		for (filecount i = 0; i < n.nchild(); i++) ret[ar.index(i).name()] = i;
 		return ret;
 	}
 
-	iterator childiter::get()
+	iterator childiter::get() const
 	{
 		return iterator{ar, n.childid(idx)};
 	}
@@ -385,18 +375,6 @@ namespace zsr
 		return node{ar, idx};
 	}
 
-	std::string iterator::meta(const std::string &key) const
-	{
-		return getnode().meta(key);
-	}
-
-	std::streambuf *iterator::open()
-	{
-		node n = getnode();
-		if (! n.isreg()) throw std::runtime_error{"Tried to get content of directory " + path()};
-		return n.content();
-	}
-
 	iterator::operator bool() const
 	{
 		return idx >= 0 && idx < ar.size();
@@ -404,46 +382,35 @@ namespace zsr
 
 	const std::string archive::magic_number{"!ZSR"};
 
-	std::ifstream archive::default_istream_{};
-
-	std::string archive::readstring()
-	{
-		uint16_t len;
-		deserialize(in_, len);
-		std::string ret{};
-		ret.resize(len);
-		deserialize(in_, ret);
-		return ret;
-	}
-
-	std::unique_ptr<node> archive::getnode(const std::string &path, bool except)
+	std::optional<node> archive::getnode(const std::string &path, bool except) const
 	{
 		if (! size_)
 		{
 			if (except) throw std::runtime_error{"Tried to get node from empty archive"};
-			return std::unique_ptr<node>{};
+			return std::nullopt;
 		}
-		std::unique_ptr<node> n{new node{*this, 0}};
+		std::optional<node> n{std::in_place, *this, 0};
 		//std::cerr << ">>>> " << this << " " << idxstart_ << " " << datastart_ << " " << n->name() << "|\n";
 		for (std::string &item : util::strsplit(path, util::pathsep))
 		{
 			if (! n->isdir())
 			{
 				if (except) throw std::runtime_error{"Tried to get child of non-directory " + path};
-				return std::unique_ptr<node>{};
+				return std::nullopt;
 			}
 			if (item == "" || item == ".") continue;
 			if (item == "..")
 			{
-				if (n->id() > 0) n = n->parent();
+				if (n->id() > 0) n.emplace(n->parent().value()); // It would be nice if we could avoid these emplaces, but I'm not sure wether move assignment of nodes is possible (it is required to use `n = n->parent()`).
 				continue;
 			}
-			n = n->child(item);
-			if (! n)
+			std::optional<node> child = n->child(item);
+			if (! child)
 			{
 				if (except) throw std::runtime_error{"Tried to access nonexistent path " + path};
-				return std::unique_ptr<node>{};
+				return std::nullopt;
 			}
+			n.emplace(child.value());
 		}
 		return n;
 	}
@@ -455,59 +422,48 @@ namespace zsr
 		return iter - node_meta_.cbegin();
 	}
 
-	void archive::extract(const std::string &path, const std::string &dest)
+	void archive::extract(const std::string &path, const std::string &dest) const
 	{
 		if (! util::isdir(dest)) util::mkdir(dest, 0750);
-		std::unique_ptr<node> member = getnode(path);
+		std::optional<node> member = getnode(path);
 		if (! member) throw std::runtime_error{"Member " + path + " does not exist in this archive"};
 		member->extract(dest);
 	}
 
-	bool archive::check(const std::string &path)
+	bool archive::check(const std::string &path) const
 	{
-		std::unique_ptr<node> n = getnode(path);
+		std::optional<node> n = getnode(path);
 		if (! n) return false;
 		if (n->isdir()) return false;
 		return true;
 	}
 
-	archive::archive(std::ifstream &&in) : in_{std::move(in)}, archive_meta_{}, node_meta_{}, open_{},  userdbuf_{}, userd_{&*userdbuf_}
+	archive::archive(const std::string &path) : in_{path}, archive_meta_{}, node_meta_{}, userd_{}
 	{
-		if (! in_) throw badzsr{"Couldn't open archive input stream"};
-		in_.seekg(0);
-		std::string magic(magic_number.size(), '\0');
-		deserialize(in_, magic);
+		base_ = static_cast<const char *>(in_.get());
+		// FIXME We need some sort of periodic checks to ensure that we're not stepping past the end of the file!  No more istream to warn us.
+		//if (in_.size() < magic_number.size() + sizeof(version)) throw badzsr{"File too small"};
+		const char *inptr = base_;
+		std::string_view magic = deser_string(inptr, magic_number.size());
 		if (magic != magic_number) throw badzsr{"Not a ZSR file"};
-		uint16_t vers{};
-		deserialize(in_, vers);
+		uint16_t vers = deser<uint16_t>(inptr);
 		if (vers != version) throw badzsr{"ZSR version " + util::t2s(version) + " cannot read files of version " + util::t2s(vers)};
-		offset idxstart{};
-		deserialize(in_, idxstart);
-		if (! in_) throw badzsr{"Premature end of file in header"};
-		uint8_t nmeta;
-		deserialize(in_, nmeta);
+		const char *idxstart = base_ + deser<offset>(inptr);
+		uint8_t nmeta = deser<uint8_t>(inptr);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
-			std::string k = readstring();
-			std::string v = readstring();
+			std::string k = std::string{deser<std::string_view>(inptr)};
+			std::string v = std::string{deser<std::string_view>(inptr)};
 			archive_meta_[k] = v;
 		}
-		deserialize(in_, nmeta);
-		for (uint8_t i = 0; i < nmeta; i++)
-		{
-			std::string mval = readstring();
-			node_meta_.push_back(mval);
-		}
-		datastart_ = in_.tellg();
-		in_.seekg(idxstart);
-		deserialize(in_, size_);
-		idxstart_ = in_.tellg();
-		offset test;
-		deserialize(in_, test);
-		std::streampos userdstart = idxstart_ + static_cast<std::streampos>(size_ * sizeof(filecount));
-		in_.seekg(0, std::ios_base::end);
-		userdbuf_.reset(new util::rangebuf{in_, userdstart, in_.tellg() - userdstart});
-		userd_.rdbuf(&*userdbuf_);
+		nmeta = deser<uint8_t>(inptr);
+		for (uint8_t i = 0; i < nmeta; i++) node_meta_.push_back(std::string{deser<std::string_view>(inptr)});
+		datastart_ = inptr;
+		inptr = idxstart;
+		size_ = deser<filecount>(inptr);
+		idxstart_ = inptr;
+		const char *userdstart = idxstart_ + size_ * sizeof(filecount);
+		userd_ = std::string_view{userdstart, static_cast<std::string_view::size_type>(base_ + in_.size() - userdstart)};
 	}
 }
 

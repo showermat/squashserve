@@ -15,10 +15,10 @@ namespace rsearch
 
 	void disktree::debug_print(zsr::offset off, std::string prefix) // Debug
 	{
-		if (! *in_) throw std::runtime_error{"Bad stream"};
-		in_->seekg(off);
-		const std::unordered_map<std::string, zsr::offset> curchild = children();
-		const std::unordered_set<zsr::filecount> myval = values();
+		// FIXME Bounds checking
+		const char *inptr = base_ + off;
+		const std::unordered_map<std::string, zsr::offset> curchild = children(inptr);
+		const std::unordered_set<zsr::filecount> myval = values(inptr);
 		for (const zsr::filecount &val : myval) std::cout << val << " ";
 		std::cout << "\n";
 		for (const std::pair<const std::string, zsr::offset> &child : curchild)
@@ -41,7 +41,7 @@ namespace rsearch
 		for (const std::pair<const std::string, radix_tree_node<std::string, std::unordered_set<zsr::filecount>> *> child : n->m_children)
 		{
 			if (child.first == "" || ! child.second) continue;
-			treesize namelen = child.first.size();
+			uint16_t namelen = child.first.size();
 			zsr::serialize(out, namelen);
 			out.write(&child.first[0], namelen);
 			childpos.push_back(static_cast<zsr::offset>(out.tellp()));
@@ -90,46 +90,34 @@ namespace rsearch
 					stree_[convert.to_bytes(lctitle.substr(i))].insert(id);
 	}
 
-	std::unordered_map<std::string, zsr::offset> disktree::children()
+	std::unordered_map<std::string, zsr::offset> disktree::children(const char *&ptr)
 	{
 		std::unordered_map<std::string, zsr::offset> ret{};
-		treesize nchild;
-		zsr::deserialize(*in_, nchild);
+		treesize nchild = zsr::deser<treesize>(ptr);
 		for (treesize i = 0; i < nchild; i++)
 		{
-			treesize namelen;
-			zsr::deserialize(*in_, namelen);
-			std::string name{};
-			name.resize(namelen);
-			in_->read(reinterpret_cast<char *>(&name[0]), namelen);
-			zsr::offset loc;
-			zsr::deserialize(*in_, loc);
-			ret[name] = loc;
+			std::string_view name = zsr::deser<std::string_view>(ptr);
+			zsr::offset loc = zsr::deser<zsr::offset>(ptr);
+			ret[std::string{name}] = loc;
 		}
 		return ret;
 	}
 
-	std::unordered_set<zsr::filecount> disktree::values()
+	std::unordered_set<zsr::filecount> disktree::values(const char *&ptr)
 	{
 		std::unordered_set<zsr::filecount> ret{};
-		treesize nval;
-		zsr::deserialize(*in_, nval);
-		for (treesize i = 0; i < nval; i++)
-		{
-			zsr::filecount curval;
-			zsr::deserialize(*in_, curval);
-			ret.insert(curval);
-		}
+		treesize nval = zsr::deser<treesize>(ptr);
+		for (treesize i = 0; i < nval; i++) ret.insert(zsr::deser<zsr::filecount>(ptr));
 		return ret;
 	}
 
 	std::unordered_set<zsr::filecount> disktree::subtree_closure(zsr::offset nodepos)
 	{
 		std::unordered_set<zsr::filecount> ret{};
-		in_->seekg(start_ + nodepos);
-		if (! *in_) throw std::runtime_error{"Tried to seek outside of file"};
-		const std::unordered_map<std::string, zsr::offset> curchild = children();
-		const std::unordered_set<zsr::filecount> myval = values();
+		const char *inptr = base_ + nodepos;
+		// FIXME Bounds checking
+		const std::unordered_map<std::string, zsr::offset> curchild = children(inptr);
+		const std::unordered_set<zsr::filecount> myval = values(inptr);
 		ret.insert(myval.cbegin(), myval.cend());
 		for (const std::pair<const std::string, zsr::offset> &child : curchild)
 		{
@@ -146,9 +134,9 @@ namespace rsearch
 		std::string::size_type idx = 0;
 		while (idx < query.size())
 		{
-			in_->seekg(start_ + curnode);
+			const char *inptr = base_ + curnode;
 			curnode = 0;
-			for (const std::pair<const std::string, zsr::offset> &child : children())
+			for (const std::pair<const std::string, zsr::offset> &child : children(inptr))
 			{
 				std::string::size_type minlen = std::min(query.size() - idx, child.first.size());
 				if (query.substr(idx, minlen) == child.first.substr(0, minlen))
@@ -174,10 +162,10 @@ namespace rsearch
 	{
 		zsr::offset top = nodefind(query);
 		if (top == 0) return std::unordered_set<zsr::filecount>{};
-		in_->seekg(start_ + top);
-		if (! *in_) throw std::runtime_error{"Tried to seek outside of file"};
-		children();
-		return values();
+		const char *inptr = base_ + top;
+		// FIXME Bounds checking
+		children(inptr);
+		return values(inptr);
 	}
 }
 

@@ -14,8 +14,6 @@ namespace rsearch
 {
 	typedef uint32_t treesize;
 
-	typedef uint16_t namesize;
-
 	class disktree_writer
 	{
 	private:
@@ -30,17 +28,16 @@ namespace rsearch
 	class disktree
 	{
 	private:
-		std::istream *in_;
-		zsr::offset start_;
-		std::unordered_map<std::string, zsr::offset> children(); // Expects get pointer to be at beginning of child section
-		std::unordered_set<zsr::filecount> values(); // Expects get pointer to be at beginning of value section -- call children() first!
+		const char *base_;
+		std::unordered_map<std::string, zsr::offset> children(const char *&ptr); // Expects pointer to be at beginning of child section
+		std::unordered_set<zsr::filecount> values(const char *&ptr); // Expects pointer to be at beginning of value section -- call children() first!
 		std::unordered_set<zsr::filecount> subtree_closure(zsr::offset nodepos);
 		zsr::offset nodefind(const std::string &query);
 		void debug_print(zsr::offset off = 0, std::string prefix = "");
 	public:
-		disktree() : in_{nullptr}, start_{0} { }
-		disktree(std::istream &in, std::streampos start = 0) : in_{&in}, start_{static_cast<zsr::offset>(start)} { }
-		void init(std::istream &in, std::streampos start = 0) { in_ = &in; start_ = start; }
+		disktree() : base_{nullptr} { }
+		disktree(const std::string_view &in) : base_{&in[0]} { }
+		void init(const std::string_view &in) { base_ = &in[0]; }
 		std::unordered_set<zsr::filecount> search(const std::string &query);
 		std::unordered_set<zsr::filecount> exact_search(const std::string &query);
 	};

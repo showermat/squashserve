@@ -7,6 +7,7 @@
 #include <list>
 #include <tuple>
 #include <memory>
+#include <optional>
 #include <fstream>
 #include <stdexcept>
 #include <cstdint>
@@ -34,7 +35,7 @@ const std::string clrln{"\r\033[K"};
 
 namespace zsr
 {
-	const uint16_t version = 1;
+	constexpr uint16_t version = 1;
 
 	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
 	typedef uint64_t offset; // Constrains the size of the archive and individual files
@@ -46,8 +47,23 @@ namespace zsr
 
 	template<typename T> inline void serialize(std::ostream &out, const T &t) { out.write(reinterpret_cast<const char *>(&t), sizeof(t)); }
 	template <> inline void serialize<std::string>(std::ostream &out, const std::string &t) { out.write(reinterpret_cast<const char *>(&t[0]), t.size()); }
-	template<typename T> inline void deserialize(std::istream &in, T &t) { in.read(reinterpret_cast<char *>(&t), sizeof(t)); }
-	template <> inline void deserialize<std::string>(std::istream &in, std::string &t) { in.read(reinterpret_cast<char *>(&t[0]), t.size()); }
+	template<typename T> inline const T deser(const char *&ptr)
+	{
+		const T *ret = reinterpret_cast<const T *>(ptr);
+		ptr += sizeof(T);
+		return *ret;
+	}
+	inline const std::string_view deser_string(const char *&ptr, uint16_t len)
+	{
+		std::string_view ret{ptr, len};
+		ptr += len;
+		return ret;
+	}
+	template <> inline const std::string_view deser<std::string_view>(const char *&ptr)
+	{
+		uint16_t len = deser<uint16_t>(ptr);
+		return deser_string(ptr, len);
+	}
 
 	class archive;
 	class index;
@@ -127,86 +143,108 @@ namespace zsr
 		virtual ~writer();
 	};
 
+	class stream : public std::istream
+	{
+	private:
+		util::imemstream in_;
+		lzma::rdbuf buf_;
+		size_t size_, decomp_;
+	public:
+		stream(const std::string_view &in, size_t decomp) : in_{in}, buf_{}, size_{in.size()}, decomp_{decomp}
+		{
+			buf_.init(in_, 0, size_, decomp_);
+			rdbuf(&buf_);
+		}
+		stream(const stream &orig) = delete;
+		stream(stream &&orig) : in_{std::move(orig.in_)}, buf_{}, size_{orig.size_}, decomp_{orig.decomp_}
+		{
+			buf_.init(in_, 0, size_, decomp_);
+			rdbuf(&buf_);
+			orig.rdbuf(nullptr);
+		}
+	};
+
 	class node
 	{
 	public:
 		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
 	private:
-		archive &container_;
+		const archive &container_;
 		filecount id_;
 		std::vector<std::string> meta_;
-		std::function<std::string(const filecount &)> &revcheck_;
+		const std::function<std::string(const filecount &)> &revcheck_;
 		ntype type_;
 		offset parent_;
 		filecount redirect_;
 		std::string name_;
 		offset len_;
 		size_t fullsize_;
-		offset datastart_;
-		diskmap::map<std::string, filecount> childmap();
-		node follow(unsigned int limit = 0, unsigned int depth = 0); // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, close, extract (create a link)
+		const char *data_;
+		diskmap::map<std::string, filecount> childmap() const;
+		node follow(unsigned int limit = 0, unsigned int depth = 0) const; // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, extract (create a link)
 	public:
-		node(archive &container, offset idx);
-		node(const node &orig) = default; // Can these both be default?
+		node(const archive &container, offset idx);
+		node(const node &orig) = default;
 		node(node &&orig) = default;
+		//node &operator =(node &&orig) = default;
+		//node(node &&orig) = container_{orig.container_}, id_{orig.id_}, meta_{std::move(orig.meta_)}, revcheck_{orig.revcheck_}, type_{orig.type}, parent_{orig.parent_}, redirect_{orig.redirect_}, name_{std::move(orig.name_)},
+		//	len_{orig.len_}, fullsize_{orig.fullsize_}, data_{orig.data_} { }
 		filecount id() const { return id_; }
 		std::string name() const { return name_; }
-		std::unique_ptr<node> parent(); // Pending existence of std::optional
+		std::optional<node> parent() const;
 		ntype type() const { return type_; }
-		bool isdir() { return follow().type_ == ntype::dir; }
-		bool isreg() { return follow().type_ == ntype::reg; }
-		std::string path();
-		std::string dest() { return util::relreduce(util::dirname(path()), follow(1).path()); }
-		size_t size() { return follow().fullsize_; }
-		std::string meta(const std::string &key);
-		std::unordered_map<std::string, filecount> children();
-		filecount nchild() { return childmap().size(); }
-		filecount childid(filecount idx) { return childmap()[idx]; }
-		std::unique_ptr<node> child(const std::string &name); // TODO Pending std::optional
-		std::streambuf *content();
-		void close();
-		void extract(const std::string &path);
+		bool isdir() const { return follow().type_ == ntype::dir; }
+		bool isreg() const { return follow().type_ == ntype::reg; }
+		std::string path() const;
+		std::string dest() const { return util::relreduce(util::dirname(path()), follow(1).path()); }
+		size_t size() const { return follow().fullsize_; }
+		std::string meta(const std::string &key) const;
+		std::unordered_map<std::string, filecount> children() const;
+		filecount nchild() const { return childmap().size(); }
+		filecount childid(filecount idx) const { return childmap()[idx]; }
+		std::optional<node> child(const std::string &name) const;
+		stream content() const;
+		void extract(const std::string &path) const;
 	};
 
 	class childiter
 	{
 	private:
-		archive &ar;
-		node n;
+		const archive &ar;
+		const node n;
 		filecount idx;
 	public:
-		childiter(archive &a, node nd) : ar{a}, n{nd}, idx{0} { }
-		std::unordered_map<std::string, filecount> all();
-		iterator get();
+		childiter(const archive &a, node nd) : ar{a}, n{nd}, idx{0} { }
+		std::unordered_map<std::string, filecount> all() const;
+		iterator get() const;
 		void reset() { idx = 0; }
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
 		void operator +=(int i) { idx += i; }
 		void operator -=(int i) { idx -= i; }
 		bool operator ==(const childiter &other) const { return &n == &other.n && idx == other.idx; }
-		operator bool() { return idx >= 0 && idx < n.nchild(); }
+		operator bool() const { return idx >= 0 && idx < n.nchild(); }
 	};
 	
 	class iterator
 	{
 	private:
-		archive &ar;
+		const archive &ar;
 		filecount idx;
 		node getnode() const;
 	public:
-		iterator(archive &a, filecount i) : ar{a}, idx{i} { }
+		iterator(const archive &a, filecount i) : ar{a}, idx{i} { }
 		filecount id() const { return idx; }
 		std::string name() const { return getnode().name(); }
 		std::string path() const { return getnode().path(); }
 		bool isdir() const { return getnode().isdir(); }
 		bool isreg() const { return getnode().isreg(); }
 		node::ntype type() const { return getnode().type(); }
-		std::string meta(const std::string &key) const;
+		std::string meta(const std::string &key) const { return getnode().meta(key); }
 		childiter children() const { return childiter(ar, getnode()); }
 		std::string dest() const { return getnode().dest(); }
 		size_t size() const { return getnode().size(); }
-		std::streambuf *open();
-		void close() { getnode().close(); }
+		stream content() const { return getnode().content(); }
 		void reset() { idx = 0; }
 		void operator ++(int i) { idx++; }
 		void operator --(int i) { idx--; }
@@ -221,38 +259,32 @@ namespace zsr
 	public:
 		static const std::string magic_number;
 	private:
-		static std::ifstream default_istream_;
 		std::function<std::string(const filecount &)> revcheck = [this](const filecount &x) { return index(x).name(); };
-		std::ifstream in_;
-		offset idxstart_, datastart_;
+		util::mmap_guard in_;
+		const char *base_;
+		const char *idxstart_, *datastart_;
 		filecount size_;
 		std::unordered_map<std::string, std::string> archive_meta_;
 		std::vector<std::string> node_meta_;
-		std::unordered_map<filecount, lzma::rdbuf> open_;
-		std::unique_ptr<util::rangebuf> userdbuf_;
-		std::istream userd_;
-		std::string readstring();
-		node getnode(filecount idx) { return node{*this, idx}; }
-		std::unique_ptr<node> getnode(const std::string &path, bool except = false); // TODO Pending std::optional
+		std::string_view userd_;
+		node getnode(filecount idx) const { return node{*this, idx}; }
+		std::optional<node> getnode(const std::string &path, bool except = false) const;
 		unsigned int metaidx(const std::string &key) const;
 		friend class node;
 	public:
+		archive(const std::string &path);
 		archive(const archive &orig) = delete;
-		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_},
-			archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, open_{std::move(orig.open_)}, userdbuf_{std::move(orig.userdbuf_)}, userd_{&*userdbuf_}
-			{ orig.in_ = std::ifstream{}; orig.userd_.rdbuf(nullptr); }
-		archive(std::ifstream &&in);
+		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, base_{orig.base_}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_},
+			archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, userd_{std::move(orig.userd_)} { }
 		filecount size() const { return size_; }
 		const std::unordered_map<std::string, std::string> &gmeta() const { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
-		bool check(const std::string &path);
-		iterator get(const std::string &path) { return iterator{*this, getnode(path, true)->id()}; }
-		iterator index(filecount idx = 0) { return iterator{*this, idx}; }
-		void extract(const std::string &member = "", const std::string &dest = ".");
-		std::istream &userdata() { return userd_; }
-		void close(const std::string &path) { getnode(path, true)->close(); }
-		void reap() { open_.clear(); }
-		virtual ~archive() { reap(); }
+		bool check(const std::string &path) const;
+		iterator get(const std::string &path) const { return iterator{*this, getnode(path, true)->id()}; }
+		iterator index(filecount idx = 0) const { return iterator{*this, idx}; }
+		void extract(const std::string &member = "", const std::string &dest = ".") const;
+		const std::string_view &userdata() const { return userd_; }
+		virtual ~archive() { }
 	};
 }
 

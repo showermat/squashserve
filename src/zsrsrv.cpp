@@ -39,8 +39,7 @@ http::doc resource(const std::string &path, const std::unordered_map<std::string
 {
 	std::ostringstream ret{};
 	zsr::iterator file = resources->get(path); // Not checking if resources is null because it is set at program launch
-	ret << file.open();
-	file.close();
+	ret << file.content().rdbuf();
 	return http::doc(file.meta("type"), ret.str(), headers);
 }
 
@@ -318,9 +317,8 @@ int main(int argc, char **argv) try
 	prefs::init();
 	std::string rsrcpath = prefs::get("resources");
 	if (rsrcpath == "") rsrcpath = util::pathjoin({util::dirname(util::exepath()), "resources.zsr"});
-	std::ifstream rsrcfile{rsrcpath};
-	if (! rsrcfile) throw std::runtime_error{"Couldn't open resource archive at " + rsrcpath + "\n"};
-	resources.reset(new zsr::archive{std::move(rsrcfile)});
+	if (! util::fexists(rsrcpath)) throw std::runtime_error{"Can't find resource archive at " + rsrcpath + "\n"};
+	resources.reset(new zsr::archive{rsrcpath});
 	volumes.init(prefs::get("basedir"));
 	http::server{prefs::get("localonly") ? "127.0.0.1" : "0.0.0.0", static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
 	return 0;

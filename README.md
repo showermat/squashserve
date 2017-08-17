@@ -47,7 +47,7 @@ Build requirements are as follows:
 
   - Build configuration is done with CMake.
 
-  - A recent C++ compiler supporting C++14 is necessary.  I compiled with GCC 5.2.0.
+  - A recent C++ compiler supporting C++17 is necessary.  GCC 7.1.1 and later should work.
 
   - I have made no effort to develop code that will work on anything but Linux on an x86_64 architecture.  I may broaden this in the
     future.
@@ -139,7 +139,7 @@ To decompress a single file:
 `zsrutil` can also be used to list files in the archive and metadata concerning the archive.
 
 The encoder can also be used as a library in other C++ programs by including the header `zsr.h`.  The only classes you should have
-to deal with are `zsr::writer`, `zsr::archive`, and `zsr::iterator`.  Use as follows:
+to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, and `zsr::childiter`.  Use as follows:
 
     #include <fstream>
     #include <streambuf>
@@ -152,24 +152,22 @@ to deal with are `zsr::writer`, `zsr::archive`, and `zsr::iterator`.  Use as fol
     ar.write(out); // ...and write it out to an archive file.
     out.close();
 
-    zsr::archive ar{std::ifstream{"/data/volumes/wikipedia.zsr"}}; // Open the archive file...
+    zsr::archive ar{"/data/volumes/wikipedia.zsr"}; // Open the archive file...
     ar.extract("wiki", "/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
     if (ar.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive:
     {
         zsr::iterator it = ar.get("wiki/Douglas_Adams.html") // Get the archive node by path.
         std::string title = it.meta("title"); // Get metadata stored with the node.
-        std::streambuf *file = it.open(); // Get the stream of the file's contents...
+        zsr::stream file = it.content(); // Get the stream of the file's contents...
         std::ostringstream oss{};
-        oss << file; // ...extract it...
+        oss << file.rdbuf(); // ...extract it...
         std::string article = oss.str(); // ...and convert it to a string.
     }
-    ar.reap(); // Clean up file descriptors opened by zsr::iterator.open().
 
-The ZSR library does not provide a threadsafe interface, because C++ I/O streams are not threadsafe.  `zsr::archive` provides the
-user `std::istream`s and `std::streambuf`s for accessing archive data that all ultimately share the open archive file's single
-`std::istream`.  There is no way for `libzsr` to force these streams to be be used in a threadsafe way.  Rather than implementing
-some other interface for getting data from the archive, thread safety is left up to the user.  All accesses to the library must be
-serialized.
+The writing portion of the library is not threadsafe.  All functions in `archive` can be safely called from multiple threads.
+Functions in `iterator` and `childiter` that read but do not update the iterator can be called from multiple threads.  `stream` is
+not threadsafe.  However, it is safe to simultaneously use multiple `interator`s, `childiter`s and `streams`s that point to the
+same file in the archive.
 
 
 ## Creating Volumes
