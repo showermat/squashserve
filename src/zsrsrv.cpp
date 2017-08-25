@@ -17,22 +17,13 @@
 #include "http.h"
 #include "prefs.h"
 
-/* TODO:
- * ...
- *
- * Frame issues:
- *     Pressing enter in titlebar does not trigger hashchange and bring you back to the last anchor
- *     Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
- *     Browser doesn't remember your position on the page if you e.g. go back
- */
-
 class handle_error : public std::runtime_error
 {
 public:
 	handle_error(const std::string &msg) : runtime_error{msg} { }
 };
 
-std::unique_ptr<zsr::archive> resources{};
+std::unique_ptr<const zsr::archive> resources{};
 Volmgr volumes{};
 
 http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})

@@ -13,7 +13,7 @@
 #include <mutex>
 #include "zsr.h"
 
-std::unique_ptr<zsr::archive> ar{};
+std::unique_ptr<const zsr::archive> ar{};
 
 void help_exit()
 {
@@ -146,7 +146,7 @@ int fs_getxattr(const char *path, const char *name, char *value, size_t size)
 	std::string attrname = namestr.substr(5);
 	try
 	{
-		if (path == std::string{"/"})
+		if (pathstr == std::string{"/"})
 		{
 			if (! ar->gmeta().count(attrname)) return -ENOATTR;
 			val = ar->gmeta().at(attrname);

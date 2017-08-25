@@ -30,14 +30,14 @@ int main(int argc, char **argv) try
 	else if (args[1] == "x")
 	{
 		if (args.size() < 3) help_exit();
-		zsr::archive ar{args[2]};
+		const zsr::archive ar{args[2]};
 		if (args.size() < 4) ar.extract();
 		else ar.extract(args[3]);
 	}
 	else if (args[1] == "i")
 	{
 		if (args.size() < 3) help_exit();
-		zsr::archive ar{args[2]};
+		const zsr::archive ar{args[2]};
 		unsigned int maxwidth = 0;
 		if (args.size() > 3)
 		{
@@ -55,7 +55,7 @@ int main(int argc, char **argv) try
 	else if (args[1] == "l")
 	{
 		if (args.size() < 3) help_exit();
-		zsr::archive ar{args[2]};
+		const zsr::archive ar{args[2]};
 		//for (const std::pair<const std::string, zsr::filecount> &child : ar.get(args.size() > 3 ? args[3] : "").children())
 		for (zsr::childiter children = ar.get(args.size() > 3 ? args[3] : "").children(); children; children++)
 		{

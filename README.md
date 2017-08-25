@@ -164,10 +164,10 @@ to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, 
         std::string article = oss.str(); // ...and convert it to a string.
     }
 
-The writing portion of the library is not threadsafe.  All functions in `archive` can be safely called from multiple threads.
-Functions in `iterator` and `childiter` that read but do not update the iterator can be called from multiple threads.  `stream` is
-not threadsafe.  However, it is safe to simultaneously use multiple `interator`s, `childiter`s and `streams`s that point to the
-same file in the archive.
+The writing portion of the library is not threadsafe; the reading portion is.  All functions in `archive` can be safely called from
+multiple threads.  Functions in `iterator` and `childiter` that read but do not update the iterator can be called from multiple
+threads.  `stream` is not threadsafe.  However, it is safe to simultaneously use multiple `interator`s, `childiter`s and `streams`s
+that point to the same file in the archive.
 
 
 ## Creating Volumes
@@ -245,7 +245,8 @@ Volumes and standard ZSR archives can be mounted as read-only filesystems throug
 
 This will make the archive browsable like a normal directory.  Files and directory subtrees can be transparently extracted by
 copying them out of the mounted archive with a file manager or `cp`.  File metadata are available as xattrs (use `getfattr -d
-filename` to view them all), and the archive metadata are available as the xattrs of the mountpoint.  Unmount with `fusermount -u`:
+filename` to list attributes for a file, and be sure to add `-e text` if any are encoded in UTF-8), and the archive metadata are
+available as the xattrs of the mountpoint.  Unmount with `fusermount -u`:
 
     $ fusermount -u ~/mnt
 
