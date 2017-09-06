@@ -3,7 +3,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "util/util.h"
-#include "zsr.h"
+#include "zsr/zsr.h"
+#include "zsr/writer.h"
 #include "Volume.h"
 
 void help_exit()

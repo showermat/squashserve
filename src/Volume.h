@@ -15,7 +15,8 @@
 #include <unistd.h>
 #include "util/util.h"
 #include "util/lua.h"
-#include "zsr.h"
+#include "zsr/zsr.h"
+#include "zsr/writer.h"
 #include "search.h"
 #include "fileinclude.h"
 #ifdef ZSR_USE_XAPIAN

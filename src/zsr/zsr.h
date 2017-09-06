@@ -4,67 +4,17 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
-#include <list>
-#include <tuple>
 #include <memory>
 #include <optional>
-#include <fstream>
 #include <stdexcept>
 #include <cstdint>
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include <ctime>
-#include <dirent.h>
-#include <errno.h>
-#include <string.h>
-#include "util/util.h"
-#include "compress.h"
-#include "diskmap.h"
-
-#define VERBOSE
-
-#ifdef VERBOSE
-const std::string clrln{"\r\033[K"};
-#define loga(msg) std::cout << clrln << util::timestr() << ": " << msg << std::endl
-#define logb(msg) std::cout << clrln << msg << std::flush
-#else
-#define loga(msg)
-#define logb(msg)
-#endif
+#include "common.h"
 
 namespace zsr
 {
-	constexpr uint16_t version = 1;
-
-	typedef uint64_t filecount; // Constrains the maximum number of files in an archive
-	typedef uint64_t offset; // Constrains the size of the archive and individual files
-
-	//bool verbose = false;
-	//const std::string clrln{"\r\033[K"};
-	//inline void loga(const std::string &msg) { if (verbose) std::cout << clrln << util::timestr() << ": " << msg << std::endl; }
-	//inline void logb(const std::string &msg) { if (verbose) std::cout << clrln << msg << std::flush; }
-
-	template<typename T> inline void serialize(std::ostream &out, const T &t) { out.write(reinterpret_cast<const char *>(&t), sizeof(t)); }
-	template <> inline void serialize<std::string>(std::ostream &out, const std::string &t) { out.write(reinterpret_cast<const char *>(&t[0]), t.size()); }
-	template<typename T> inline const T deser(const char *&ptr)
-	{
-		const T *ret = reinterpret_cast<const T *>(ptr);
-		ptr += sizeof(T);
-		return *ret;
-	}
-	inline const std::string_view deser_string(const char *&ptr, uint16_t len)
-	{
-		std::string_view ret{ptr, len};
-		ptr += len;
-		return ret;
-	}
-	template <> inline const std::string_view deser<std::string_view>(const char *&ptr)
-	{
-		uint16_t len = deser<uint16_t>(ptr);
-		return deser_string(ptr, len);
-	}
-
 	class archive;
 	class index;
 	class iterator;
@@ -73,74 +23,6 @@ namespace zsr
 	{
 	public:
 		badzsr(std::string msg) : runtime_error{msg} { }
-	};
-
-	class writer
-	{
-	public:
-		class filenode
-		{
-		private:
-			writer &owner_;
-			const filecount id_;
-			const std::string path_;
-			const struct stat &stat_;
-		public:
-			filenode(writer &owner, const filecount id, const std::string &path, const struct stat &s) : owner_{owner}, id_{id}, path_{path}, stat_{s} { }
-			filecount id() const { return id_; }
-			const std::string &path() const { return path_; }
-			const struct stat &stat() const { return stat_; }
-		};
-		enum class linkpolicy { process, follow, skip };
-	private:
-		class linkmgr
-		{
-		public:
-			struct linkinfo
-			{
-				bool resolved;
-				std::streampos destpos;
-				filecount destid;
-				linkinfo() : resolved{false}, destpos{}, destid{} { }
-			};
-		private:
-			std::string root_;
-			std::list<linkinfo> links_;
-			std::unordered_map<std::string, linkinfo *> by_src_;
-			std::unordered_multimap<std::string, linkinfo *> by_dest_;
-			void add(const std::string &src, const std::string &dest);
-			static bool walk_add(const std::string &path, const struct stat *st, void *dest);
-		public:
-			linkmgr(const std::string root) : root_{root} { }
-			void search();
-			void handle_src(const std::string &path, std::streampos destpos);
-			void handle_dest(const std::string &path, filecount id);
-			void write(std::ostream &out);
-			size_t size() { return links_.size(); }
-		};
-		const std::string root_, fullroot_;
-		linkpolicy linkpol_;
-		std::unordered_map<std::string, std::string> volmeta_;
-		std::vector<std::string> nodemeta_;
-		std::function<std::vector<std::string>(const filenode &)> metagen_;
-		std::istream *userdata_;
-		std::string headf_, contf_, idxf_;
-		filecount nfile_;
-		linkmgr links_;
-		void writestring(const std::string &s, std::ostream &out);
-		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
-	public:
-		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{},
-			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_} { }
-		void userdata(std::istream &data) { userdata_ = &data; }
-		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
-		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
-		void node_meta(const std::vector<std::string> keys, std::function<std::unordered_map<std::string, std::string>(const filenode &)> generator);
-		void write_body(const std::string &contname = "content.zsr.tmp", const std::string &idxname = "index.zsr.tmp");
-		void write_header(const std::string &tmpfname = "header.zsr.tmp");
-		void combine(std::ofstream &out);
-		void write(std::ofstream &out);
-		virtual ~writer();
 	};
 
 	class stream : public std::istream
@@ -256,8 +138,6 @@ namespace zsr
 
 	class archive
 	{
-	public:
-		static const std::string magic_number;
 	private:
 		std::function<std::string(const filecount &)> revcheck = [this](const filecount &x) { return index(x).name(); };
 		util::mmap_guard in_;

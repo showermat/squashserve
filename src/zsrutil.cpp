@@ -1,6 +1,7 @@
 #include <iostream>
 #include <iomanip>
-#include "zsr.h"
+#include "zsr/zsr.h"
+#include "zsr/writer.h"
 #include "util/lua.h"
 
 void help_exit()

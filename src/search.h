@@ -8,7 +8,7 @@
 #include <deque>
 #include <locale>
 #include "../lib/radix_tree/radix_tree.hpp" // Thanks to github/ytakano
-#include "zsr.h"
+#include "zsr/zsr.h"
 
 namespace rsearch
 {

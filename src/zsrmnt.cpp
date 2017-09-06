@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <memory>
 #include <mutex>
-#include "zsr.h"
+#include "zsr/zsr.h"
 
 std::unique_ptr<const zsr::archive> ar{};
 

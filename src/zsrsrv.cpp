@@ -12,7 +12,7 @@
 #include "../lib/json/json.hpp" // Thanks to github/nlohmann
 #include "util/util.h"
 #include "util/template.h"
-#include "zsr.h"
+#include "zsr/zsr.h"
 #include "Volume.h"
 #include "http.h"
 #include "prefs.h"
