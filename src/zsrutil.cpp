@@ -23,7 +23,7 @@ int main(int argc, char **argv) try
 		{
 			info.load(args[4]);
 			ar.volume_meta(info.table_iter("params").tomap<std::string, std::string>());
-			ar.node_meta(info.table_iter("metanames").tovec<std::string>(), [&info](const zsr::writer::filenode &file) { return info.calltbl("meta", file.path()).tomap<std::string, std::string>(); });
+			ar.node_meta(info.table_iter("metanames").tovec<std::string>(), [&info](const zsr::filenode &file) { return info.calltbl("meta", file.path()).tomap<std::string, std::string>(); });
 		}
 		std::ofstream out{args[3]};
 		ar.write(out);

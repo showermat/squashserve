@@ -7,51 +7,52 @@
 
 namespace zsr
 {
+	class filenode
+	{
+	public:
+		enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
+	private:
+		const filecount id_;
+		const std::string path_;
+		const struct stat &stat_;
+	public:
+		filenode(const filecount id, const std::string &path, const struct stat &s) : id_{id}, path_{path}, stat_{s} { }
+		filecount id() const { return id_; }
+		const std::string &path() const { return path_; }
+		const struct stat &stat() const { return stat_; }
+	};
+
+	class linkmgr
+	{
+	public:
+		struct linkinfo
+		{
+			bool resolved;
+			std::streampos destpos;
+			filecount destid;
+			linkinfo() : resolved{false}, destpos{}, destid{} { }
+		};
+	private:
+		std::string root_;
+		std::list<linkinfo> links_;
+		std::unordered_map<std::string, linkinfo *> by_src_;
+		std::unordered_multimap<std::string, linkinfo *> by_dest_;
+		void add(const std::string &src, const std::string &dest);
+		static bool walk_add(const std::string &path, const struct stat *st, void *dest);
+	public:
+		linkmgr(const std::string root) : root_{root} { }
+		void search();
+		void handle_src(const std::string &path, std::streampos destpos);
+		void handle_dest(const std::string &path, filecount id);
+		void write(std::ostream &out);
+		size_t size() { return links_.size(); }
+	};
+
 	class writer
 	{
 	public:
-		class filenode
-		{
-		public:
-			enum class ntype : char {unk = 0, dir = 1, reg = 2, link = 3};
-		private:
-			writer &owner_;
-			const filecount id_;
-			const std::string path_;
-			const struct stat &stat_;
-		public:
-			filenode(writer &owner, const filecount id, const std::string &path, const struct stat &s) : owner_{owner}, id_{id}, path_{path}, stat_{s} { }
-			filecount id() const { return id_; }
-			const std::string &path() const { return path_; }
-			const struct stat &stat() const { return stat_; }
-		};
 		enum class linkpolicy { process, follow, skip };
 	private:
-		class linkmgr
-		{
-		public:
-			struct linkinfo
-			{
-				bool resolved;
-				std::streampos destpos;
-				filecount destid;
-				linkinfo() : resolved{false}, destpos{}, destid{} { }
-			};
-		private:
-			std::string root_;
-			std::list<linkinfo> links_;
-			std::unordered_map<std::string, linkinfo *> by_src_;
-			std::unordered_multimap<std::string, linkinfo *> by_dest_;
-			void add(const std::string &src, const std::string &dest);
-			static bool walk_add(const std::string &path, const struct stat *st, void *dest);
-		public:
-			linkmgr(const std::string root) : root_{root} { }
-			void search();
-			void handle_src(const std::string &path, std::streampos destpos);
-			void handle_dest(const std::string &path, filecount id);
-			void write(std::ostream &out);
-			size_t size() { return links_.size(); }
-		};
 		const std::string root_, fullroot_;
 		linkpolicy linkpol_;
 		std::unordered_map<std::string, std::string> volmeta_;

@@ -56,13 +56,12 @@ namespace zsr
 		serialize(contout, parent);
 		serialize(contout, type);
 		writestring(util::basename(path), contout);
-		const std::vector<std::string> metad = metagen_(filenode(*this, id, path, s));
+		const std::vector<std::string> metad = metagen_(filenode(id, path, s));
 		if (type == filenode::ntype::reg)
 		{
-			offset fullsize = static_cast<offset>(util::fsize(path));
 			if (metad.size() != nodemeta_.size()) throw std::runtime_error{"Number of generated metadata does not match number of file metadata keys"};
 			for (const std::string &val : metad) writestring(val, contout);
-			serialize(contout, fullsize);
+			serialize(contout, static_cast<offset>(util::fsize(path)));
 			std::streampos sizepos = contout.tellp();
 			serialize(contout, ptrfill); // Placeholder for length
 			lzma::wrbuf compressor{in};
@@ -110,7 +109,7 @@ namespace zsr
 		return id;
 	}
 
-	void writer::linkmgr::add(const std::string &src, const std::string &dest)
+	void linkmgr::add(const std::string &src, const std::string &dest)
 	{
 		links_.push_back(linkinfo{});
 		linkinfo *inserted = &links_.back();
@@ -118,7 +117,7 @@ namespace zsr
 		by_dest_.insert(std::make_pair(dest, inserted));
 	}
 
-	bool writer::linkmgr::walk_add(const std::string &path, const struct stat *st, void *arg)
+	bool linkmgr::walk_add(const std::string &path, const struct stat *st, void *arg)
 	{
 		linkmgr *caller = (linkmgr *) arg;
 		if ((st->st_mode & S_IFMT) == S_IFLNK)
@@ -132,19 +131,19 @@ namespace zsr
 		return true;
 	}
 
-	void writer::linkmgr::search()
+	void linkmgr::search()
 	{
 		util::fswalk(root_, walk_add, (void *) this, false);
 	}
 
-	void writer::linkmgr::handle_src(const std::string &path, std::streampos destpos)
+	void linkmgr::handle_src(const std::string &path, std::streampos destpos)
 	{
 		std::unordered_map<std::string, linkinfo *>::iterator iter = by_src_.find(path);
 		if (iter == by_src_.end()) throw std::runtime_error{"Couldn't find " + path + " in link table"};
 		iter->second->destpos = destpos;
 	}
 
-	void writer::linkmgr::handle_dest(const std::string &path, filecount id)
+	void linkmgr::handle_dest(const std::string &path, filecount id)
 	{
 		std::pair<std::unordered_map<std::string, linkinfo *>::iterator, std::unordered_map<std::string, linkinfo *>::iterator> range = by_dest_.equal_range(path);
 		for (std::unordered_map<std::string, linkinfo *>::iterator iter = range.first; iter != range.second; iter++)
@@ -165,7 +164,7 @@ namespace zsr
 		};
 	}
 
-	void writer::linkmgr::write(std::ostream &out)
+	void linkmgr::write(std::ostream &out)
 	{
 		size_t total = by_src_.size();
 		size_t done = 0;

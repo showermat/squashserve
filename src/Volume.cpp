@@ -108,7 +108,7 @@ const std::string Volwriter::default_metagen{"function meta(path, ftype) return 
 
 const std::string Volwriter::default_metanames{"metanames = {\"title\", \"type\"}"};
 
-std::vector<std::string> Volwriter::meta(const zsr::writer::filenode &n)
+std::vector<std::string> Volwriter::meta(const zsr::filenode &n)
 {
 	int ftype = 0;
 	if ((n.stat().st_mode & S_IFMT) == S_IFDIR) ftype = 1;
@@ -161,7 +161,7 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 	if (! info.exists("metanames")) info.loadstr(default_metanames);
 	volmeta = info.table_iter("params").tomap<std::string, std::string>();
 	archwriter.volume_meta(volmeta);
-	std::function<std::vector<std::string>(const zsr::writer::filenode &)> meta_callback = [this](const zsr::writer::filenode &n) { return this->meta(n); };
+	std::function<std::vector<std::string>(const zsr::filenode &)> meta_callback = [this](const zsr::filenode &n) { return this->meta(n); };
 	metanames = info.table_iter("metanames").tovec<std::string>();
 	archwriter.node_meta(metanames, meta_callback);
 #ifdef ZSR_USE_XAPIAN

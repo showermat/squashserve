@@ -68,9 +68,6 @@ namespace zsr
 		node(const archive &container, offset idx);
 		node(const node &orig) = default;
 		node(node &&orig) = default;
-		//node &operator =(node &&orig) = default;
-		//node(node &&orig) = container_{orig.container_}, id_{orig.id_}, meta_{std::move(orig.meta_)}, revcheck_{orig.revcheck_}, type_{orig.type}, parent_{orig.parent_}, redirect_{orig.redirect_}, name_{std::move(orig.name_)},
-		//	len_{orig.len_}, fullsize_{orig.fullsize_}, data_{orig.data_} { }
 		filecount id() const { return id_; }
 		std::string name() const { return name_; }
 		std::optional<node> parent() const;

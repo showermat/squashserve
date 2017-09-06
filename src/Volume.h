@@ -62,7 +62,7 @@ private:
 #ifdef ZSR_USE_XAPIAN
 	Xapwriter xap;
 #endif
-	std::vector<std::string> meta(const zsr::writer::filenode &n);
+	std::vector<std::string> meta(const zsr::filenode &n);
 public:
 	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol);
 	Volwriter(const Volwriter &orig) = delete;
