@@ -26,6 +26,16 @@ public:
 std::unique_ptr<const zsr::archive> resources{};
 Volmgr volumes{};
 
+std::string inject(const std::string &page, const std::string &payload, const std::regex after = std::regex{"<\\s*body[^>]*>", std::regex_constants::ECMAScript | std::regex_constants::icase})
+{
+	std::vector<std::string> parts{};
+	for (std::sregex_token_iterator iter{page.begin(), page.end(), after, {-1, 0}}; iter != std::sregex_token_iterator{}; iter++) parts.push_back(iter->str());
+	if (parts.size() != 3) return page;
+	std::ostringstream ret{};
+	ret << parts[0] << parts[1] << payload << parts[2];
+	return ret.str();
+}
+
 http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})
 {
 	std::ostringstream ret{};
@@ -72,7 +82,7 @@ http::doc home(bool privileged)
 	{
 		std::unordered_map<std::string, std::string> curtokens = volumes.tokens(cat);
 		if (volumes.loaded(cat)) curtokens["loaded"] = "";
- 		buf << templ::render(sects[1], curtokens) << sects[2];
+		buf << templ::render(sects[1], curtokens) << sects[2];
 		if (volumes.loaded(cat)) buf << loadcat(cat).content();
 		buf << sects[4] << templ::render(sects[5], curtokens);
 	}
@@ -151,20 +161,18 @@ http::doc shuffle(Volume &vol)
 	return http::redirect(http::mkpath({"view", vol.id(), vol.shuffle()}));
 }
 
-http::doc view(Volume &vol, const std::string &path)
-{
-	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
-	http::doc ret = resource("html/view.html");
-	ret.content(templ::render(ret.content(), vol.tokens(path)));
-	return ret;
-}
-
-http::doc content(Volume &vol, const std::string &path)
+http::doc content(Volume &vol, const std::string &path, bool toolbar = false)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"content", vol.id(), vol.info("home")}));
 	try
 	{
 		std::pair<std::string, std::string> contpair = vol.get(path);
+		if (toolbar && contpair.first == "text/html")
+		{
+			http::doc toolbar = resource("html/toolbar.html");
+			toolbar.content(templ::render(toolbar.content(), vol.tokens(path)));
+			contpair.second = inject(contpair.second, toolbar.content());
+		}
 		return http::doc{contpair.first, contpair.second};
 	}
 	catch (Volume::error &e) { return error(e.header(), e.body()); }
@@ -268,7 +276,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 			else input = util::urldecode(std::string{start, url.end()});
 			std::string input_qstr = input + (querystr.size() ? "?" + querystr : "");
 			if (path[0] == "search") return search(volumes.get(path[1]), input_qstr);
-			else if (path[0] == "view") return view(volumes.get(path[1]), input_qstr);
+			else if (path[0] == "view") return content(volumes.get(path[1]), input, true);
 			else if (path[0] == "complete") return complete(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "titles") return titles(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "shuffle") return shuffle(volumes.get(path[1]));

@@ -15,7 +15,7 @@ function clearform(volid)
 	return true;
 }
 
-function autocomplete(elem, volid, newtab = false)
+function autocomplete(elem, volid, newtab)
 {
 	var matcher = match(volid);
 	matcher.initialize();
@@ -35,3 +35,19 @@ function autocomplete(elem, volid, newtab = false)
 	//$("p.tt-footer a").on("click", function() { $(this).attr("href", $(this).attr("href") + elem.val()); })
 }
 
+function search_setup(page, input, submit, newtab = false)
+{
+	$(input).val("");
+	$(input).each(function() { autocomplete($(this), $(this).parent().data("volid"), newtab); });
+	$(submit).on('submit', function() {
+		var query = $(this).find(input).val();
+		var location = "/" + page + "/" + $(this).data("volid") + "/" + encodeURIComponent(query);
+		if (newtab)
+		{
+			window.open(location);
+			clearform($(this).data("volid"));
+		}
+		else window.location = location;
+		return false;
+	});
+}

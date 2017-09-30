@@ -1,0 +1,80 @@
+i.fa
+{
+	color: black;
+}
+
+div#zsr-topbar
+{
+	position: fixed;
+	z-index: 10;
+	top: 8px;
+	right: 8px;
+	height: 32px;
+	border: none;
+}
+div#zsr-toolbar
+{
+	width: 100%;
+	height: 100%;
+	display: flex;
+	opacity: 0.4;
+	background: rgba(192, 192, 192, 0.6);
+	flex-flow: row nowrap;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 8pt;
+}
+
+div#zsr-toolbar:hover
+{
+	opacity: 1;
+}
+
+div.zsr-toolbar-expand
+{
+	flex: 1 1 auto;
+}
+
+div.zsr-toolbar-spacer
+{
+	width: 8px;
+}
+
+a.zsr-toolbar-button
+{
+	display: block;
+	margin: 0px 12px;
+	margin-top: 2px;
+}
+
+a.zsr-close-button
+{
+	display: block;
+	width: 16px;
+	height: 16px;
+	padding: 0px 16px;
+}
+
+a.zsr-close-button img
+{
+	width: 100%;
+	height: 100%;
+}
+
+form#zsr-search
+{
+	height: 16px;
+	margin: 0px;
+}
+
+form#zsr-search button, form#zsr-search input
+{
+	height: 100%;
+	border: 1px solid #aaa;
+	line-height: 100%;
+}
+
+form#zsr-search button
+{
+	padding: 0px 6px;
+}
