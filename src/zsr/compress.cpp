@@ -168,4 +168,3 @@ namespace lzma
 		init(file, start, size, decomp);
 	}
 }
-

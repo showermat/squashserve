@@ -39,7 +39,7 @@ std::string inject(const std::string &page, const std::string &payload, const st
 http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})
 {
 	std::ostringstream ret{};
-	zsr::iterator file = resources->get(path); // Not checking if resources is null because it is set at program launch
+	zsr::node file = resources->get(path); // Not checking if resources is null because it is set at program launch
 	ret << file.content().rdbuf();
 	return http::doc(file.meta("type"), ret.str(), headers);
 }
@@ -327,4 +327,3 @@ catch (std::exception &e)
 	std::cerr << "Error: " << e.what() << "\n";
 	return 1;
 }
-

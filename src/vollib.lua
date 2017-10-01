@@ -41,4 +41,3 @@ function default_meta(path, ftype)
 	end
 	return ret
 end
-

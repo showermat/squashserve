@@ -20,4 +20,3 @@ $(document).ready(function() {
 	});
 	search_setup("search", ".search-input", ".search", true);
 });
-

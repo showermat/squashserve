@@ -71,4 +71,3 @@ namespace lzma
 }
 
 #endif
-

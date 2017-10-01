@@ -139,7 +139,7 @@ To decompress a single file:
 `zsrutil` can also be used to list files in the archive and metadata concerning the archive.
 
 The encoder can also be used as a library in other C++ programs by including the header `zsr.h`.  The only classes you should have
-to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, and `zsr::childiter`.  Use as follows:
+to deal with are `zsr::writer`, `zsr::archive`, `zsr::node`, `zsr::iterator`, `zsr::stream`.  Use as follows:
 
     #include <fstream>
     #include <streambuf>
@@ -153,21 +153,21 @@ to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, 
     out.close();
 
     zsr::archive ar{"/data/volumes/wikipedia.zsr"}; // Open the archive file...
-    ar.extract("wiki", "/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
+    ar.get("wiki").extract("/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
     if (ar.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive:
     {
-        zsr::iterator it = ar.get("wiki/Douglas_Adams.html") // Get the archive node by path.
-        std::string title = it.meta("title"); // Get metadata stored with the node.
-        zsr::stream file = it.content(); // Get the stream of the file's contents...
+        zsr::node n = ar.get("wiki/Douglas_Adams.html") // Get the archive node by path.
+        std::string title = n.meta("title"); // Get metadata stored with the node.
+        zsr::stream file = n.content(); // Get the stream of the file's contents...
         std::ostringstream oss{};
         oss << file.rdbuf(); // ...extract it...
         std::string article = oss.str(); // ...and convert it to a string.
     }
 
-The writing portion of the library is not threadsafe; the reading portion is.  All functions in `archive` can be safely called from
-multiple threads.  Functions in `iterator` and `childiter` that read but do not update the iterator can be called from multiple
-threads.  `stream` is not threadsafe.  However, it is safe to simultaneously use multiple `interator`s, `childiter`s and `streams`s
-that point to the same file in the archive.
+The writing portion of the library is not threadsafe; the reading portion is.  All functions in `archive` and `node` can be safely
+called from multiple threads.  Functions in `iterator` that read but do not update the iterator can be called from multiple threads.
+`stream` is not threadsafe.  However, it is safe to simultaneously use multiple `node`s, `iterator`s, and `streams`s that point to
+the same file in the archive.
 
 
 ## Creating Volumes
@@ -382,4 +382,3 @@ be useful.
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.
     The original can be obtained from <https://github.com/jquery/jquery>.
-

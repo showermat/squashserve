@@ -324,4 +324,3 @@ infofile = open(os.path.join(rootdir, metadir, infoname), "w")
 infofile.write(info)
 infofile.close()
 subprocess.call(["convert", "-density", "200", "-background", "none", faviconsrc, "-resize", "120x120", "-gravity", "center", "-extent", "128x128", os.path.join(rootdir, metadir, faviconname)], shell=False)
-

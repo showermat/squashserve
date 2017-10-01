@@ -74,5 +74,3 @@ if res.status_code != 200:
 	exit(2);
 volid = res.text;
 if "DISPLAY" in os.environ: subprocess.call(["xdg-open", viewurl % (volid)])
-
-

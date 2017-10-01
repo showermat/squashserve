@@ -32,8 +32,8 @@ int main(int argc, char **argv) try
 	{
 		if (args.size() < 3) help_exit();
 		const zsr::archive ar{args[2]};
-		if (args.size() < 4) ar.extract();
-		else ar.extract(args[3]);
+		if (args.size() < 4) ar.get("/").extract(".");
+		else ar.get(args[3]).extract(".");
 	}
 	else if (args[1] == "i")
 	{
@@ -42,7 +42,7 @@ int main(int argc, char **argv) try
 		unsigned int maxwidth = 0;
 		if (args.size() > 3)
 		{
-			zsr::iterator n = ar.get(args[3]);
+			zsr::node n = ar.get(args[3]);
 			for (const std::string &key : ar.nodemeta()) if (key.size() > maxwidth) maxwidth = key.size();
 			for (const std::string &key : ar.nodemeta()) if (n.meta(key).size()) std::cout << std::setw(maxwidth) << key << ":  " << n.meta(key) << "\n";
 			return 0;
@@ -58,9 +58,9 @@ int main(int argc, char **argv) try
 		if (args.size() < 3) help_exit();
 		const zsr::archive ar{args[2]};
 		//for (const std::pair<const std::string, zsr::filecount> &child : ar.get(args.size() > 3 ? args[3] : "").children())
-		for (zsr::childiter children = ar.get(args.size() > 3 ? args[3] : "").children(); children; children++)
+		for (zsr::iterator children = ar.get(args.size() > 3 ? args[3] : "").children(); children; children++)
 		{
-			zsr::iterator child = children.get();
+			zsr::node child = children.get();
 			std::cout << child.name();
 			zsr::node::ntype type = child.type();
 			if (type == zsr::node::ntype::dir) std::cout << "/";
@@ -76,4 +76,3 @@ catch (std::exception &e)
 	std::cerr << "Error: " << e.what() << "\n";
 	return 1;
 }
-

@@ -114,4 +114,3 @@ namespace http
 		mg_mgr_free(&mgr);
 	}
 }
-

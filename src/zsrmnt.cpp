@@ -50,7 +50,7 @@ int fs_release(const char *path, struct fuse_file_info *info)
 
 int fs_readlink(const char *path, char *buf, size_t size)
 {
-	const zsr::iterator n = ar->get(std::string{path});
+	const zsr::node n = ar->get(std::string{path});
 	if (n.type() != zsr::node::ntype::link) return -EINVAL;
 	strncpy(buf, n.dest().c_str(), size - 1);
 	buf[size - 1] = 0; // This isn't the behvaior described in the manpage....
@@ -63,9 +63,9 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	try
 	{
 		//for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
-		for (zsr::childiter children = ar->get(std::string{path}).children(); children; children++)
+		for (zsr::iterator children = ar->get(std::string{path}).children(); children; children++)
 		{
-			zsr::iterator child = children.get();
+			zsr::node child = children.get();
 			dirent dir;
 			strncpy(dir.d_name, child.name().c_str(), 256); // TODO Path name length limit?
 			zsr::node::ntype type = child.type();
@@ -88,7 +88,7 @@ int fs_getattr(const char *path, struct stat *stat)
 	stat->st_nlink = 1;
 	try
 	{
-		const zsr::iterator n = ar->get(std::string{path});
+		const zsr::node n = ar->get(std::string{path});
 		if (n.type() == zsr::node::ntype::dir) stat->st_mode = S_IFDIR;
 		else if (n.type() == zsr::node::ntype::reg)
 		{
@@ -119,7 +119,7 @@ int fs_listxattr(const char *path, char *list, size_t size) // FIXME Metadata co
 		}
 		else
 		{
-			const zsr::iterator n = ar->get(pathstr);
+			const zsr::node n = ar->get(pathstr);
 			if (n.isdir()) return 0;
 			for (const std::string &key : ar->nodemeta())
 			{
@@ -153,7 +153,7 @@ int fs_getxattr(const char *path, const char *name, char *value, size_t size)
 		}
 		else
 		{
-			const zsr::iterator n = ar->get(pathstr);
+			const zsr::node n = ar->get(pathstr);
 			try { val = n.meta(attrname); }
 			catch (std::runtime_error &e) { return -ENOATTR; }
 			if (! val.size()) return -ENOATTR;
@@ -198,4 +198,3 @@ int main(int argc, char **argv)
 	ops.removexattr = fs_removexattr;
 	return fuse_main(argc, argv, &ops, nullptr);
 }
-

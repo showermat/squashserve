@@ -2,8 +2,22 @@
 
 namespace zsr
 {
+	stream::stream(const std::string_view &in, size_t decomp) : in_{in}, buf_{}, size_{in.size()}, decomp_{decomp}
+	{
+		buf_.init(in_, 0, size_, decomp_);
+		rdbuf(&buf_);
+	}
+
+	stream::stream(stream &&orig) : in_{std::move(orig.in_)}, buf_{}, size_{orig.size_}, decomp_{orig.decomp_}
+	{
+		buf_.init(in_, 0, size_, decomp_);
+		rdbuf(&buf_);
+		orig.rdbuf(nullptr);
+	}
+
 	node::node(const archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
+		if (idx >= container.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(container.size()) + ")");
 		const char *inptr = container_.idxstart_ + idx * sizeof(offset);
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
 		offset start = deser<offset>(inptr);
@@ -15,11 +29,11 @@ namespace zsr
 		else if (type_ == ntype::reg)
 		{
 			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(std::string{deser<std::string_view>(inptr)});
-			fullsize_ = deser<size_t>(inptr);
+			fullsize_ = deser<offset>(inptr);
 			len_ = deser<offset>(inptr);
 		}
 		data_ = inptr;
-		//std::cerr << "Node " << id_ << ": " << name_ << "@" << std::hex << start << "[" << std::dec << len_ << "]" << "\n";
+		//std::cerr << "Node " << id_ << ": " << name_ << " @ " << std::hex << start << " [" << std::dec << len_ << "]\n";
 	}
 
 	diskmap::map<std::string, filecount> node::childmap() const
@@ -60,6 +74,11 @@ namespace zsr
 		//return follow().meta_[container_.metaidx(key)];
 	}
 
+	iterator node::children() const
+	{
+		return iterator{container_, *this};
+	}
+
 	std::optional<node> node::child(const std::string &name) const
 	{
 		std::optional<filecount> childid = childmap().get(name);
@@ -97,27 +116,16 @@ namespace zsr
 		}
 	}
 
-	std::unordered_map<std::string, filecount> childiter::all() const
+	std::unordered_map<std::string, filecount> iterator::all() const
 	{
 		std::unordered_map<std::string, filecount> ret{};
 		for (filecount i = 0; i < n.nchild(); i++) ret[ar.index(i).name()] = i;
 		return ret;
 	}
 
-	iterator childiter::get() const
+	node iterator::get() const
 	{
-		return iterator{ar, n.childid(idx)};
-	}
-
-	node iterator::getnode() const
-	{
-		if (idx >= ar.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(ar.size()) + ")");
-		return node{ar, idx};
-	}
-
-	iterator::operator bool() const
-	{
-		return idx >= 0 && idx < ar.size();
+		return node{ar, n.childid(idx)};
 	}
 
 	std::optional<node> archive::getnode(const std::string &path, bool except) const
@@ -160,14 +168,6 @@ namespace zsr
 		return iter - node_meta_.cbegin();
 	}
 
-	void archive::extract(const std::string &path, const std::string &dest) const
-	{
-		if (! util::isdir(dest)) util::mkdir(dest, 0750);
-		std::optional<node> member = getnode(path);
-		if (! member) throw std::runtime_error{"Member " + path + " does not exist in this archive"};
-		member->extract(dest);
-	}
-
 	bool archive::check(const std::string &path) const
 	{
 		std::optional<node> n = getnode(path);
@@ -204,4 +204,3 @@ namespace zsr
 		userd_ = std::string_view{userdstart, static_cast<std::string_view::size_type>(base_ + in_.size() - userdstart)};
 	}
 }
-
