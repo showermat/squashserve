@@ -101,7 +101,7 @@ The ZSR format is fairly simple.  It consists of:
       - The two-byte length of the key and the key itself
   - Data: a data entry for each file, consisting of:
       - The eight-byte ID of this entry's parent, or 0 for the root (index IDs are assigned in the order entries are stored in the
-	index, starting with 0 for the root)
+        index, starting with 0 for the root)
       - The one-byte type of the file: 1 for directory, 2 for regular file, 3 for symbolic link
       - The two-byte length of the entry's name and the name itself
       - If the entry is a *file*:

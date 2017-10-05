@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <lzma.h>
-#include "util/util.h"
+#include "../util/util.h"
 
 namespace lzma
 {
@@ -67,6 +67,28 @@ namespace lzma
 		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
 		void init(std::istream &file, std::streampos start, std::streampos size, std::streampos decomp);
 		void reset() { init(*file_, start_, size_, decomp_); }
+	};
+
+	class memrdbuf : public std::streambuf
+	{
+	private:
+		const char *source_;
+		std::vector<char> buf_;
+		lzma_stream lzma_;
+		lzma_action action_;
+		pos_type start_, size_, len_, pos_;
+		void reset();
+		std::streamsize load();
+		pos_type ff_to(std::streambuf::pos_type target);
+	public:
+		memrdbuf(const char *source, std::streampos size, std::streampos start, std::streampos len);
+		memrdbuf(const memrdbuf &orig) = delete;
+		memrdbuf(memrdbuf &&orig) : std::streambuf{std::move(orig)}, source_{orig.source_}, buf_{std::move(orig.buf_)},
+			lzma_{orig.lzma_}, action_{orig.action_}, start_{orig.start_}, size_{orig.size_}, len_{orig.len_}, pos_{orig.pos_}
+			{ orig.lzma_.internal = nullptr; }
+		int_type underflow();
+		pos_type seekpos(pos_type target, std::ios_base::openmode which);
+		pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which);
 	};
 }
 

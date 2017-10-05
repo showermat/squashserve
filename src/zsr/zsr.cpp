@@ -2,19 +2,6 @@
 
 namespace zsr
 {
-	stream::stream(const std::string_view &in, size_t decomp) : in_{in}, buf_{}, size_{in.size()}, decomp_{decomp}
-	{
-		buf_.init(in_, 0, size_, decomp_);
-		rdbuf(&buf_);
-	}
-
-	stream::stream(stream &&orig) : in_{std::move(orig.in_)}, buf_{}, size_{orig.size_}, decomp_{orig.decomp_}
-	{
-		buf_.init(in_, 0, size_, decomp_);
-		rdbuf(&buf_);
-		orig.rdbuf(nullptr);
-	}
-
 	node::node(const archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
 		if (idx >= container.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(container.size()) + ")");
@@ -90,7 +77,7 @@ namespace zsr
 	{
 		if (type_ == ntype::link) return follow().content();
 		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get content of non-regular file"};
-		return stream{std::string_view{data_, len_}, fullsize_};
+		return stream{data_, static_cast<std::streampos>(len_), static_cast<std::streampos>(fullsize_)}; // TODO Theoretically unsafe unsigned-to-signed conversions
 	}
 
 	void node::extract(const std::string &location) const

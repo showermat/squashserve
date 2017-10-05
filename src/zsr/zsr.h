@@ -28,13 +28,11 @@ namespace zsr
 	class stream : public std::istream
 	{
 	private:
-		util::imemstream in_;
-		lzma::rdbuf buf_;
-		size_t size_, decomp_;
+		lzma::memrdbuf buf_;
 	public:
-		stream(const std::string_view &in, size_t decomp);
+		stream(const char *start, std::streampos len, std::streampos decomp) : buf_{start, len, 0, decomp} { rdbuf(&buf_); }
 		stream(const stream &orig) = delete;
-		stream(stream &&orig);
+		stream(stream &&orig) : buf_{std::move(orig.buf_)} { rdbuf(&buf_); orig.rdbuf(nullptr); }
 	};
 
 	class node
@@ -118,8 +116,9 @@ namespace zsr
 	public:
 		archive(const std::string &path);
 		archive(const archive &orig) = delete;
-		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, base_{orig.base_}, idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_},
-			archive_meta_{std::move(orig.archive_meta_)}, node_meta_{std::move(orig.node_meta_)}, userd_{std::move(orig.userd_)} { }
+		archive(archive &&orig) : revcheck{std::move(orig.revcheck)}, in_{std::move(orig.in_)}, base_{orig.base_},
+			idxstart_{orig.idxstart_}, datastart_{orig.datastart_}, size_{orig.size_}, archive_meta_{std::move(orig.archive_meta_)},
+			node_meta_{std::move(orig.node_meta_)}, userd_{std::move(orig.userd_)} { }
 		filecount size() const { return size_; }
 		const std::unordered_map<std::string, std::string> &gmeta() const { return archive_meta_; }
 		std::vector<std::string> nodemeta() const { return node_meta_; }
