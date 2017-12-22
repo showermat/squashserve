@@ -166,14 +166,14 @@ namespace zsr
 	archive::archive(const std::string &path) : in_{path}, archive_meta_{}, node_meta_{}, userd_{}
 	{
 		base_ = static_cast<const char *>(in_.get());
-		// FIXME We need some sort of periodic checks to ensure that we're not stepping past the end of the file!  No more istream to warn us.
-		//if (in_.size() < magic_number.size() + sizeof(version)) throw badzsr{"File too small"};
+		if (in_.size() < magic_number.size() + sizeof(uint16_t) + sizeof(offset)) throw badzsr{"File too small"};
 		const char *inptr = base_;
 		std::string_view magic = deser_string(inptr, magic_number.size());
 		if (magic != magic_number) throw badzsr{"Not a ZSR file"};
 		uint16_t vers = deser<uint16_t>(inptr);
 		if (vers != version) throw badzsr{"ZSR version " + util::t2s(version) + " cannot read files of version " + util::t2s(vers)};
 		const char *idxstart = base_ + deser<offset>(inptr);
+		if (idxstart > base_ + in_.size()) throw badzsr{"File too small"};
 		uint8_t nmeta = deser<uint8_t>(inptr);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
@@ -188,6 +188,7 @@ namespace zsr
 		size_ = deser<filecount>(inptr);
 		idxstart_ = inptr;
 		const char *userdstart = idxstart_ + size_ * sizeof(filecount);
+		if (userdstart > base_ + in_.size()) throw badzsr{"File too small"};
 		userd_ = std::string_view{userdstart, static_cast<std::string_view::size_type>(base_ + in_.size() - userdstart)};
 	}
 }

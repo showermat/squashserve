@@ -72,9 +72,10 @@ os.chdir(wikiname)
 for subdir in ["wiki", "rsrc", "img", "misc", "_meta"]: os.makedirs(subdir, exist_ok=True)
 info["home"] = "wiki/" + re.sub("^/" + hpath + "/", "", base.path) + ".html"
 info["origin"] = base.scheme + "://" + base.netloc
-infofile = open("_meta/info.txt", "w")
-for (key, value) in info.items(): infofile.write(key + ":" + value + "\n")
-infofile.close()
+with open("_meta/info.lua", "w") as infofile:
+	infofile.write("params = {\n")
+	for (key, value) in info.items(): infofile.write("\t" + key + " = \"" + value.replace('\\', '\\\\').replace('"', '\\"') + "\",\n")
+	infofile.write("}")
 urls = queue.Queue()
 urls.put(("wiki", args.home))
 

@@ -421,13 +421,21 @@ table figure {
 	text-align: center;
 }
 
-.gallerybox .thumb span:nth-of-type(2) { /* Ick */
-	width: 100%;
+.gallerybox {
+	vertical-align: top;
+	display: inline-block;
 }
 
-.gallerybox .thumb span img {
-	display: block;
-	margin: 0px auto;
+.gallerybox .thumb {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: #F9F9F9;
+	border: 1px solid #ccc;
+}
+
+.gallerybox .thumb span:nth-of-type(2) { /* Ick */
+	width: 100%;
 }
 
 .tright, figure.mw-halign-right, figure, div.floatright {
@@ -753,17 +761,6 @@ ul.gallery {
 	margin: 2px;
 	padding: 2px;
 	display: block;
-}
-
-li.gallerybox {
-	vertical-align: top;
-	display: inline-block;
-}
-
-li.gallerybox div.thumb {
-	display: block;
-	background-color: #F9F9F9;
-	border: 1px solid #ccc;
 }
 
 div.gallerytext {

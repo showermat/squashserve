@@ -321,11 +321,13 @@ all HTML and thumbnail images on the site.  Here is a summary of the methods I t
     strategy I am currently pursuing, with the resulting ZSR archive described above.  I plan to continue refining this approach,
     although I will also keep looking into the other approaches listed here in case one shows more merit.
 
-If you want to download your own copy of Wikipedia with this script, it should be as easy as running `accessories/wikimedia.py
-wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia` folder.  The script creates the
-`_meta` directory for you, so it's all ready to be archived.  To be on the safe side, any computer you use for this should have,
-say, 500 GB free hard disk space and 16 GB RAM.
-
+Before downloading your own copy of Wikipedia, make sure you have enough disk space for the copy and enough RAM to run `mkvol`.  500
+GB of disk space and 16 GB of RAM should be sufficient.  Also, if you're downloading to an ext4 partition, you will need to make
+sure that `dir_index` is disabled on the partition; otherwise, [you *will* run into hash
+collisions](https://unix.stackexchange.com/questions/222221) and the archive will be incomplete.  I recommend using an XFS-formatted
+partition for downloading.  Once your system is ready, getting your own copy of Wikipedia should be as easy as running
+`accessories/wikimedia.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia`
+folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.
 
 ## Accessory Tools
 

@@ -72,3 +72,11 @@ div#zsr-toolbar form#zsr-search button
 {
 	padding: 0px 6px;
 }
+
+@media print
+{
+	div#zsr-toolbar
+	{
+		display: none;
+	}
+}

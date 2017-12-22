@@ -14,9 +14,11 @@ import signal
 import datetime
 import subprocess
 import threading
-import multiprocessing.pool
 import concurrent.futures
 import queue
+import traceback
+
+import tracing
 
 # TODO
 # It would be nice to download the category namespace for both Wikipedia and Wiktionary, but the HTML rendering appears to always be empty!
@@ -29,9 +31,10 @@ import queue
 # ...
 
 debug = False
-trace = False
 debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
-	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China"]
+	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
+	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
+	"Chongqing", "Implosive consonant"]
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
@@ -40,7 +43,6 @@ sites = {
 rootdir = sys.argv[1]
 if rootdir == "debug":
 	debug = True
-	trace = False
 	rootdir = "wikipedia"
 (site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
 
@@ -59,17 +61,23 @@ resfpath = os.path.join(rootdir, "resume.txt")
 today = datetime.date.today().strftime("%Y-%m-%d")
 useragent = "wikidump/0.4 robot contact:matthew.schauer@e10x.net (Please block temporarily and send e-mail if bandwidth limit exceeded)"
 
+class HTTPError(Exception):
+	def __init__(self, code):
+		self.code = code
+	def __str__(self):
+		return "HTTP %d" % (self.code)
+
 def friendlyname(fname):
 	subs = {"\"": "[quote]", "/": "[slash]", " ": "_", "_+": "_"}
 	parts = fname.split("#", 1)
 	for (char, sub) in subs.items(): parts[0] = re.sub(char, sub, parts[0])
 	return parts[0] + ".html" + ("#" + parts[1] if len(parts) > 1 else "")
 
-def outline(html): # FIXME In the current state, this does not preserve HTML sub-formatting (such as superscript) in headers
+def outline(html): # FIXME In its current state, this does not preserve HTML sub-formatting (such as superscript) in headers
 	ret = []
 	cur = None
 	for child in html.body.children:
-		if child.name == "h2":
+		if child.name in ["h1", "h2"]:
 			if cur:
 				ret.append(cur)
 				cur = None
@@ -77,7 +85,8 @@ def outline(html): # FIXME In the current state, this does not preserve HTML sub
 			cur = (child["id"], child.get_text(), [])
 		elif child.name == "h3":
 			if "id" not in child.attrs: continue
-			cur[2].append((child["id"], child.get_text()))
+			if cur is None: cur = (child["id"], child.get_text(), []) # We really don't know what to do in this situation, so we just make it a top-level header
+			else: cur[2].append((child["id"], child.get_text()))
 		else: continue
 	if cur: ret.append(cur)
 	return ret
@@ -128,8 +137,9 @@ def resolve_styles(html):
 	styleblock.string = css
 	html.head.append(styleblock)
 
-def writeout(title, content):
+def writeout(title, content, tracer):
 	if not content: return
+	tracer.processing()
 	noproto = re.compile("^//")
 	html = bs4.BeautifulSoup(content, "lxml")
 
@@ -161,6 +171,7 @@ def writeout(title, content):
 		elif re.compile("^/").match(src): src = origin_root + src
 		elif re.compile("^\.\.").match(src): raise Exception("Found relative image link " + src)
 		elif re.compile("^[a-z]*://").match(src): pass
+		elif re.compile("^./Special:FilePath/").match(src): src = origin + src[1:]
 		else: raise Exception("Unhandled image link case " + src)
 		img["src"] = src
 		fname = urllib.parse.unquote(urllib.parse.urlparse(src)[2].split("/")[-1])
@@ -169,14 +180,16 @@ def writeout(title, content):
 			os.rename(os.path.join(rootdir, oldimgdir, fname), os.path.join(rootdir, imgdir, fname))
 			img["src"] = os.path.join("..", imgdir, fname)
 			continue
+		tracer.image(src)
 		reply = requests.get(src, headers={"user-agent": useragent})
 		if reply.status_code != 200: continue
-		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src); #fname += mimetypes.guess_extension(reply.headers["content-type"]); # I don't think this ever happens.
+		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
 		out = open(os.path.join(rootdir, imgdir, fname), "wb")
 		out.write(reply.content)
 		out.close()
 		img["src"] = os.path.join("..", imgdir, fname)
 
+	tracer.cleaning()
 	for tag in html.find_all(True):
 		for attr in ["srcset", "data-mw", "about"]:
 			if attr in tag.attrs: del tag[attr]
@@ -204,10 +217,10 @@ def download(title):
 	elif res.status_code == 200:
 		return res.text
 	else:
-		raise Exception("HTTP %s" % (res.status_code)); # TODO Specialize this exception
+		raise HTTPError(res.status_code);
 
 cnt = 0
-def getpage(title):
+def getpage(title, tracer):
 	global cnt, logfile, interrupt; # Why?
 	cnt += 1
 	title = urllib.parse.unquote(title)
@@ -216,43 +229,43 @@ def getpage(title):
 	for i in range(3):
 		if interrupt: break
 		try:
-			writeout(title, download(title))
+			tracer.start(title)
+			writeout(title, download(title), tracer)
+			tracer.finish()
 			break
 		except Exception as e:
 			if i < 2:
 				time.sleep(4)
 				continue
 			print("\r\033[2K%d %s: %s" % (cnt, title, str(e)))
-			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ": " + str(e) + "\n")
+			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ":\n" + traceback.format_exc() + "\n")
 			logfile.flush()
 			break
 
 interrupt = False
 def articles(q, tag = (0, "")):
 	global interrupt
-	try:
-		url = origin_root + "/w/api.php?format=json&action=query&list=allpages&aplimit=500&apnamespace=%d&apcontinue=%s"
-		q.put((0, "Main Page"))
-		while True:
-			if interrupt: return
-			req = requests.get(url % ([ i[0] for i in namespaces.items() ][tag[0]], tag[1]))
-			req.encoding = "UTF-8"
-			res = json.loads(req.text)
-			try: tag = (tag[0], res["continue"]["apcontinue"])
-			except KeyError:
-				tag = (tag[0] + 1, "")
-				if tag[0] >= len(namespaces): tag = None
-			for item in res["query"]["allpages"]:
-				while True:
-					if interrupt: return
-					try:
-						q.put((0, item["title"]), timeout=1)
-						break
-					except queue.Full: continue
-			if not tag: break
-			q.put((1, tag))
-		for i in range(concurrency): q.put((2, None))
-	except Exception as e: print(e)
+	url = origin_root + "/w/api.php?format=json&action=query&list=allpages&aplimit=500&apnamespace=%d&apcontinue=%s"
+	q.put((0, "Main Page"))
+	while True:
+		if interrupt: return
+		req = requests.get(url % ([ i[0] for i in namespaces.items() ][tag[0]], urllib.parse.quote(tag[1])))
+		req.encoding = "UTF-8"
+		res = json.loads(req.text)
+		try: tag = (tag[0], res["continue"]["apcontinue"])
+		except KeyError:
+			tag = (tag[0] + 1, "")
+			if tag[0] >= len(namespaces): tag = None
+		for item in res["query"]["allpages"]:
+			while True:
+				if interrupt: return
+				try:
+					q.put((0, item["title"]), timeout=1)
+					break
+				except queue.Full: continue
+		if not tag: break
+		q.put((1, tag))
+	for i in range(concurrency): q.put((2, None))
 
 resflock = threading.Lock()
 savedtag = None
@@ -260,36 +273,20 @@ def resumewrite(tag):
 	global resflock, savedtag
 	with resflock:
 		if savedtag:
-			resf = open(resfpath, "w")
-			resf.write(savedtag[0] + " " + savedtag[1])
-			resf.close()
+			with open(resfpath, "w") as resf:
+				resf.write("%d %s" % savedtag)
 		savedtag = tag
 
 def process(q):
 	global interrupt
-	global traceout, tracelock, tracerank
-	if trace:
-		now = datetime.datetime.now().timestamp() - tracestart
-		with tracelock:
-			rank = tracerank
-			tracerank += 1
-			traceout.write("\n<circle cx=\"%d\" cy=\"%d\" r=\"%d\" fill=\"blue\" stroke=\"none\" />" % (now, rank * 20 + 10, 2))
+	tracer = tracing.Tracer()
 	while True:
-		if trace: start = datetime.datetime.now().timestamp() - tracestart
 		if interrupt: break
 		(cat, item) = q.get()
 		if cat == 2: break
 		elif cat == 1: resumewrite(item)
-		elif cat == 0: getpage(item)
-		if trace and cat == 0:
-			dur = datetime.datetime.now().timestamp() - start - tracestart
-			if dur > 1:
-				with tracelock:
-					traceout.write("\n<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" />" % (start, rank * 20, dur, 18))
-					if dur > 100: out.write("<text x=\"%d\" y=\"%d\" fill=\"black\" stroke=\"none\">%s</text>" % (start + 2, rank * 20 + 10, item))
-	if trace:
-		now = datetime.datetime.now().timestamp() - tracestart
-		with tracelock: traceout.write("\n<circle cx=\"%d\" cy=\"%d\" r=\"%d\" fill=\"red\" stroke=\"none\" />" % (now, rank * 20 + 10, 2))
+		elif cat == 0: getpage(item, tracer)
+	tracer.exit()
 
 def sigint(signum, frame):
 	global interrupt
@@ -315,28 +312,25 @@ if os.path.isfile(resfpath):
 	resf.close()
 logfile = open(logfname, "a")
 logfile.write("\n== %s %s ==\n" % (site_name, today))
-if trace:
-	traceout = open(tracefname, "w")
-	tracelock = threading.Lock()
-	traceout.write('<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n')
-	traceout.write('<svg xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg">')
-	traceout.write('<rect x="0" y="0" width="100%" height="100%" fill="white" />')
-	traceout.write('<g fill="white" stroke="black" stroke-width="1">')
-	tracestart = datetime.datetime.now().timestamp()
-	tracerank = 0
+tracing.init(tracefname)
 if debug:
-	for page in debug_pages: getpage(page)
+	tracer = tracing.Tracer()
+	for page in debug_pages: getpage(page, tracer)
 else:
 	artq = queue.Queue(2048)
 	signal.signal(signal.SIGINT, sigint)
 	with concurrent.futures.ThreadPoolExecutor(concurrency + 1) as pool:
-		pool.submit(articles, artq, start)
-		for i in range(concurrency): pool.submit(process, artq)
+		res = []
+		res.append(pool.submit(articles, artq, start))
+		for i in range(concurrency): res.append(pool.submit(process, artq))
+		(finished, unfinished) = concurrent.futures.wait(res, None, concurrent.futures.FIRST_EXCEPTION)
+		for done in finished:
+			if done.exception():
+				interrupt = True
+				raise done.exception()
 print()
 logfile.close()
-if trace:
-	traceout.write("</g></svg>")
-	traceout.close()
+tracing.cleanup()
 if os.path.isfile(resfpath) and not interrupt: os.unlink(resfpath)
 if interrupt: exit(0)
 
