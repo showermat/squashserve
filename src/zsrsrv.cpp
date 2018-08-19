@@ -41,6 +41,11 @@ http::doc error(const std::string &header, const std::string &body)
 	return ret;
 }
 
+std::string viewbase() //(Volume &vol, const std::string &path)
+{
+	return prefs::get("toolbar") ? "view" : "content";
+}
+
 http::doc loadcat(const std::string &name)
 {
 	http::doc ret = resource("html/home.html");
@@ -49,7 +54,11 @@ http::doc loadcat(const std::string &name)
 	std::unordered_set<std::string> volnames = volumes.load(name);
 	std::set<std::string> volsort{volnames.begin(), volnames.end()};
 	for (const std::string &vol : volsort)
-		buf << templ::render(sects[3], volumes.get(vol).tokens());
+	{
+		std::unordered_map<std::string, std::string> tokens = volumes.get(vol).tokens();
+		tokens["viewbase"] = "/" + viewbase();
+		buf << templ::render(sects[3], tokens);
+	}
 	ret.content(buf.str());
 	return ret;
 }
@@ -84,12 +93,13 @@ http::doc home(bool privileged)
 http::doc search(Volume &vol, const std::string &query)
 {
 	std::string match = vol.quicksearch(query);
-	if (match != "") return http::redirect(http::mkpath({"view", vol.id(), match}));
+	if (match != "") return http::redirect(http::mkpath({viewbase(), vol.id(), match}));
 #ifndef ZSR_USE_XAPIAN
 	return http::redirect(http::mkpath({"titles", vol.id(), query}));
 #endif
 	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
+	tokens["viewbase"] = "/" + viewbase();
 	http::doc ret = resource("html/search.html");
 	std::vector<std::string> sects = templ::split(ret.content(), 3, "search.html");
 	std::stringstream buf{};
@@ -99,7 +109,7 @@ http::doc search(Volume &vol, const std::string &query)
 		for (const Result &res : vol.search(query, prefs::get("results"), prefs::get("preview")))
 		{
 			std::unordered_map<std::string, std::string> qtoks = tokens;
-			qtoks["url"] = http::mkpath({"view", vol.id(), res.url});
+			qtoks["member"] = res.url;
 			qtoks["match"] = util::t2s(res.relevance);
 			qtoks["title"] = res.title;
 			qtoks["preview"] = res.preview;
@@ -127,7 +137,7 @@ http::doc complete(Volume &vol, const std::string &query)
 	}
 	std::sort(names.begin(), names.end(), strlencomp);
 	nlohmann::json ret{};
-	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", "/view/" + vol.id() + "/" + res[name]}});
+	for (const std::string &name : names) ret.push_back({{"title", name}, {"url", http::mkpath({viewbase(), vol.id(), res[name]})}});
 	ret.push_back(std::unordered_map<std::string, std::string>{{"title", "<b>See all</b>"}, {"url", "/titles/" + vol.id() + "/" + query}});
 	return http::doc{"text/plain", ret.dump()};
 }
@@ -139,8 +149,9 @@ http::doc titles(Volume &vol, const std::string &query)
 	std::vector<std::string> sects = templ::split(ret.content(), 3, "titles.html");
 	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
+	titletokens["viewbase"] = "/" + viewbase();
 	buf << templ::render(sects[0], titletokens);
-	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << templ::render(sects[1], {{"title", pair.first}, {"url", "/view/" + vol.id() + "/" + pair.second}}); // Is sorting worth the time consumption?
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << templ::render(sects[1], {{"title", pair.first}, {"url", http::mkpath({viewbase(), vol.id(), pair.second})}}); // Is sorting worth the time consumption?
 	buf << templ::render(sects[2], titletokens);
 	ret.content(buf.str());
 	return ret;
@@ -148,7 +159,7 @@ http::doc titles(Volume &vol, const std::string &query)
 
 http::doc shuffle(Volume &vol)
 {
-	return http::redirect(http::mkpath({"view", vol.id(), vol.shuffle()}));
+	return http::redirect(http::mkpath({viewbase(), vol.id(), vol.shuffle()}));
 }
 
 http::doc view(Volume &vol, const std::string &path, const std::string &query)

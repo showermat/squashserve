@@ -26,4 +26,8 @@
 	"name": "preview",
 	"desc": "Search result preview length",
 	"default": 400
+}, {
+	"name": "toolbar",
+	"desc": "Enable toolbar overlay when viewing pages",
+	"default": true
 }]
