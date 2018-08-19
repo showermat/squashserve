@@ -4,6 +4,7 @@
 <title>Library</title>
 <meta charset="UTF-8" />
 <link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/typeahead.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
 <link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
@@ -14,12 +15,12 @@
 <body>
 <main class="normal">
 <div id="utils">
-	 {{#priv?}}
- 	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
- 	<a href="/add"><i class="fa fa-2x fa-plus"></i></a>
- 	<a href="/pref"><i class="fa fa-2x fa-gear"></i></a>
- 	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
-	 {{/}}
+	{{#priv?}}
+	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
+	<a href="/add"><i class="fa fa-2x fa-plus"></i></a>
+	<a href="/pref"><i class="fa fa-2x fa-gear"></i></a>
+	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
+	{{/}}
 </div>
 <h1>Library</h1>
 %
@@ -49,4 +50,3 @@
 </main>
 </body>
 </html>
-

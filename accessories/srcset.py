@@ -42,4 +42,3 @@ for root, dirs, files in os.walk(basedir):
 			#srcset_fetch(fh)
 			srcset_remove(fh)
 			fh.close()
-

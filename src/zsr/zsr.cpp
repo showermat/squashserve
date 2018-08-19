@@ -4,6 +4,7 @@ namespace zsr
 {
 	node::node(const archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
+		if (idx >= container.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(container.size()) + ")");
 		const char *inptr = container_.idxstart_ + idx * sizeof(offset);
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
 		offset start = deser<offset>(inptr);
@@ -15,11 +16,11 @@ namespace zsr
 		else if (type_ == ntype::reg)
 		{
 			for (uint8_t i = 0; i < nmeta; i++) meta_.push_back(std::string{deser<std::string_view>(inptr)});
-			fullsize_ = deser<size_t>(inptr);
+			fullsize_ = deser<offset>(inptr);
 			len_ = deser<offset>(inptr);
 		}
 		data_ = inptr;
-		//std::cerr << "Node " << id_ << ": " << name_ << "@" << std::hex << start << "[" << std::dec << len_ << "]" << "\n";
+		//std::cerr << "Node " << id_ << ": " << name_ << " @ " << std::hex << start << " [" << std::dec << len_ << "]\n";
 	}
 
 	diskmap::map<std::string, filecount> node::childmap() const
@@ -60,6 +61,11 @@ namespace zsr
 		//return follow().meta_[container_.metaidx(key)];
 	}
 
+	iterator node::children() const
+	{
+		return iterator{container_, *this};
+	}
+
 	std::optional<node> node::child(const std::string &name) const
 	{
 		std::optional<filecount> childid = childmap().get(name);
@@ -71,7 +77,7 @@ namespace zsr
 	{
 		if (type_ == ntype::link) return follow().content();
 		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get content of non-regular file"};
-		return stream{std::string_view{data_, len_}, fullsize_};
+		return stream{data_, static_cast<std::streampos>(len_), static_cast<std::streampos>(fullsize_)}; // TODO Theoretically unsafe unsigned-to-signed conversions
 	}
 
 	void node::extract(const std::string &location) const
@@ -97,27 +103,16 @@ namespace zsr
 		}
 	}
 
-	std::unordered_map<std::string, filecount> childiter::all() const
+	std::unordered_map<std::string, filecount> iterator::all() const
 	{
 		std::unordered_map<std::string, filecount> ret{};
 		for (filecount i = 0; i < n.nchild(); i++) ret[ar.index(i).name()] = i;
 		return ret;
 	}
 
-	iterator childiter::get() const
+	node iterator::get() const
 	{
-		return iterator{ar, n.childid(idx)};
-	}
-
-	node iterator::getnode() const
-	{
-		if (idx >= ar.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(ar.size()) + ")");
-		return node{ar, idx};
-	}
-
-	iterator::operator bool() const
-	{
-		return idx >= 0 && idx < ar.size();
+		return node{ar, n.childid(idx)};
 	}
 
 	std::optional<node> archive::getnode(const std::string &path, bool except) const
@@ -160,14 +155,6 @@ namespace zsr
 		return iter - node_meta_.cbegin();
 	}
 
-	void archive::extract(const std::string &path, const std::string &dest) const
-	{
-		if (! util::isdir(dest)) util::mkdir(dest, 0750);
-		std::optional<node> member = getnode(path);
-		if (! member) throw std::runtime_error{"Member " + path + " does not exist in this archive"};
-		member->extract(dest);
-	}
-
 	bool archive::check(const std::string &path) const
 	{
 		std::optional<node> n = getnode(path);
@@ -179,14 +166,14 @@ namespace zsr
 	archive::archive(const std::string &path) : in_{path}, archive_meta_{}, node_meta_{}, userd_{}
 	{
 		base_ = static_cast<const char *>(in_.get());
-		// FIXME We need some sort of periodic checks to ensure that we're not stepping past the end of the file!  No more istream to warn us.
-		//if (in_.size() < magic_number.size() + sizeof(version)) throw badzsr{"File too small"};
+		if (in_.size() < magic_number.size() + sizeof(uint16_t) + sizeof(offset)) throw badzsr{"File too small"};
 		const char *inptr = base_;
 		std::string_view magic = deser_string(inptr, magic_number.size());
 		if (magic != magic_number) throw badzsr{"Not a ZSR file"};
 		uint16_t vers = deser<uint16_t>(inptr);
 		if (vers != version) throw badzsr{"ZSR version " + util::t2s(version) + " cannot read files of version " + util::t2s(vers)};
 		const char *idxstart = base_ + deser<offset>(inptr);
+		if (idxstart > base_ + in_.size()) throw badzsr{"File too small"};
 		uint8_t nmeta = deser<uint8_t>(inptr);
 		for (uint8_t i = 0; i < nmeta; i++)
 		{
@@ -201,7 +188,7 @@ namespace zsr
 		size_ = deser<filecount>(inptr);
 		idxstart_ = inptr;
 		const char *userdstart = idxstart_ + size_ * sizeof(filecount);
+		if (userdstart > base_ + in_.size()) throw badzsr{"File too small"};
 		userd_ = std::string_view{userdstart, static_cast<std::string_view::size_type>(base_ + in_.size() - userdstart)};
 	}
 }
-

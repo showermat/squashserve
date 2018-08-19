@@ -85,10 +85,7 @@ namespace zsr
 			std::streampos childstart = contout.tellp();
 			size_t maxnchild = 0;
 			struct dirent *ent;
-			while ((ent = readdir(dir)))
-			{
-				if (! (linkpol_ == linkpolicy::skip && ent->d_type == DT_LNK)) maxnchild++;
-			}
+			while ((ent = readdir(dir))) if (! (linkpol_ == linkpolicy::skip && ent->d_type == DT_LNK)) maxnchild++;
 			rewinddir(dir);
 			maxnchild -= 2;
 			contout.seekp(children.hdrsize + children.recsize * maxnchild, std::ios::cur);

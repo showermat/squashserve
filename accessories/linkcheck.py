@@ -23,4 +23,3 @@ while not fileq.empty():
 	for ref in [ urllib.parse.urlparse(tag["src"]) for tag in html("img", src = True) ]:
 		if ref.scheme != "" or ref.netloc != "" or ref.path == "": continue
 		if not os.path.isfile(ref.path): print(path + " -> " + ref.path)
-

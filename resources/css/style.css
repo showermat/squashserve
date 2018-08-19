@@ -188,49 +188,10 @@ form.search
 	white-space: nowrap;
 }
 
-span.twitter-typeahead
-{
-	display: inline !important;
-}
-
-div.tt-menu
-{
-	max-height: 400px;
-	overflow-x: hidden;
-	overflow-y: auto;
-}
-
-p.tt-suggestion, p.tt-footer
-{
-	margin: 0;
-}
-
-p.tt-suggestion a, p.tt-footer a
-{
-	display: block;
-	width: 100%;
-	padding: 6px 4px;
-	width: 400px;
-	overflow: hidden;
-	background: rgba(224, 224, 224, 0.8);
-	color: black;
-	text-decoration: none;
-}
-
-p.tt-footer a
-{
-	font-style: italic;
-	font-weight: bold;
-}
-
-p.tt-suggestion a:hover, p.tt-footer a:hover
-{
-	background: rgba(192, 192, 192, 0.8);
-}
-
 form#search
 {
 	height: 16px;
+	margin: 0px;
 	margin-top: -2px;
 }
 

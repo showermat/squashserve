@@ -248,7 +248,7 @@ std::pair<std::string, std::string> Volume::get(std::string path)
 {
 	if (! archive_->check(path)) throw error{"Not Found", "The requested path " + path + " was not found in this volume"};
 	std::ostringstream contentss{};
-	zsr::iterator file = archive_->get(path);
+	zsr::node file = archive_->get(path);
 	contentss << file.content().rdbuf(); // TODO What if it's a really big file?  Can we set up the infrastructure for multiple calls to Mongoose printf?
 	std::string content = contentss.str();
 	return std::make_pair(file.meta("type"), content);
@@ -259,13 +259,17 @@ std::string Volume::shuffle() const
 	constexpr int tries = 32;
 	for (int i = 0; i < tries; i++)
 	{
-		zsr::iterator n = archive_->index(util::randint<zsr::filecount>(0, archive_->size() - 1));
+		zsr::node n = archive_->index(util::randint<zsr::filecount>(0, archive_->size() - 1));
 		if (! n.isreg() || n.meta("title") == "") continue;
 		return n.path();
 	}
 	std::vector<zsr::filecount> files{};
 	files.reserve(archive_->size());
-	for (zsr::iterator n = archive_->index(); n; n++) if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
+	for (zsr::filecount i = 0; i < archive_->size(); i++)
+	{
+		zsr::node n = archive_->index(i);
+		if (! n.isdir() && n.meta("title") != "") files.push_back(n.id());
+	}
 	if (files.size() == 0) return "";
 	return archive_->index(files[util::randint<zsr::filecount>(0, files.size() - 1)]).path();
 }
@@ -287,7 +291,7 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 		r.relevance = iter.get_percent();
 		std::string idenc = iter.get_document().get_value(1);
 		zsr::filecount *id = reinterpret_cast<zsr::filecount *>(&idenc[0]);
-		zsr::iterator node = archive_->index(*id);
+		zsr::node node = archive_->index(*id);
 		r.url = node.path();
 		std::ostringstream raw{};
 		raw << node.content();
@@ -315,7 +319,7 @@ std::unordered_map<std::string, std::string> Volume::complete(const std::string 
 	for (const zsr::filecount &idx : matches)
 	{
 		if (max > 0 && cnt++ >= max) break;
-		zsr::iterator n = archive_->index(idx);
+		zsr::node n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
 	}
 	return ret;
@@ -325,10 +329,9 @@ std::string Volume::quicksearch(std::string query)
 {
 	query = util::utf8lower(query);
 	std::unordered_set<zsr::filecount> res = titles_.exact_search(query);
-	//if (res.size() == 1) return archive_->index(*res.begin()).path();
 	for (const zsr::filecount &idx : res)
 	{
-		zsr::iterator n = archive_->index(idx);
+		zsr::node n = archive_->index(idx);
 		if (util::utf8lower(n.meta("title")) == query) return n.path();
 	}
 	res = titles_.search(query);
@@ -373,7 +376,7 @@ void Volmgr::refresh()
 	categories_.clear();
 	mapping_.clear();
 	volumes_.clear();
-	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through excpetions
+	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through exceptions
 	{
 		if (util::isdir(util::pathjoin({dir_, file}))) continue;
 		std::string volid = file.substr(0, file.size() - 4);
@@ -472,5 +475,3 @@ Volume &Volmgr::get(const std::string &name)
 	if (! volumes_.count(name)) load(mapping_[name]);
 	return volumes_.at(name);
 }
-
-

@@ -1,16 +1,3 @@
-
-function search_setup()
-{
-	$(".search-input").val("");
-	$(".search-input").each(function() { autocomplete($(this), $(this).parent().data("volid"), true); });
-	$(".search").on('submit', function() {
-		var query = $(this).find(".search-input").val();
-		window.open("/search/" + $(this).data("volid") + "/" + encodeURIComponent(query));
-		clearform($(this).data("volid"));
-		return false;
-	});
-}
-
 $(document).ready(function() {
 	$("#quit").on("click", function() {
 		$("html").load("/rsrc/html/quit.html", function() { $.get("/action/quit"); });
@@ -26,11 +13,10 @@ $(document).ready(function() {
 		$.get(url, function(data) {
 			target.html(data);
 			target.parent().toggleClass("loaded unloaded");
-			search_setup();
+			search_setup("search", ".search-input", ".search", true);
 			anchor.find(".category-loading").hide();
 		});
 		return false;
 	});
-	search_setup();
+	search_setup("search", ".search-input", ".search", true);
 });
-

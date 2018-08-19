@@ -4,6 +4,7 @@
 <title>{{title}}</title>
 <meta charset="UTF-8">
 <link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/typeahead.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
 <link rel="icon" href="{{icon}}">
 <style>
@@ -19,7 +20,7 @@ html { height: 100%; }
 	<div class="toolbar-spacer"></div>
 	<a href="/" class="toolbar-button" target="_top"><i class="fa fa-lg fa-th-list" title="Library"></i></a>
 	<a href="/view/{{id}}/{{home}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
-	<a href="{{live}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
+	<a href="{{live}}{{query}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
 	<a href="/shuffle/{{id}}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
 	<div class="toolbar-spacer"></div>
 	<div class="toolbar-expand"></div>
@@ -28,9 +29,9 @@ html { height: 100%; }
 	<button type="submit">Go</button>
 	</form>
 	<div class="toolbar-spacer"></div>
-	<a href="/content/{{id}}/{{member}}" class="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
+	<a href="/content/{{id}}/{{member}}{{query}}" class="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
 </div></div>
-<iframe id="page" name="page" src="/content/{{id}}/{{member}}"></iframe>
+<iframe id="page" name="page" src="/content/{{id}}/{{member}}{{query}}"></iframe>
 </body>
 </html>
 

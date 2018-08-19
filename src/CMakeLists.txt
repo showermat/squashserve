@@ -26,4 +26,3 @@ add_custom_target(resources DEPENDS ${CMAKE_BINARY_DIR}/resources.zsr)
 add_executable(zsrsrv zsrsrv.cpp search.cpp Volume.cpp http.cpp ${CMAKE_SOURCE_DIR}/fileinclude.cpp)
 add_dependencies(zsrsrv resources)
 target_link_libraries(zsrsrv util zsr mongoose pthread) # xapian
-

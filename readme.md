@@ -101,7 +101,7 @@ The ZSR format is fairly simple.  It consists of:
       - The two-byte length of the key and the key itself
   - Data: a data entry for each file, consisting of:
       - The eight-byte ID of this entry's parent, or 0 for the root (index IDs are assigned in the order entries are stored in the
-	index, starting with 0 for the root)
+        index, starting with 0 for the root)
       - The one-byte type of the file: 1 for directory, 2 for regular file, 3 for symbolic link
       - The two-byte length of the entry's name and the name itself
       - If the entry is a *file*:
@@ -139,7 +139,7 @@ To decompress a single file:
 `zsrutil` can also be used to list files in the archive and metadata concerning the archive.
 
 The encoder can also be used as a library in other C++ programs by including the header `zsr.h`.  The only classes you should have
-to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, and `zsr::childiter`.  Use as follows:
+to deal with are `zsr::writer`, `zsr::archive`, `zsr::node`, `zsr::iterator`, `zsr::stream`.  Use as follows:
 
     #include <fstream>
     #include <streambuf>
@@ -153,21 +153,21 @@ to deal with are `zsr::writer`, `zsr::archive`, `zsr::iterator`, `zsr::stream`, 
     out.close();
 
     zsr::archive ar{"/data/volumes/wikipedia.zsr"}; // Open the archive file...
-    ar.extract("wiki", "/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
+    ar.get("wiki").extract("/data/wikipedia2"); // ...and extract the "wiki" subdirectory to a new location.
     if (ar.check("wiki/Douglas_Adams.html")) // If a certain file exists in the archive:
     {
-        zsr::iterator it = ar.get("wiki/Douglas_Adams.html") // Get the archive node by path.
-        std::string title = it.meta("title"); // Get metadata stored with the node.
-        zsr::stream file = it.content(); // Get the stream of the file's contents...
+        zsr::node n = ar.get("wiki/Douglas_Adams.html") // Get the archive node by path.
+        std::string title = n.meta("title"); // Get metadata stored with the node.
+        zsr::stream file = n.content(); // Get the stream of the file's contents...
         std::ostringstream oss{};
         oss << file.rdbuf(); // ...extract it...
         std::string article = oss.str(); // ...and convert it to a string.
     }
 
-The writing portion of the library is not threadsafe; the reading portion is.  All functions in `archive` can be safely called from
-multiple threads.  Functions in `iterator` and `childiter` that read but do not update the iterator can be called from multiple
-threads.  `stream` is not threadsafe.  However, it is safe to simultaneously use multiple `interator`s, `childiter`s and `streams`s
-that point to the same file in the archive.
+The writing portion of the library is not threadsafe; the reading portion is.  All functions in `archive` and `node` can be safely
+called from multiple threads.  Functions in `iterator` that read but do not update the iterator can be called from multiple threads.
+`stream` is not threadsafe.  However, it is safe to simultaneously use multiple `node`s, `iterator`s, and `streams`s that point to
+the same file in the archive.
 
 
 ## Creating Volumes
@@ -321,11 +321,13 @@ all HTML and thumbnail images on the site.  Here is a summary of the methods I t
     strategy I am currently pursuing, with the resulting ZSR archive described above.  I plan to continue refining this approach,
     although I will also keep looking into the other approaches listed here in case one shows more merit.
 
-If you want to download your own copy of Wikipedia with this script, it should be as easy as running `accessories/wikimedia.py
-wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia` folder.  The script creates the
-`_meta` directory for you, so it's all ready to be archived.  To be on the safe side, any computer you use for this should have,
-say, 500 GB free hard disk space and 16 GB RAM.
-
+Before downloading your own copy of Wikipedia, make sure you have enough disk space for the copy and enough RAM to run `mkvol`.  500
+GB of disk space and 16 GB of RAM should be sufficient.  Also, if you're downloading to an ext4 partition, you will need to make
+sure that `dir_index` is disabled on the partition; otherwise, [you *will* run into hash
+collisions](https://unix.stackexchange.com/questions/222221) and the archive will be incomplete.  I recommend using an XFS-formatted
+partition for downloading.  Once your system is ready, getting your own copy of Wikipedia should be as easy as running
+`accessories/wikimedia.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia`
+folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.
 
 ## Accessory Tools
 
@@ -346,11 +348,11 @@ of 2; you can increase this further to get debugging output.  *Please* ask the p
 reduce server load if you aren't dumping your own installation.
 
 
-### Wikimedia dump
+### Mediawiki Dump
 
 As mentioned above, the `wikimedia.py` script does much the same thing as Wikidump, but it's designed to use the new HTTP API on new
 Mediawiki sites and works much more quickly.  I've tried it out successfully with Wikipedia and Wiktionary, and it should work for
-other Wikimedia installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.
+other Mediawiki installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.
 I don't know how widely the new API will be adopted by other sites on Mediawiki, especially ones that don't want to be
 bulk-downloaded, but it may supplant Wikidump at some point in the future.
 
@@ -382,4 +384,3 @@ be useful.
 
   - `resources/js/jquery-2.1.4.min.js` is copyright, the jQuery Foundation, and is released under the terms of the jQuery License.
     The original can be obtained from <https://github.com/jquery/jquery>.
-

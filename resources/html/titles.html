@@ -4,12 +4,13 @@
 <title>{{title}}</title>
 <meta charset="UTF-8" />
 <link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/typeahead.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
 <link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
 <script src="/rsrc/js/jquery-2.1.4.min.js"></script>
 <script src="/rsrc/js/typeahead.bundle.js"></script>
 <script src="/rsrc/js/complete.js"></script>
-<script src="/rsrc/js/titles.js"></script>
+<script>$(document).ready(function() { search_setup("titles", "#search-input", "#search"); });</script>
 </head>
 <body>
 <main class="normal">
@@ -34,4 +35,3 @@
 </main>
 </body>
 </html>
-

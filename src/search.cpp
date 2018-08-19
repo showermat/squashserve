@@ -168,4 +168,3 @@ namespace rsearch
 		return values(inptr);
 	}
 }
-

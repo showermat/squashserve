@@ -29,7 +29,7 @@ Volmgr volumes{};
 http::doc resource(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {})
 {
 	std::ostringstream ret{};
-	zsr::iterator file = resources->get(path); // Not checking if resources is null because it is set at program launch
+	zsr::node file = resources->get(path); // Not checking if resources is null because it is set at program launch
 	ret << file.content().rdbuf();
 	return http::doc(file.meta("type"), ret.str(), headers);
 }
@@ -72,7 +72,7 @@ http::doc home(bool privileged)
 	{
 		std::unordered_map<std::string, std::string> curtokens = volumes.tokens(cat);
 		if (volumes.loaded(cat)) curtokens["loaded"] = "";
- 		buf << templ::render(sects[1], curtokens) << sects[2];
+		buf << templ::render(sects[1], curtokens) << sects[2];
 		if (volumes.loaded(cat)) buf << loadcat(cat).content();
 		buf << sects[4] << templ::render(sects[5], curtokens);
 	}
@@ -151,11 +151,13 @@ http::doc shuffle(Volume &vol)
 	return http::redirect(http::mkpath({"view", vol.id(), vol.shuffle()}));
 }
 
-http::doc view(Volume &vol, const std::string &path)
+http::doc view(Volume &vol, const std::string &path, const std::string &query)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
 	http::doc ret = resource("html/view.html");
-	ret.content(templ::render(ret.content(), vol.tokens(path)));
+	std::unordered_map<std::string, std::string> tokens = vol.tokens(path);
+	tokens["query"] = query;
+	ret.content(templ::render(ret.content(), tokens));
 	return ret;
 }
 
@@ -266,13 +268,14 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 			std::string::const_iterator start = util::find_nth(url.begin(), url.end(), '/', 3) + 1;
 			if (start > url.end()) input = "";
 			else input = util::urldecode(std::string{start, url.end()});
-			std::string input_qstr = input + (querystr.size() ? "?" + querystr : "");
-			if (path[0] == "search") return search(volumes.get(path[1]), input_qstr);
-			else if (path[0] == "view") return view(volumes.get(path[1]), input_qstr);
+			std::string full_qstr = (querystr.size() ? "?" + querystr : "");
+			std::string input_qstr = input + full_qstr;
+			if (path[0] == "content") return content(volumes.get(path[1]), input);
+			else if (path[0] == "view") return view(volumes.get(path[1]), input, full_qstr);
 			else if (path[0] == "complete") return complete(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "titles") return titles(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "shuffle") return shuffle(volumes.get(path[1]));
-			else return content(volumes.get(path[1]), input);
+			else /*if (path[0] == "search")*/ return search(volumes.get(path[1]), input_qstr);
 		}
 		else if (path[0] == "load" || path[0] == "unload")
 		{
@@ -319,4 +322,3 @@ catch (std::exception &e)
 	std::cerr << "Error: " << e.what() << "\n";
 	return 1;
 }
-

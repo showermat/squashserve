@@ -14,14 +14,15 @@ import signal
 import datetime
 import subprocess
 import threading
-import multiprocessing.pool
 import concurrent.futures
 import queue
+import traceback
+
+import tracing
 
 # TODO
-# Vet namespaces and allow some to be included per site: (appendix, wikisaurus, wiktionary, category) in Wiktionary, possibly (category) in Wikipedia?
+# It would be nice to download the category namespace for both Wikipedia and Wiktionary, but the HTML rendering appears to always be empty!
 # Don't download redirects to pages that we're not downloading, like links to pages in namespaces
-# Links in footnotes to where they were cited are broken
 # Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions (adds an extra GET and requires moving images; probably no faster)
 # Eventually: postprocessing for redlinks?
 #
@@ -30,20 +31,21 @@ import queue
 
 debug = False
 debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
-	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China"]
+	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
+	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
+	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%"]
 
 sites = {
-	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg"),
-	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/0/06/Wiktionary-logo-v2.svg"),
+	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
+	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/0/06/Wiktionary-logo-v2.svg", {0: "", 100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"}),
 }
 rootdir = sys.argv[1]
 if rootdir == "debug":
 	debug = True
 	rootdir = "wikipedia"
-(site_name, site_description, origin_root, faviconsrc) = sites[rootdir]
+(site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
 
 concurrency = 32
-apiurl = origin_root + "/api/rest_v1"
 origin = origin_root + "/wiki"
 imgdir = "img"
 oldimgdir = "img_old"
@@ -52,10 +54,17 @@ metadir = "_meta"
 infoname = "info.lua"
 faviconname = "favicon.png"
 cssname = "wikistyle.css"
+tracefname = os.path.join(rootdir, "trace.svg")
 logfname = os.path.join(rootdir, "dump.log")
 resfpath = os.path.join(rootdir, "resume.txt")
 today = datetime.date.today().strftime("%Y-%m-%d")
-useragent = "wikidump/0.3 contact:matthew.schauer.x@gmail.com (Please block temporarily and send email if bandwidth limit exceeded)"
+useragent = "wikidump/0.4 robot contact:matthew.schauer@e10x.net (Please block temporarily and send e-mail if bandwidth limit exceeded)"
+
+class HTTPError(Exception):
+	def __init__(self, code):
+		self.code = code
+	def __str__(self):
+		return "HTTP %d" % (self.code)
 
 def friendlyname(fname):
 	subs = {"\"": "[quote]", "/": "[slash]", " ": "_", "_+": "_"}
@@ -63,26 +72,18 @@ def friendlyname(fname):
 	for (char, sub) in subs.items(): parts[0] = re.sub(char, sub, parts[0])
 	return parts[0] + ".html" + ("#" + parts[1] if len(parts) > 1 else "")
 
-def outline(html): # FIXME In the current state, this does not preserve HTML sub-formatting (such as superscript) in headers
+def outline(html): # FIXME In its current state, this does not preserve HTML sub-formatting (such as superscript) in headers
 	ret = []
-	cur = None
-	for child in html.body.children:
-		if child.name == "h2":
-			if cur:
-				ret.append(cur)
-				cur = None
-			if "id" not in child.attrs: continue
-			cur = (child["id"], child.get_text(), [])
-		elif child.name == "h3":
-			if "id" not in child.attrs: continue
-			cur[2].append((child["id"], child.get_text()))
-		else: continue
-	if cur: ret.append(cur)
+	for section in html.children:
+		if section.name != "section": continue
+		if len(section.contents) == 0: continue
+		if section.contents[0].name not in ["h1", "h2", "h3"]: continue
+		ret.append((section["id"], section.contents[0].get_text(), outline(section)))
 	return ret
 
 def addtoc(html):
 	if not html.h2: return
-	contents = outline(html)
+	contents = outline(html.body)
 	if len(contents) <= 1: return
 	toc = html.new_tag("div", id="toc")
 	toc["class"] = "plainlist"
@@ -106,7 +107,7 @@ def addtoc(html):
 			li.append(sublist)
 		toclist.append(li)
 	toc.append(toclist)
-	html.h2.insert_before(toc)
+	html.section.append(toc)
 
 def resolve_styles(html):
 	styles = {}
@@ -126,8 +127,9 @@ def resolve_styles(html):
 	styleblock.string = css
 	html.head.append(styleblock)
 
-def writeout(title, content):
+def writeout(title, content, tracer):
 	if not content: return
+	tracer.processing()
 	noproto = re.compile("^//")
 	html = bs4.BeautifulSoup(content, "lxml")
 
@@ -144,7 +146,8 @@ def writeout(title, content):
 		link["href"] = "https:" + link["href"]
 		if "rel" in link.attrs and "stylesheet" in link["rel"]: link.extract()
 	for link in html("a", href=re.compile("^\./.*:")): # Links to other namespaces
-		link["href"] = origin + link["href"][1:]
+		if link["href"].split(":", 1)[0][2:] in namespaces.values(): link["href"] = "./" + friendlyname(link["href"][2:])
+		else: link["href"] = origin + link["href"][1:]
 	for link in html("a", href=re.compile("^\./")): # Local article links
 		link["href"] = "./" + friendlyname(link["href"][2:])
 	for link in html("a", href=re.compile("^/wiki")): # Absolute article links
@@ -158,6 +161,7 @@ def writeout(title, content):
 		elif re.compile("^/").match(src): src = origin_root + src
 		elif re.compile("^\.\.").match(src): raise Exception("Found relative image link " + src)
 		elif re.compile("^[a-z]*://").match(src): pass
+		elif re.compile("^./Special:FilePath/").match(src): src = origin + src[1:]
 		else: raise Exception("Unhandled image link case " + src)
 		img["src"] = src
 		fname = urllib.parse.unquote(urllib.parse.urlparse(src)[2].split("/")[-1])
@@ -166,14 +170,16 @@ def writeout(title, content):
 			os.rename(os.path.join(rootdir, oldimgdir, fname), os.path.join(rootdir, imgdir, fname))
 			img["src"] = os.path.join("..", imgdir, fname)
 			continue
+		tracer.image(src)
 		reply = requests.get(src, headers={"user-agent": useragent})
 		if reply.status_code != 200: continue
-		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src); #fname += mimetypes.guess_extension(reply.headers["content-type"]); # I don't think this ever happens.
+		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
 		out = open(os.path.join(rootdir, imgdir, fname), "wb")
 		out.write(reply.content)
 		out.close()
 		img["src"] = os.path.join("..", imgdir, fname)
 
+	tracer.cleaning()
 	for tag in html.find_all(True):
 		for attr in ["srcset", "data-mw", "about"]:
 			if attr in tag.attrs: del tag[attr]
@@ -188,7 +194,7 @@ def writeout(title, content):
 def download(title):
 	fname = os.path.join(rootdir, htmldir, friendlyname(title))
 	if os.path.lexists(fname): return None; # Do not re-download existing articles
-	url = apiurl + "/page/html/%s?redirect=true"
+	url = origin_root + "/api/rest_v1/page/html/%s?redirect=true"
 	target = urllib.parse.quote(title, safe="")
 	while True:
 		#print("\nGET %s => " % (url % (target)), end="")
@@ -201,46 +207,52 @@ def download(title):
 	elif res.status_code == 200:
 		return res.text
 	else:
-		raise Exception("HTTP %s" % (res.status_code)); # TODO Specialize this exception
+		raise HTTPError(res.status_code);
 
 cnt = 0
-def getpage(title):
+def getpage(title, tracer):
 	global cnt, logfile, interrupt; # Why?
 	cnt += 1
 	title = urllib.parse.unquote(title)
 	print("\r\033[2K%d %s" % (cnt, title), end="")
-	# print("%d %s" % (cnt, title))
-	for i in range(3):
+	#print("%d %s" % (cnt, title))
+	for i in range(5):
 		if interrupt: break
 		try:
-			writeout(title, download(title))
+			tracer.start(title)
+			writeout(title, download(title), tracer)
+			tracer.finish()
 			break
 		except Exception as e:
-			if i < 2:
+			if i < 4:
 				time.sleep(4)
 				continue
 			print("\r\033[2K%d %s: %s" % (cnt, title, str(e)))
-			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ": " + str(e) + "\n")
+			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ":\n" + traceback.format_exc() + "\n")
 			logfile.flush()
 			break
 
-def fetch_artlist(tag):
-	url = apiurl + "/page/title/%s"
-	res = requests.get(url % (tag))
-	res.encoding = "UTF-8"
-	return json.loads(res.text)
-
 interrupt = False
-def articles(q, tag = ""):
+def articles(q, tag = (0, "")):
 	global interrupt
+	url = origin_root + "/w/api.php?format=json&action=query&list=allpages&aplimit=500&apnamespace=%d&apcontinue=%s"
 	q.put((0, "Main Page"))
 	while True:
 		if interrupt: return
-		res = fetch_artlist(tag)
-		try: tag = res["_links"]["next"]["href"]
-		except KeyError: tag = None
-		for item in res["items"]:
-			q.put((0, item))
+		req = requests.get(url % ([ i[0] for i in namespaces.items() ][tag[0]], urllib.parse.quote(tag[1])))
+		req.encoding = "UTF-8"
+		res = json.loads(req.text)
+		try: tag = (tag[0], res["continue"]["apcontinue"])
+		except KeyError:
+			tag = (tag[0] + 1, "")
+			if tag[0] >= len(namespaces): tag = None
+		for item in res["query"]["allpages"]:
+			while True:
+				if interrupt: return
+				try:
+					q.put((0, item["title"]), timeout=1)
+					break
+				except queue.Full: continue
 		if not tag: break
 		q.put((1, tag))
 	for i in range(concurrency): q.put((2, None))
@@ -249,29 +261,29 @@ resflock = threading.Lock()
 savedtag = None
 def resumewrite(tag):
 	global resflock, savedtag
-	resflock.acquire()
-	if savedtag:
-		resf = open(resfpath, "w")
-		resf.write(savedtag)
-		resf.close()
-	savedtag = tag
-	resflock.release()
+	with resflock:
+		if savedtag:
+			with open(resfpath, "w") as resf:
+				resf.write("%d %s" % savedtag)
+		savedtag = tag
 
 def process(q):
 	global interrupt
+	tracer = tracing.Tracer()
 	while True:
 		if interrupt: break
 		(cat, item) = q.get()
 		if cat == 2: break
 		elif cat == 1: resumewrite(item)
-		elif cat == 0: getpage(item)
+		elif cat == 0: getpage(item, tracer)
+	tracer.exit()
 
 def sigint(signum, frame):
 	global interrupt
 	if signum not in [2, 15]: return
 	if interrupt: exit(1)
 	interrupt = True
-	print("\r\033[2KCleaning up...")
+	print("\nCleaning up...")
 
 for path in [rootdir, os.path.join(rootdir, htmldir), os.path.join(rootdir, metadir)]:
 	if not os.path.isdir(path): os.mkdir(path)
@@ -282,24 +294,33 @@ if not os.path.exists(resfpath):
 	if os.path.exists(os.path.join(rootdir, imgdir)): os.rename(os.path.join(rootdir, imgdir), os.path.join(rootdir, oldimgdir))
 if not os.path.exists(os.path.join(rootdir, imgdir)): os.mkdir(os.path.join(rootdir, imgdir))
 if not os.path.exists(os.path.join(rootdir, cssname)): shutil.copy(os.path.join(os.path.dirname(os.path.realpath(__file__)), cssname), os.path.join(rootdir, cssname))
-start = ""
+start = (0, "")
 if os.path.isfile(resfpath):
 	resf = open(resfpath)
-	start = resf.read()
+	parts = resf.read().split(" ")
+	start = (int(parts[0]), parts[1])
 	resf.close()
 logfile = open(logfname, "a")
 logfile.write("\n== %s %s ==\n" % (site_name, today))
+tracing.init(tracefname)
 if debug:
-	for page in debug_pages: getpage(page)
+	tracer = tracing.Tracer()
+	for page in debug_pages: getpage(page, tracer)
 else:
 	artq = queue.Queue(2048)
 	signal.signal(signal.SIGINT, sigint)
-	pool = concurrent.futures.ThreadPoolExecutor(concurrency + 1)
-	pool.submit(articles, artq, start)
-	for i in range(concurrency): pool.submit(process, artq)
-	pool.shutdown()
+	with concurrent.futures.ThreadPoolExecutor(concurrency + 1) as pool:
+		res = []
+		res.append(pool.submit(articles, artq, start))
+		for i in range(concurrency): res.append(pool.submit(process, artq))
+		(finished, unfinished) = concurrent.futures.wait(res, None, concurrent.futures.FIRST_EXCEPTION)
+		for done in finished:
+			if done.exception():
+				interrupt = True
+				raise done.exception()
 print()
 logfile.close()
+tracing.cleanup()
 if os.path.isfile(resfpath) and not interrupt: os.unlink(resfpath)
 if interrupt: exit(0)
 
@@ -324,4 +345,3 @@ infofile = open(os.path.join(rootdir, metadir, infoname), "w")
 infofile.write(info)
 infofile.close()
 subprocess.call(["convert", "-density", "200", "-background", "none", faviconsrc, "-resize", "120x120", "-gravity", "center", "-extent", "128x128", os.path.join(rootdir, metadir, faviconname)], shell=False)
-
