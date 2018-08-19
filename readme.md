@@ -348,11 +348,11 @@ of 2; you can increase this further to get debugging output.  *Please* ask the p
 reduce server load if you aren't dumping your own installation.
 
 
-### Wikimedia dump
+### Mediawiki Dump
 
 As mentioned above, the `wikimedia.py` script does much the same thing as Wikidump, but it's designed to use the new HTTP API on new
 Mediawiki sites and works much more quickly.  I've tried it out successfully with Wikipedia and Wiktionary, and it should work for
-other Wikimedia installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.
+other Mediawiki installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.
 I don't know how widely the new API will be adopted by other sites on Mediawiki, especially ones that don't want to be
 bulk-downloaded, but it may supplant Wikidump at some point in the future.
 

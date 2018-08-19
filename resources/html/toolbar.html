@@ -1,3 +1,4 @@
+<!-- <iframe style="position: fixed; z-index: 10; top: 8px; right: 8px; height: 32px; border: none" src="/rsrc/html/toolbar-contents.html"></iframe> -->
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
 <link rel="stylesheet" href="/rsrc/css/typeahead.css">
 <link rel="stylesheet" href="/rsrc/css/toolbar.css">
@@ -9,7 +10,7 @@
 	<div class="zsr-toolbar-spacer"></div>
 	<a href="/" class="zsr-toolbar-button" target="_top"><i class="fa fa-lg fa-th-list" title="Library"></i></a>
 	<a href="/view/{{id}}/{{home}}" class="zsr-toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
-	<a href="{{live}}" class="zsr-toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
+	<a href="{{live}}{{query}}" class="zsr-toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
 	<a href="/shuffle/{{id}}" class="zsr-toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
 	<div class="zsr-toolbar-spacer"></div>
 	<div class="zsr-toolbar-expand"></div>
@@ -18,5 +19,5 @@
 	<button type="submit">Go</button>
 	</form>
 	<div class="zsr-toolbar-spacer"></div>
-	<a href="/content/{{id}}/{{member}}" class="zsr-close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
+	<a href="/content/{{id}}/{{member}}{{query}}" class="zsr-close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
 </div>

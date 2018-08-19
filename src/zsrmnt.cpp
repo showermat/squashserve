@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <string.h>
-#include <attr/xattr.h>
+#include <sys/xattr.h>
 #include <vector>
 #include <unordered_map>
 #include <stdexcept>
@@ -142,21 +142,21 @@ int fs_getxattr(const char *path, const char *name, char *value, size_t size)
 {
 	std::string pathstr{path}, namestr{name}, val{};
 	std::ostringstream buf{};
-	if (namestr.substr(0, 5) != "user.") return -ENOATTR;
+	if (namestr.substr(0, 5) != "user.") return -ENODATA;
 	std::string attrname = namestr.substr(5);
 	try
 	{
 		if (pathstr == std::string{"/"})
 		{
-			if (! ar->gmeta().count(attrname)) return -ENOATTR;
+			if (! ar->gmeta().count(attrname)) return -ENODATA;
 			val = ar->gmeta().at(attrname);
 		}
 		else
 		{
 			const zsr::node n = ar->get(pathstr);
 			try { val = n.meta(attrname); }
-			catch (std::runtime_error &e) { return -ENOATTR; }
-			if (! val.size()) return -ENOATTR;
+			catch (std::runtime_error &e) { return -ENODATA; }
+			if (! val.size()) return -ENODATA;
 		}
 	}
 	catch (std::runtime_error &e) { return -ENOENT; }

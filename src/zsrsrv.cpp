@@ -161,7 +161,7 @@ http::doc shuffle(Volume &vol)
 	return http::redirect(http::mkpath({"view", vol.id(), vol.shuffle()}));
 }
 
-http::doc content(Volume &vol, const std::string &path, bool toolbar = false)
+http::doc content(Volume &vol, const std::string &path, const std::string &query, bool toolbar = false)
 {
 	if (! path.size()) return http::redirect(http::mkpath({"content", vol.id(), vol.info("home")}));
 	try
@@ -170,7 +170,9 @@ http::doc content(Volume &vol, const std::string &path, bool toolbar = false)
 		if (toolbar && contpair.first == "text/html")
 		{
 			http::doc toolbar = resource("html/toolbar.html");
-			toolbar.content(templ::render(toolbar.content(), vol.tokens(path)));
+			std::unordered_map<std::string, std::string> tokens = vol.tokens(path);
+			tokens["query"] = query;
+			toolbar.content(templ::render(toolbar.content(), tokens));
 			contpair.second = inject(contpair.second, toolbar.content());
 		}
 		return http::doc{contpair.first, contpair.second};
@@ -274,13 +276,14 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 			std::string::const_iterator start = util::find_nth(url.begin(), url.end(), '/', 3) + 1;
 			if (start > url.end()) input = "";
 			else input = util::urldecode(std::string{start, url.end()});
-			std::string input_qstr = input + (querystr.size() ? "?" + querystr : "");
-			if (path[0] == "search") return search(volumes.get(path[1]), input_qstr);
-			else if (path[0] == "view") return content(volumes.get(path[1]), input, true);
+			std::string full_qstr = (querystr.size() ? "?" + querystr : "");
+			std::string input_qstr = input + full_qstr;
+			if (path[0] == "content") return content(volumes.get(path[1]), input, full_qstr);
+			else if (path[0] == "view") return content(volumes.get(path[1]), input, full_qstr, true);
 			else if (path[0] == "complete") return complete(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "titles") return titles(volumes.get(path[1]), input_qstr);
 			else if (path[0] == "shuffle") return shuffle(volumes.get(path[1]));
-			else return content(volumes.get(path[1]), input);
+			else /*if (path[0] == "search")*/ return search(volumes.get(path[1]), input_qstr);
 		}
 		else if (path[0] == "load" || path[0] == "unload")
 		{

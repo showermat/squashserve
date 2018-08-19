@@ -9,7 +9,15 @@
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    mkvol [-l POL] srcdir dest.zsr\nFlags:\n    -l POL: Handle symbolic links according to policy POL:\n        process: Encode symbolic links within the tree as links in the archive\n        follow: Always follow symbolic links and archive the destination\n        skip: Ignore symbolic links completely\n"; // TODO Improve
+	std::cerr <<
+R"(Usage:
+    mkvol [-l POL] srcdir dest.zsr
+Flags:
+    -l POL: Handle symbolic links according to policy POL:
+        process: Encode symbolic links within the tree as links in the archive (default)
+        follow: Always follow symbolic links and archive the destination
+        skip: Ignore symbolic links completely
+)"; // TODO Improve
 	exit(1);
 }
 

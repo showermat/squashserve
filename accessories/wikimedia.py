@@ -23,7 +23,6 @@ import tracing
 # TODO
 # It would be nice to download the category namespace for both Wikipedia and Wiktionary, but the HTML rendering appears to always be empty!
 # Don't download redirects to pages that we're not downloading, like links to pages in namespaces
-# Links in footnotes to where they were cited are broken
 # Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions (adds an extra GET and requires moving images; probably no faster)
 # Eventually: postprocessing for redlinks?
 #
@@ -34,7 +33,7 @@ debug = False
 debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
 	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
 	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
-	"Chongqing", "Implosive consonant"]
+	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%"]
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
@@ -75,25 +74,16 @@ def friendlyname(fname):
 
 def outline(html): # FIXME In its current state, this does not preserve HTML sub-formatting (such as superscript) in headers
 	ret = []
-	cur = None
-	for child in html.body.children:
-		if child.name in ["h1", "h2"]:
-			if cur:
-				ret.append(cur)
-				cur = None
-			if "id" not in child.attrs: continue
-			cur = (child["id"], child.get_text(), [])
-		elif child.name == "h3":
-			if "id" not in child.attrs: continue
-			if cur is None: cur = (child["id"], child.get_text(), []) # We really don't know what to do in this situation, so we just make it a top-level header
-			else: cur[2].append((child["id"], child.get_text()))
-		else: continue
-	if cur: ret.append(cur)
+	for section in html.children:
+		if section.name != "section": continue
+		if len(section.contents) == 0: continue
+		if section.contents[0].name not in ["h1", "h2", "h3"]: continue
+		ret.append((section["id"], section.contents[0].get_text(), outline(section)))
 	return ret
 
 def addtoc(html):
 	if not html.h2: return
-	contents = outline(html)
+	contents = outline(html.body)
 	if len(contents) <= 1: return
 	toc = html.new_tag("div", id="toc")
 	toc["class"] = "plainlist"
@@ -117,7 +107,7 @@ def addtoc(html):
 			li.append(sublist)
 		toclist.append(li)
 	toc.append(toclist)
-	html.h2.insert_before(toc)
+	html.section.append(toc)
 
 def resolve_styles(html):
 	styles = {}
@@ -226,7 +216,7 @@ def getpage(title, tracer):
 	title = urllib.parse.unquote(title)
 	print("\r\033[2K%d %s" % (cnt, title), end="")
 	#print("%d %s" % (cnt, title))
-	for i in range(3):
+	for i in range(5):
 		if interrupt: break
 		try:
 			tracer.start(title)
@@ -234,7 +224,7 @@ def getpage(title, tracer):
 			tracer.finish()
 			break
 		except Exception as e:
-			if i < 2:
+			if i < 4:
 				time.sleep(4)
 				continue
 			print("\r\033[2K%d %s: %s" % (cnt, title, str(e)))

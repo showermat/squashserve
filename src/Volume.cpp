@@ -329,7 +329,6 @@ std::string Volume::quicksearch(std::string query)
 {
 	query = util::utf8lower(query);
 	std::unordered_set<zsr::filecount> res = titles_.exact_search(query);
-	//if (res.size() == 1) return archive_->index(*res.begin()).path();
 	for (const zsr::filecount &idx : res)
 	{
 		zsr::node n = archive_->index(idx);
@@ -377,7 +376,7 @@ void Volmgr::refresh()
 	categories_.clear();
 	mapping_.clear();
 	volumes_.clear();
-	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through excpetions
+	for (const std::string &file : util::ls(dir_, "\\.zsr$")) // Pass through exceptions
 	{
 		if (util::isdir(util::pathjoin({dir_, file}))) continue;
 		std::string volid = file.substr(0, file.size() - 4);

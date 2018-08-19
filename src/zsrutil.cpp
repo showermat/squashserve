@@ -6,7 +6,13 @@
 
 void help_exit()
 {
-	std::cerr << "Usage:\n    zsrutil c src dest.zsr [info.lua]\n    zsrutil x src [member]\n    zsrutil i src [member]\n    zsrutil l src [member]\n"; // TODO Improve
+	std::cerr <<
+R"(Usage:
+    zsrutil c src dest.zsr [info.lua]
+    zsrutil x src [member]
+    zsrutil i src [member]
+    zsrutil l src [member]
+)"; // TODO Improve
 	exit(1);
 }
 
