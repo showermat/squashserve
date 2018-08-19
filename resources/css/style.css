@@ -248,7 +248,7 @@ a.toolbar-button
 	margin: 0px 12px;
 }
 
-a.close-button
+a#close-button
 {
 	display: block;
 	width: 12px;
@@ -256,7 +256,7 @@ a.close-button
 	padding: 0px 16px;
 }
 
-a.close-button img
+a#close-button img
 {
 	width: 100%;
 	height: 100%;

@@ -164,6 +164,11 @@ http::doc shuffle(Volume &vol)
 
 http::doc view(Volume &vol, const std::string &path, const std::string &query)
 {
+	/* Using an iframe like this requires hacky JavaScript link rewriters to make things as transparent as possible, which causes
+	 * issues including the following.  However, it's the best way of doing a toolbar that I've been able to come up with so far.
+	 *   - Links dynamically added to pages with JavaScript are not bound by the onclick handler that keeps them in the iframe
+	 *   - The browser doesn't remember your position on the page if you e.g. go back
+	 */
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
 	http::doc ret = resource("html/view.html");
 	std::unordered_map<std::string, std::string> tokens = vol.tokens(path);

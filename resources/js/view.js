@@ -35,5 +35,9 @@ $(document).ready(function() {
 		$("#page").get(0).contentDocument.location.hash = window.location.hash;
 		window.frames[0].scrollBy(0, -36);
 	});
+	$("#close-button").on('click', function() {
+		$(this).prop("href", $(this).prop("href").split("#")[0] + window.location.hash);
+		return true;
+	})
 });
 
