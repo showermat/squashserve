@@ -67,7 +67,7 @@ namespace zsr
 	public:
 		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{},
 			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_} { }
-		void userdata(std::istream &data) { userdata_ = &data; }
+		void userdata(std::istream &data) { userdata_ = &data; userdata_->exceptions(std::ios::badbit); }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::unordered_map<std::string, std::string>(const filenode &)> generator);

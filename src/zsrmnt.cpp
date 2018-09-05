@@ -62,7 +62,6 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	std::vector<dirent> ls{};
 	try
 	{
-		//for (const std::pair<const std::string, zsr::filecount> &child : ar->get(std::string{path}).children())
 		for (zsr::iterator children = ar->get(std::string{path}).children(); children; children++)
 		{
 			zsr::node child = children.get();

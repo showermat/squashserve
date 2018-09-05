@@ -32,6 +32,19 @@
 </tr>
 %
 </table>
+{{#pages>1?}}
+	<div id="pager">
+	{{#page>1?}}
+		<div class="item"><a style="" href="/titles/{{id}}/{{queryesc}}/1">«</a></div>
+		<div class="item"><a style="" href="/titles/{{id}}/{{queryesc}}/{{page-1}}">‹</a></div>
+	{{/}}
+	<div class="item">{{page}} / {{pages}}</div>
+	{{#page<pages?}}
+		<div class="item"><a style="" href="/titles/{{id}}/{{queryesc}}/{{page+1}}">›</a></div>
+		<div class="item"><a style="" href="/titles/{{id}}/{{queryesc}}/{{pages}}">»</a></div>
+	{{/}}
+	</div>
+{{/}}
 </main>
 </body>
 </html>

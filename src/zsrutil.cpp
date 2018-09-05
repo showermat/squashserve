@@ -32,6 +32,8 @@ int main(int argc, char **argv) try
 			ar.node_meta(info.table_iter("metanames").tovec<std::string>(), [&info](const zsr::filenode &file) { return info.calltbl("meta", file.path()).tomap<std::string, std::string>(); });
 		}
 		std::ofstream out{args[3]};
+		if (! out) throw std::runtime_error{"Couldn't open output file " + args[3] + " for writing"};
+		out.exceptions(std::ios_base::badbit);
 		ar.write(out);
 	}
 	else if (args[1] == "x")

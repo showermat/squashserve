@@ -33,7 +33,7 @@ debug = False
 debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
 	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
 	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
-	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%"]
+	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%", "Aluminum", "Aluminium"]
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
@@ -57,8 +57,10 @@ cssname = "wikistyle.css"
 tracefname = os.path.join(rootdir, "trace.svg")
 logfname = os.path.join(rootdir, "dump.log")
 resfpath = os.path.join(rootdir, "resume.txt")
-today = datetime.date.today().strftime("%Y-%m-%d")
 useragent = "wikidump/0.4 robot contact:matthew.schauer@e10x.net (Please block temporarily and send e-mail if bandwidth limit exceeded)"
+
+def timestr(format = "%Y-%m-%d %H:%M:%S"):
+	return datetime.datetime.now().strftime(format)
 
 class HTTPError(Exception):
 	def __init__(self, code):
@@ -228,7 +230,7 @@ def getpage(title, tracer):
 				time.sleep(4)
 				continue
 			print("\r\033[2K%d %s: %s" % (cnt, title, str(e)))
-			logfile.write(datetime.datetime.today().strftime("%Y-%m-%d %H:%M:%S") + ": " + title + ":\n" + traceback.format_exc() + "\n")
+			logfile.write(timestr() + ": " + title + ":\n" + traceback.format_exc() + "\n")
 			logfile.flush()
 			break
 
@@ -279,11 +281,12 @@ def process(q):
 	tracer.exit()
 
 def sigint(signum, frame):
-	global interrupt
+	global interrupt, logfile
 	if signum not in [2, 15]: return
 	if interrupt: exit(1)
 	interrupt = True
 	print("\nCleaning up...")
+	logfile.write(timestr() + ": Interrupted\n")
 
 for path in [rootdir, os.path.join(rootdir, htmldir), os.path.join(rootdir, metadir)]:
 	if not os.path.isdir(path): os.mkdir(path)
@@ -301,7 +304,7 @@ if os.path.isfile(resfpath):
 	start = (int(parts[0]), parts[1])
 	resf.close()
 logfile = open(logfname, "a")
-logfile.write("\n== %s %s ==\n" % (site_name, today))
+logfile.write("\n== %s %s ==\n" % (site_name, timestr()))
 tracing.init(tracefname)
 if debug:
 	tracer = tracing.Tracer()
@@ -334,13 +337,17 @@ info = """params = {
 	home = "%s/Main_Page.html",
 }
 
-function index(path, ftype)
-	if not is_html(path) then return "" end
-	if ftype == T_REG then return html_title(path) end
-	if ftype == T_LNK then return basename(path):gsub("_", " ") end
-	return ""
+function meta(path, ftype)
+	ret = {}
+	if ftype == T_REG then
+		if is_html(path) then ret["title"] = html_title(path) end
+		ret["type"] = mimetype(path)
+	elseif ftype == T_LNK then
+		if is_html(path) then ret["title"] = basename(path):gsub("_", " ") end
+	end
+	return ret
 end
-""" % (site_name, site_description, today, origin_root, origin_root, htmldir)
+""" % (site_name, site_description, timestr("%Y-%m-%d"), origin_root, origin_root, htmldir)
 infofile = open(os.path.join(rootdir, metadir, infoname), "w")
 infofile.write(info)
 infofile.close()

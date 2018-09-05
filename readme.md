@@ -121,7 +121,7 @@ The ZSR format is fairly simple.  It consists of:
       - The eight-byte number of index entries; that is, the total number of files and directories stored in the index
       - For each file, the offset from the start of the data section to the start of the data entry for that file
   - User data: arbitrary user-defined data may follow the archive.  (This is used, for example, to store the search index for
-    volumes.)  This region of the file is made available to the user as a `std::istream` when the file is opened.
+    volumes.)  This region of the file is made available to the user as a `std::string_view` when the file is opened.
 
 The encoder for the file format is implemented in `zsr.cpp`.  I provide a small utility for command-line compression and
 decompression of ZSR files in `zsrutil.cpp`.  Its usage is as follows:
@@ -326,7 +326,7 @@ GB of disk space and 16 GB of RAM should be sufficient.  Also, if you're downloa
 sure that `dir_index` is disabled on the partition; otherwise, [you *will* run into hash
 collisions](https://unix.stackexchange.com/questions/222221) and the archive will be incomplete.  I recommend using an XFS-formatted
 partition for downloading.  Once your system is ready, getting your own copy of Wikipedia should be as easy as running
-`accessories/wikimedia.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia`
+`accessories/mediawiki.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia`
 folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.
 
 ## Accessory Tools
@@ -350,7 +350,7 @@ reduce server load if you aren't dumping your own installation.
 
 ### Mediawiki Dump
 
-As mentioned above, the `wikimedia.py` script does much the same thing as Wikidump, but it's designed to use the new HTTP API on new
+As mentioned above, the `mediawiki.py` script does much the same thing as Wikidump, but it's designed to use the new HTTP API on new
 Mediawiki sites and works much more quickly.  I've tried it out successfully with Wikipedia and Wiktionary, and it should work for
 other Mediawiki installations as well, if you just add the right information to the `sites` dictionary at the beginning of the file.
 I don't know how widely the new API will be adopted by other sites on Mediawiki, especially ones that don't want to be

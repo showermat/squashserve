@@ -48,6 +48,7 @@ int main(int argc, char **argv) try
 	}
 	std::ofstream out{args[1]};
 	if (! out) throw std::runtime_error{"Couldn't open output file"};
+	out.exceptions(std::ios_base::badbit);
 	Volwriter{args[0], linkpol}.write(out);
 	return 0;
 }

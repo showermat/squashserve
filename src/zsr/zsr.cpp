@@ -55,10 +55,8 @@ namespace zsr
 
 	std::string node::meta(const std::string &key) const
 	{
-		// TODO We should either give links metadata or follow them when retrieving
-		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get metadata of a non-regular file"};
-		return meta_[container_.metaidx(key)];
-		//return follow().meta_[container_.metaidx(key)];
+		if (! isreg()) throw std::runtime_error{"Tried to get metadata of a non-regular file"};
+		return follow().meta_[container_.metaidx(key)];
 	}
 
 	iterator node::children() const
@@ -77,7 +75,7 @@ namespace zsr
 	{
 		if (type_ == ntype::link) return follow().content();
 		if (type_ != ntype::reg) throw std::runtime_error{"Tried to get content of non-regular file"};
-		return stream{data_, static_cast<std::streampos>(len_), static_cast<std::streampos>(fullsize_)}; // TODO Theoretically unsafe unsigned-to-signed conversions
+		return stream{data_, static_cast<std::streampos>(len_), static_cast<std::streampos>(fullsize_)}; // Theoretically unsafe unsigned-to-signed conversions
 	}
 
 	void node::extract(const std::string &location) const
@@ -94,6 +92,7 @@ namespace zsr
 		{
 			std::ofstream out{fullpath};
 			if (! out) throw std::runtime_error{"Could not create file " + fullpath};
+			out.exceptions(std::ios_base::badbit);
 			out << content().rdbuf();
 			out.close();
 		}

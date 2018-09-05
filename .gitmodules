@@ -1,3 +1,9 @@
 [submodule "src/util"]
 	path = src/util
 	url = git@github.com:showermat/libutil.git
+[submodule "lib/json"]
+	path = lib/json
+	url = git@github.com:nlohmann/json.git
+[submodule "lib/Mustache"]
+	path = lib/mustache
+	url = git@github.com:kainjow/Mustache.git

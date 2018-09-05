@@ -124,9 +124,9 @@ http::doc search(Volume &vol, const std::string &query)
 
 http::doc complete(Volume &vol, const std::string &query)
 {
-	constexpr int limit = 40;
+	unsigned int limit = prefs::get("complete");
 	std::function<bool(const std::string &, const std::string &)> strlencomp = [](const std::string &a, const std::string &b) { return a.size() < b.size(); };
-	std::unordered_map<std::string, std::string> res = vol.complete(query, limit * 2);
+	std::unordered_map<std::string, std::string> res = vol.complete(query, 0, limit * 2);
 	std::vector<std::string> names{};
 	names.reserve(res.size());
 	for (const std::pair<const std::string, std::string> &pair : res) names.push_back(pair.first);
@@ -142,16 +142,21 @@ http::doc complete(Volume &vol, const std::string &query)
 	return http::doc{"text/plain", ret.dump()};
 }
 
-http::doc titles(Volume &vol, const std::string &query)
+http::doc titles(Volume &vol, const std::string &query, int page = 1)
 {
+	int pagelen = prefs::get("pagesize");
+	int npages = (pagelen == 0 ? 1 : vol.completions(query) / pagelen + 1);
 	http::doc ret = resource("html/titles.html");
 	std::stringstream buf{};
 	std::vector<std::string> sects = templ::split(ret.content(), 3, "titles.html");
 	std::unordered_map<std::string, std::string> titletokens = vol.tokens();
 	titletokens["query"] = query;
+	titletokens["queryesc"] = util::urlencode(query);
 	titletokens["viewbase"] = "/" + viewbase();
+	titletokens["pages"] = util::t2s(npages);
+	titletokens["page"] = util::t2s(page);
 	buf << templ::render(sects[0], titletokens);
-	for (const std::pair<const std::string, std::string> &pair : vol.complete(query)) buf << templ::render(sects[1], {{"title", pair.first}, {"url", http::mkpath({viewbase(), vol.id(), pair.second})}}); // Is sorting worth the time consumption?
+	for (const std::pair<const std::string, std::string> &pair : vol.complete(query, (page - 1) * pagelen, pagelen)) buf << templ::render(sects[1], {{"title", pair.first}, {"url", http::mkpath({viewbase(), vol.id(), pair.second})}});
 	buf << templ::render(sects[2], titletokens);
 	ret.content(buf.str());
 	return ret;
@@ -245,26 +250,27 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 		}
 		for (const std::string &key : keynames) if (args.count("key_" + key) && args.count("value_" + key)) info[args.at("key_" + key)] = args.at("value_" + key);
 		try { Volume::create(srcdir, prefs::get("basedir"), id, info); }
-		catch(std::runtime_error &e) { return error("Volume Creation Failed", e.what()); }
+		catch (std::runtime_error &e) { return error("Volume Creation Failed", e.what()); }
 		volumes.refresh();
 		return http::redirect("/");
 	}
 	else if (verb == "quit") std::exit(0);
-	/*else if (verb == "debug")
-	{
-		std::stringstream buf{};
-		for (const std::pair<const std::string, std::string> &arg : args) buf << arg.first << " = " << arg.second << "\n";
-		return http::doc{"text/plain", buf.str()};
-	}*/
 	else return error("Bad Request", "Unknown action “" + verb + "”");
 }
 
-http::doc urlhandle(const std::string &url, const std::string &querystr, const uint32_t remoteip)
+std::string url_input(const std::string &url, int start)
 {
-	//std::cout << url << "\n";
-	const uint32_t localip = util::str2ip("127.0.0.1"); // TODO Make this configurable
+	std::string::const_iterator startpos = util::find_nth(url.begin(), url.end(), '/', start + 1) + 1;
+	if (startpos > url.end()) return std::string{};
+	return util::urldecode(std::string{startpos, url.end()});
+}
+
+http::doc urlhandle(const std::string &url, const std::string &querystr, uint32_t remoteip)
+{
+	const uint32_t localip = util::str2ip("127.0.0.1");
 	std::vector<std::string> path = util::strsplit(url, '/');
 	if (path.size() && path[0] == "") path.erase(path.begin());
+	if (path.size() && path[path.size() - 1] == "") path.erase(path.end());
 	for (std::string &elem : path) elem = util::urldecode(elem);
 	std::unordered_map<std::string, std::string> query{};
 	if (querystr.size() > 0) for (const std::string &qu : util::strsplit(querystr, '&'))
@@ -280,41 +286,59 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, const u
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (! volumes.check(path[1])) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
-			std::string input{};
-			std::string::const_iterator start = util::find_nth(url.begin(), url.end(), '/', 3) + 1;
-			if (start > url.end()) input = "";
-			else input = util::urldecode(std::string{start, url.end()});
 			std::string full_qstr = (querystr.size() ? "?" + querystr : "");
-			std::string input_qstr = input + full_qstr;
-			if (path[0] == "content") return content(volumes.get(path[1]), input);
-			else if (path[0] == "view") return view(volumes.get(path[1]), input, full_qstr);
-			else if (path[0] == "complete") return complete(volumes.get(path[1]), input_qstr);
-			else if (path[0] == "titles") return titles(volumes.get(path[1]), input_qstr);
-			else if (path[0] == "shuffle") return shuffle(volumes.get(path[1]));
-			else /*if (path[0] == "search")*/ return search(volumes.get(path[1]), input_qstr);
+			if (path[0] == "content") return content(volumes.get(path[1]), url_input(url, 2));
+			if (path[0] == "view") return view(volumes.get(path[1]), url_input(url, 2), full_qstr);
+			if (path[0] == "complete")
+			{
+				if (path.size() > 3) return error("Bad Request", "Trailing path elements");
+				return complete(volumes.get(path[1]), path[2]);
+			}
+			if (path[0] == "titles")
+			{
+				if (path.size() > 4) return error("Bad Request", "Trailing path elements");
+				return titles(volumes.get(path[1]), path[2], path.size() > 3 ? util::s2t<int>(path[3]) : 1);
+			}
+			if (path[0] == "shuffle")
+			{
+				if (path.size() > 2) return error("Bad Request", "Trailing path elements");
+				return shuffle(volumes.get(path[1]));
+			}
+			if (path[0] == "search")
+			{
+				if (path.size() > 3) return error("Bad Request", "Trailing path elements");
+				return search(volumes.get(path[1]), path[2]);
+			}
 		}
-		else if (path[0] == "load" || path[0] == "unload")
+		if (path[0] == "load" || path[0] == "unload")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing category name");
+			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
 			if (path[0] == "load") return loadcat(path[1]);
 			else return unloadcat(path[1]);
 		}
-		else if (path[0] == "external")
+		if (path[0] == "external")
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing external path");
+			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
 			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
 			return http::doc{"text/plain", volumes.load_external(path[1])};
 		}
-		else if (path[0] == "pref") return pref();
-		else if (path[0] == "rsrc") return rsrc(util::strjoin(path, '/', 1));
-		else if (path[0] == "add") return http::doc{resource("html/add.html")};
-		else if (path[0] == "action")
+		if (path[0] == "rsrc") return rsrc(url_input(url, 1));
+		if (path[0] == "action")
 		{
 			if (path.size() < 2) return error("Bad Request", "No action selected");
+			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
 			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
 			return action(path[1], query);
 		}
-		else throw handle_error{"Unknown action “" + path[0] + "”"};
+		if (path[0] == "pref" || path[0] == "add")
+		{
+			if (path.size() > 1) return error("Bad Request", "Trailing path elements");
+			if (path[0] == "pref") return pref();
+			if (path[0] == "add") return http::doc{resource("html/add.html")};
+		}
+		throw handle_error{"Unknown action “" + path[0] + "”"};
 	}
 	catch (std::exception &e)
 	{

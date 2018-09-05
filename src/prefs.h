@@ -36,7 +36,10 @@ namespace prefs
 		for (const std::string &loc : preflocs) if (loc != "" && util::fexists(loc) && ! util::isdir(loc))
 		{
 			conffile = loc;
-			std::ifstream{loc} >> userp;
+			std::ifstream in{loc};
+			if (! in) throw std::runtime_error{"Couldn't open input file " + loc + " for reading"};
+			in.exceptions(std::ios_base::badbit);
+			in >> userp;
 			return;
 		}
 		userp = nlohmann::json::parse(R"({})");
@@ -44,11 +47,20 @@ namespace prefs
 
 	void write()
 	{
-		if (conffile != "") std::ofstream{conffile} << userp;
+		if (conffile != "")
+		{
+			std::ofstream out{conffile};
+			if (! out) throw std::runtime_error{"Couldn't open output file " + conffile + " for writing"};
+			out.exceptions(std::ios_base::badbit);
+			out << userp;
+		}
 		else for (const std::string &loc : preflocs) if (loc != "" && util::fexists(loc) && ! util::isdir(loc))
 		{
 			conffile = loc;
-			std::ofstream{loc} << userp.dump(4);
+			std::ofstream out{loc};
+			if (! out) throw std::runtime_error{"Couldn't open output file " + loc + " for writing"};
+			out.exceptions(std::ios_base::badbit);
+			out << userp.dump(4);
 			return;
 		}
 		else throw std::runtime_error{"Could not write preferences"};

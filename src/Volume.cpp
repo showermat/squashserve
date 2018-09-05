@@ -95,7 +95,9 @@ void Volwriter::Xapwriter::write(std::ostream &out) try
 	db.commit();
 	db.close();
 	Xapian::Database{xaptmpd}.compact(xaptmpf, Xapian::DBCOMPACT_SINGLE_FILE); // | Xapian::Compactor::FULLER); // Adding FULLER compaction triggers a bug in glass "File too large"
-	out << std::ifstream{xaptmpf}.rdbuf();
+	std::ifstream in{xaptmpf};
+	in.exceptions(std::ios_base::badbit);
+	out << in.rdbuf();
 	util::rm_recursive(xaptmpd);
 	util::rm(xaptmpf);
 }
@@ -149,7 +151,7 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 	info.loadstr(lua_preamble);
 	std::function<std::string(std::string, std::string, std::string)> iconv = [](std::string in, std::string from, std::string to) {
 		try { return util::conv(in, from, to); }
-		catch(std::runtime_error &e) { std::cout << "\n" << e.what() << "\n"; return std::string{}; }
+		catch (std::runtime_error &e) { std::cout << "\n" << e.what() << "\n"; return std::string{}; }
 	};
 	info.expose(iconv, "iconv");
 	std::function<std::string(std::string)> mimetype = [](std::string path) {
@@ -176,6 +178,8 @@ void Volwriter::write(std::ofstream &out)
 	archwriter.write_header();
 	archwriter.write_body();
 	std::ofstream searchout{searchtmpf};
+	if (! searchout) throw std::runtime_error{"Couldn't open search temporary file"};
+	searchout.exceptions(std::ios_base::badbit);
 #ifdef ZSR_USE_XAPIAN
 	zsr::offset xapstart{0};
 	zsr::serialize(searchout, xapstart);
@@ -190,6 +194,8 @@ void Volwriter::write(std::ofstream &out)
 #endif
 	searchout.close();
 	std::ifstream searchin{searchtmpf};
+	if (! searchin) throw std::runtime_error{"Couldn't open search temporary file"};
+	searchin.exceptions(std::ios_base::badbit);
 	archwriter.userdata(searchin);
 	archwriter.combine(out);
 	util::rm(searchtmpf);
@@ -208,6 +214,7 @@ void Volume::create(const std::string &srcdir, const std::string &destdir, const
 		std::string infofname{util::pathjoin({srcdir, metadir, "info.lua"})};
 		std::ofstream infofile{infofname};
 		if (! infofile) throw std::runtime_error{"Could not open information file " + infofname + " for writing"};
+		infofile.exceptions(std::ios_base::badbit);
 		infofile << "params = {\n";
 		for (const std::pair<const std::string, std::string> &item : info)
 		{
@@ -220,6 +227,7 @@ void Volume::create(const std::string &srcdir, const std::string &destdir, const
 	std::string outpath = util::pathjoin({destdir, id + ".zsr"});
 	std::ofstream out{outpath};
 	if (! out) throw std::runtime_error{"Could not open output file " + outpath};
+	out.exceptions(std::ios_base::badbit);
 	Volwriter{srcdir, zsr::writer::linkpolicy::process}.write(out);
 }
 
@@ -307,19 +315,41 @@ std::vector<Result> Volume::search(const std::string &query, int nres, int prevl
 
 }
 
-std::unordered_map<std::string, std::string> Volume::complete(const std::string &query, int max)
+int Volume::completions(const std::string &query)
 {
+	if (! query.size()) return 0;
+	std::vector<std::string> words = util::strsplit(util::utf8lower(query), ' ');
+	std::unordered_set<zsr::filecount> matches = titles_.search(words.back());
+	words.pop_back();
+	for (const std::string &word : words) matches = util::intersection(matches, titles_.search(word));
+	return matches.size();
+}
+
+std::unordered_map<std::string, std::string> Volume::complete(const std::string &query, zsr::filecount start, zsr::filecount max)
+{
+	// FIXME The ordering given here is suboptimal.  All the search backend can sort by is the tree path, which is lower-case and
+	// potentially not the same as the article title (for example, if the file is a link).  So that's kind of useless.  It's
+	// unfortunately easier for now to just fetch all the articles and sort them by file index -- if you're going to do a half-
+	// baked solution, do one that doesn't take much effort.  Then we select out the slice of these for the current page, and rely
+	// on the hash function for unordered_map to give the same ordering every time within the page.  I'm not sure if there's a way
+	// to do this that's both better and not really difficult.
 	std::unordered_map<std::string, std::string> ret{};
 	if (! query.size()) return ret;
 	std::vector<std::string> words = util::strsplit(util::utf8lower(query), ' ');
 	std::unordered_set<zsr::filecount> matches = titles_.search(words.back());
 	words.pop_back();
 	for (const std::string &word : words) matches = util::intersection(matches, titles_.search(word));
-	int cnt = 0;
-	for (const zsr::filecount &idx : matches)
+	std::vector<zsr::filecount> sorted{matches.begin(), matches.end()};
+	std::sort(sorted.begin(), sorted.end());
+	std::vector<zsr::node> nodes{};
+	for (zsr::filecount i = start; i < sorted.size() && (max == 0 || i < start + max); i++) nodes.push_back(archive_->index(sorted[i]));
+	std::vector<zsr::node> linksfirst{};
+	for (const zsr::node &n : nodes) if (n.type() == zsr::node::ntype::link) linksfirst.push_back(n);
+	for (const zsr::node &n : nodes) if (n.type() != zsr::node::ntype::link) linksfirst.push_back(n);
+	zsr::filecount cnt = 0;
+	for (const zsr::node &n : linksfirst)
 	{
 		if (max > 0 && cnt++ >= max) break;
-		zsr::node n = archive_->index(idx);
 		ret[n.meta("title")] = n.path();
 	}
 	return ret;
@@ -327,15 +357,21 @@ std::unordered_map<std::string, std::string> Volume::complete(const std::string 
 
 std::string Volume::quicksearch(std::string query)
 {
+	std::function<std::list<zsr::node>(zsr::archive &, std::unordered_set<zsr::filecount>)> getnodes = [](zsr::archive &ar, std::unordered_set<zsr::filecount> idxs) {
+		std::list<zsr::node> ret{};
+		for (const zsr::filecount &idx: idxs) ret.push_back(ar.index(idx));
+		return ret;
+	};
 	query = util::utf8lower(query);
-	std::unordered_set<zsr::filecount> res = titles_.exact_search(query);
-	for (const zsr::filecount &idx : res)
-	{
-		zsr::node n = archive_->index(idx);
-		if (util::utf8lower(n.meta("title")) == query) return n.path();
-	}
-	res = titles_.search(query);
-	if (res.size() == 1) return archive_->index(*res.begin()).path();
+	std::list<zsr::node> nodes = getnodes(*archive_, titles_.exact_search(query));
+	for (const zsr::node &n : nodes) if (n.meta("title") == query) return n.path();
+	for (const zsr::node &n : nodes) if (util::utf8lower(n.meta("title")) == query) return n.path();
+	nodes = getnodes(*archive_, titles_.search(query));
+	if (nodes.size() == 1) return nodes.begin()->path();
+	for (std::list<zsr::node>::iterator iter = nodes.begin(); iter != nodes.end(); )
+		if (iter->type() == zsr::node::ntype::link) iter = nodes.erase(iter);
+		else iter++;
+	if (nodes.size() == 1) return nodes.begin()->path();
 	return "";
 }
 
@@ -384,6 +420,7 @@ void Volmgr::refresh()
 	}
 	std::ifstream catin{util::pathjoin({dir_, "categories.txt"})};
 	if (! catin) return;
+	catin.exceptions(std::ios_base::badbit);
 	std::string line{};
 	unsigned int linen = 0;
 	while (std::getline(catin, line))
@@ -406,7 +443,6 @@ void Volmgr::refresh()
 		}
 		if (cnt) catorder_.push_back(tok[0]);
 	}
-
 }
 
 std::vector<std::string> &Volmgr::categories()
@@ -428,11 +464,11 @@ std::unordered_set<std::string> Volmgr::load(const std::string &cat)
 	{
 		try
 		{
-			if (! volumes_.count(pair.first)) volumes_.emplace(pair.first, Volume{util::pathjoin({dir_, pair.first + ".zsr"})}); // FIXME Creating the volume and then move-inserting causes issues in the stream.  Why?  Missing a field in move constructor?
+			if (! volumes_.count(pair.first)) volumes_.emplace(pair.first, Volume{util::pathjoin({dir_, pair.first + ".zsr"})});
 			ret.insert(pair.first);
 		}
 		catch (zsr::badzsr &e) { std::cerr << pair.first << ": " << e.what() << "\n"; }
-		catch (std::runtime_error &e) { std::cerr << pair.first << ": " << e.what() << "\n"; } // TODO How should this be done?  Exception subclassing and handling needs some refinement
+		catch (std::runtime_error &e) { std::cerr << pair.first << ": " << e.what() << "\n"; }
 	}
 	return ret;
 }

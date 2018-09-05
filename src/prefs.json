@@ -27,6 +27,14 @@
 	"desc": "Search result preview length",
 	"default": 400
 }, {
+	"name": "complete",
+	"desc": "Maximum number of autocomplete candidates to display",
+	"default": 40
+}, {
+	"name": "pagesize",
+	"desc": "Number of titles results to display per page",
+	"default": 100
+}, {
 	"name": "toolbar",
 	"desc": "Enable toolbar overlay when viewing pages",
 	"default": true

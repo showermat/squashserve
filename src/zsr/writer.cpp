@@ -17,6 +17,7 @@ namespace zsr
 		filenode::ntype type = filenode::ntype::reg;
 		DIR *dir = nullptr;
 		std::ifstream in{};
+		in.exceptions(std::ios_base::badbit);
 		std::string fulltarget{};
 		try
 		{
@@ -66,7 +67,6 @@ namespace zsr
 			serialize(contout, ptrfill); // Placeholder for length
 			lzma::wrbuf compressor{in};
 			contout << &compressor;
-			if (! contout) throw std::runtime_error{"Bad output stream while writing archive content for file " + path};
 			offset len = static_cast<offset>(contout.tellp() - sizepos - sizeof(offset));
 			std::streampos end = contout.tellp();
 			contout.seekp(sizepos);
@@ -188,6 +188,8 @@ namespace zsr
 		std::ofstream contout{contname}, idxout{idxname};
 		if (! contout) throw std::runtime_error{"Couldn't open " + contname + " for writing"};
 		if (! idxout) throw std::runtime_error{"Couldn't open " + idxname + " for writing"};
+		contout.exceptions(std::ios_base::badbit);
+		idxout.exceptions(std::ios_base::badbit);
 		nfile_ = 0;
 		recursive_process(root_, 0, contout, idxout);
 		loga("Wrote " << nfile_ << " entries");
@@ -202,6 +204,7 @@ namespace zsr
 	{
 		headf_ = tmpfname;
 		std::ofstream out{tmpfname};
+		out.exceptions(std::ios_base::badbit);
 		if (! out) throw std::runtime_error{"Couldn't open " + tmpfname + " for writing"};
 		serialize(out, magic_number);
 		serialize(out, version);
@@ -225,6 +228,9 @@ namespace zsr
 		std::ifstream header{headf_};
 		std::ifstream content{contf_};
 		std::ifstream index{idxf_};
+		header.exceptions(std::ios_base::badbit);
+		content.exceptions(std::ios_base::badbit);
+		index.exceptions(std::ios_base::badbit);
 		out << header.rdbuf();
 		out << content.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
@@ -234,7 +240,6 @@ namespace zsr
 		serialize(out, nfile_);
 		out << index.rdbuf();
 		if (userdata_) out << userdata_->rdbuf();
-		if (! out) throw std::runtime_error{"Bad output stream while writing archive output file"};
 		loga("Done writing archive");
 		for (const std::string &file : {headf_, contf_, idxf_}) util::rm(file);
 	}

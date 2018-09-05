@@ -76,7 +76,8 @@ namespace lzma
 		std::vector<char> buf_;
 		lzma_stream lzma_;
 		lzma_action action_;
-		pos_type start_, size_, len_, pos_;
+		const pos_type size_, start_, len_;
+		pos_type pos_; // The offset of the first byte in the buffer relative to the beginning of the entire file (not start_)
 		void reset();
 		std::streamsize load();
 		pos_type ff_to(std::streambuf::pos_type target);
@@ -84,7 +85,7 @@ namespace lzma
 		memrdbuf(const char *source, std::streampos size, std::streampos start, std::streampos len);
 		memrdbuf(const memrdbuf &orig) = delete;
 		memrdbuf(memrdbuf &&orig) : std::streambuf{std::move(orig)}, source_{orig.source_}, buf_{std::move(orig.buf_)},
-			lzma_{orig.lzma_}, action_{orig.action_}, start_{orig.start_}, size_{orig.size_}, len_{orig.len_}, pos_{orig.pos_}
+			lzma_{orig.lzma_}, action_{orig.action_}, size_{orig.size_}, start_{orig.start_}, len_{orig.len_}, pos_{orig.pos_}
 			{ orig.lzma_.internal = nullptr; }
 		int_type underflow();
 		pos_type seekpos(pos_type target, std::ios_base::openmode which);

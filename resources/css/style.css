@@ -207,6 +207,26 @@ form#search button, form.search button, form#search input, form.search input
 	line-height: 100%;
 }
 
+div#pager
+{
+	display: flex;
+	justify-content: center;
+	align-items: stretch;
+}
+
+div#pager div.item
+{
+	margin: 0em 0.25em;
+}
+
+div#pager a
+{
+	color: black;
+	text-decoration: none;
+	padding: 0.25em 1em;
+	background: #eee;
+}
+
 div#topbar
 {
 	position: absolute;

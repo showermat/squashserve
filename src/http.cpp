@@ -6,6 +6,7 @@ namespace http
 	{
 		std::ifstream in{path};
 		if (! in) throw std::runtime_error{"Couldn't open " + path + " for reading"};
+		in.exceptions(std::ios_base::badbit);
 		std::ostringstream buf{};
 		buf << in.rdbuf();
 		content_ = buf.str();

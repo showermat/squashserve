@@ -116,7 +116,8 @@ public:
 	std::pair<std::string, std::string> get(std::string path);
 	std::string shuffle() const;
 	std::vector<Result> search(const std::string &query, int nres, int prevlen);
-	std::unordered_map<std::string, std::string> complete(const std::string &query, int max = 0);
+	int completions(const std::string &query);
+	std::unordered_map<std::string, std::string> complete(const std::string &query, zsr::filecount start = 0, zsr::filecount max = 0);
 	std::string quicksearch(std::string query);
 	std::string info(const std::string &key) const;
 	std::unordered_map<std::string, std::string> tokens(std::string member = "");

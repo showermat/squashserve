@@ -21,7 +21,7 @@ namespace http
 		std::string content_;
 		std::unordered_map<std::string, std::string> headers_;
 	public:
-		doc(): type_{"text/plain"}, content_{}, headers_{} { }
+		doc() : type_{"text/plain"}, content_{}, headers_{} { }
 		doc(const std::string &type, const std::string &content, const std::unordered_map<std::string, std::string> &headers = {}) : type_{type}, content_{content}, headers_{headers} { }
 		doc(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {});
 		void content(const std::string &value) { content_ = value; }

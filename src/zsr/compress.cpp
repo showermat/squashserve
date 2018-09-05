@@ -54,6 +54,7 @@ namespace lzma
 	void buf_base::init(std::istream &file)
 	{
 		file_ = &file;
+		file_->exceptions(std::ios::badbit);
 		buf_.resize(chunksize);
 		inbuf_.resize(chunksize);
 		action_ = LZMA_RUN;
@@ -122,8 +123,7 @@ namespace lzma
 	
 	std::streambuf::pos_type rdbuf::seekpos(pos_type target, std::ios_base::openmode which)
 	{
-		//std::cerr << ">> Absolute seek to " << target << "\n";
-		if (target < pos_) reset(); // TODO Optimize by checking if the seek destination is still in the get buffer
+		if (target < pos_) reset();
 		while (pos_ + pos_type(egptr() - eback()) < target)
 		{
 			//int_type loadsize = underflow();
@@ -167,7 +167,7 @@ namespace lzma
 	}
 
 	memrdbuf::memrdbuf(const char *source, std::streampos size, std::streampos start, std::streampos len) : source_{source}, buf_{},
-		start_{start}, size_{size}, len_{len}
+		size_{size}, start_{start}, len_{len}
 	{
 		buf_.resize(chunksize);
 		reset();
@@ -231,7 +231,7 @@ namespace lzma
 	{
 		if (target >= len_) target = len_ - pos_type(1);
 		target += start_;
-		if (target < pos_) reset(); // TODO Optimize by checking if the seek destination is still in the get buffer
+		if (target < pos_) reset();
 		return ff_to(target) - start_;
 	}
 
