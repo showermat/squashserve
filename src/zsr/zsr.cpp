@@ -2,14 +2,14 @@
 
 namespace zsr
 {
-	node::node(const archive &container, offset idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
+	node::node(const archive &container, filecount idx): container_{container}, id_{idx}, revcheck_{container_.revcheck}
 	{
 		if (idx >= container.size()) throw std::runtime_error("Tried to access invalid node (" + util::t2s(idx) + " ≥ " + util::t2s(container.size()) + ")");
 		const char *inptr = container_.idxstart_ + idx * sizeof(offset);
 		uint8_t nmeta = static_cast<uint8_t>(container_.node_meta_.size());
 		offset start = deser<offset>(inptr);
 		inptr = container_.datastart_ + start;
-		parent_ = deser<offset>(inptr);
+		parent_ = deser<filecount>(inptr);
 		type_ = deser<ntype>(inptr);
 		name_ = deser<std::string_view>(inptr);
 		if (type_ == ntype::link) redirect_ = deser<filecount>(inptr);
@@ -186,7 +186,7 @@ namespace zsr
 		inptr = idxstart;
 		size_ = deser<filecount>(inptr);
 		idxstart_ = inptr;
-		const char *userdstart = idxstart_ + size_ * sizeof(filecount);
+		const char *userdstart = idxstart_ + size_ * sizeof(offset);
 		if (userdstart > base_ + in_.size()) throw badzsr{"File too small"};
 		userd_ = std::string_view{userdstart, static_cast<std::string_view::size_type>(base_ + in_.size() - userdstart)};
 	}

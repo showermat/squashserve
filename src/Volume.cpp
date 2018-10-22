@@ -121,15 +121,6 @@ std::vector<std::string> Volwriter::meta(const zsr::filenode &n)
 	{
 		if (values.count("title") && values.at("title") != "")
 		{
-			if (volmeta.count("encoding"))
-			{
-				try { values["title"] = util::conv(values.at("title"), volmeta.at("encoding"), "UTF-8"); }
-				catch (std::runtime_error &e)
-				{
-					std::cout << clrln << "Could not convert title for file " << n.path() << "\n";
-					values["title"] = util::basename(n.path());
-				}
-			}
 			searchwriter.add(values.at("title"), n.id());
 #ifdef ZSR_USE_XAPIAN
 			xap.add(content, values.at("title"), n.id());
@@ -158,6 +149,19 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 		return util::mimetype(path);
 	};
 	info.expose(mimetype, "mimetype");
+	std::function<std::string(std::string)> html_title = [](std::string path) {
+		std::string ret = html::doc::read_file(path).title();
+		if (ret.size() > 0) return ret;
+		ret = util::basename(path);
+		std::string::size_type extpos = ret.rfind(".");
+		if (extpos != std::string::npos) ret = ret.substr(0, extpos);
+		return ret;
+	};
+	info.expose(html_title, "html_title");
+	std::function<std::string(std::string)> html_encoding = [](std::string path) {
+		return html::doc::read_file(path).encoding();
+	};
+	info.expose(html_encoding, "html_encoding");
 	info.load(util::pathjoin({indir, Volume::metadir, "info.lua"}));
 	if (! info.exists("meta")) info.loadstr(default_metagen);
 	if (! info.exists("metanames")) info.loadstr(default_metanames);
@@ -174,7 +178,8 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 
 void Volwriter::write(std::ofstream &out)
 {
-	std::string searchtmpf{"titles.zsr.tmp"};
+	loga("Started");
+	std::string searchtmpf{"titles-" + util::t2s(::getpid()) + ".zsr.tmp"};
 	archwriter.write_header();
 	archwriter.write_body();
 	std::ofstream searchout{searchtmpf};

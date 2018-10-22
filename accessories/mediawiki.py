@@ -17,6 +17,7 @@ import threading
 import concurrent.futures
 import queue
 import traceback
+import hashlib
 
 import tracing
 
@@ -33,7 +34,8 @@ debug = False
 debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persimmon", "Alpha Centauri", "Boranes", "Busy signal",
 	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
 	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
-	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%", "Aluminum", "Aluminium"]
+	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%", "Aluminum", "Aluminium", "PAD (control code)",
+	"C0 and C1 control codes"]
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
@@ -45,6 +47,7 @@ if rootdir == "debug":
 	rootdir = "wikipedia"
 (site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
 
+safe_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 concurrency = 32
 origin = origin_root + "/wiki"
 imgdir = "img"
@@ -72,7 +75,9 @@ def friendlyname(fname):
 	subs = {"\"": "[quote]", "/": "[slash]", " ": "_", "_+": "_"}
 	parts = fname.split("#", 1)
 	for (char, sub) in subs.items(): parts[0] = re.sub(char, sub, parts[0])
-	return parts[0] + ".html" + ("#" + parts[1] if len(parts) > 1 else "")
+	if parts[0][0] in safe_chars: first = parts[0][0]
+	else: first = "_"
+	return first + "/" + parts[0] + ".html" + ("#" + parts[1] if len(parts) > 1 else "")
 
 def outline(html): # FIXME In its current state, this does not preserve HTML sub-formatting (such as superscript) in headers
 	ret = []
@@ -143,20 +148,20 @@ def writeout(title, content, tracer):
 	addtoc(html)
 
 	html.head.append(html.new_tag("meta", charset="utf-8")); # FIXME Does this work?  Some articles already have it; others appear not to
-	html.head.append(html.new_tag("link", rel="stylesheet", href="../" + cssname))
+	html.head.append(html.new_tag("link", rel="stylesheet", href="../../" + cssname))
 	for link in html("a", href=noproto) + html("link", href=noproto): # Stylesheet links
 		link["href"] = "https:" + link["href"]
 		if "rel" in link.attrs and "stylesheet" in link["rel"]: link.extract()
 	for link in html("a", href=re.compile("^\./.*:")): # Links to other namespaces
-		if link["href"].split(":", 1)[0][2:] in namespaces.values(): link["href"] = "./" + friendlyname(link["href"][2:])
+		if link["href"].split(":", 1)[0][2:] in namespaces.values(): link["href"] = "../" + friendlyname(link["href"][2:])
 		else: link["href"] = origin + link["href"][1:]
 	for link in html("a", href=re.compile("^\./")): # Local article links
-		link["href"] = "./" + friendlyname(link["href"][2:])
+		link["href"] = "../" + friendlyname(link["href"][2:])
 	for link in html("a", href=re.compile("^/wiki")): # Absolute article links
 		# link["href"] = origin + link["href"][5:]
-		link["href"] = "./" + friendlyname(link["href"][6:])
+		link["href"] = "../" + friendlyname(link["href"][6:])
 	for link in html("area", href=re.compile("^/wiki/")): # Image maps
-		link["href"] = "../wiki/" + friendlyname(link["href"][6:])
+		link["href"] = "../../wiki/" + friendlyname(link["href"][6:])
 	for img in html("img"): # Article images
 		src = img["src"]
 		if noproto.match(src): src = "https:" + src
@@ -168,18 +173,18 @@ def writeout(title, content, tracer):
 		img["src"] = src
 		fname = urllib.parse.unquote(urllib.parse.urlparse(src)[2].split("/")[-1])
 		if re.search("//wikimedia.org/api/rest_v1/media/math/render/svg", src): fname += ".svg"
-		if os.path.isfile(os.path.join(rootdir, oldimgdir, fname)):
-			os.rename(os.path.join(rootdir, oldimgdir, fname), os.path.join(rootdir, imgdir, fname))
-			img["src"] = os.path.join("..", imgdir, fname)
-			continue
-		tracer.image(src)
-		reply = requests.get(src, headers={"user-agent": useragent})
-		if reply.status_code != 200: continue
-		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
-		out = open(os.path.join(rootdir, imgdir, fname), "wb")
-		out.write(reply.content)
-		out.close()
-		img["src"] = os.path.join("..", imgdir, fname)
+		subkey = safe_chars[hashlib.md5(fname.encode("UTF-8")).digest()[0] % len(safe_chars)]
+		if os.path.isfile(os.path.join(rootdir, oldimgdir, subkey, fname)):
+			os.rename(os.path.join(rootdir, oldimgdir, subkey, fname), os.path.join(rootdir, imgdir, subkey, fname))
+		else:
+			tracer.image(src)
+			reply = requests.get(src, headers={"user-agent": useragent})
+			if reply.status_code != 200: continue
+			if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
+			destdir = os.path.join(rootdir, imgdir, subkey)
+			if not os.path.exists(destdir): os.mkdir(destdir)
+			with open(os.path.join(destdir, fname), "wb") as out: out.write(reply.content)
+		img["src"] = os.path.join("..", "..", imgdir, subkey, fname)
 
 	tracer.cleaning()
 	for tag in html.find_all(True):
@@ -189,9 +194,9 @@ def writeout(title, content, tracer):
 		comment.extract()
 	#resolve_styles(html); # Too much effort for negligible space savings
 
-	out = open(os.path.join(rootdir, htmldir, friendlyname(title)), "w")
-	out.write(str(html))
-	out.close()
+	dest = os.path.join(rootdir, htmldir, friendlyname(title))
+	if not os.path.exists(os.path.dirname(dest)): os.mkdir(os.path.dirname(dest))
+	with open(dest, "w") as out: out.write(str(html))
 
 def download(title):
 	fname = os.path.join(rootdir, htmldir, friendlyname(title))
@@ -205,7 +210,11 @@ def download(title):
 		if res.status_code == 301: target = res.headers["location"]
 		else: break
 	if res.status_code == 302:
-		os.symlink("./" + friendlyname(urllib.parse.unquote(res.headers["location"])), fname)
+		location = urllib.parse.unquote(res.headers["location"]).split("#", 1)
+		target = "../" + friendlyname(location[0]) + (("#" + location[1]) if len(location) > 1 else "")
+		if not os.path.exists(os.path.dirname(fname)): os.mkdir(os.path.dirname(fname))
+		with open(fname, "w") as outf:
+			outf.write("<html><head><meta charset=\"utf8\"><title>%s</title><meta http-equiv=\"refresh\" content=\"0;url=%s\"></head></html>" % (title, target))
 	elif res.status_code == 200:
 		return res.text
 	else:
@@ -333,8 +342,8 @@ info = """params = {
 	language = "eng",
 	created = "%s",
 	refer = "%s",
-	origin = "%s;^(.*).html$;$1",
-	home = "%s/Main_Page.html",
+	origin = "%s;^wiki/./(.*).html$;wiki/$1",
+	home = "%s/M/Main_Page.html",
 }
 
 function meta(path, ftype)

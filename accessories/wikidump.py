@@ -174,6 +174,11 @@ while not urls.empty():
 				ahref["href"] = prefix + "../misc/" + basename(hrefurl.path)
 				urls.put(("misc", urlunsplit(hrefurl)))
 		for imgsrc in html("img", src=True):
+			if "data-url" in imgsrc.attrs:
+				imgsrc["src"] = imgsrc["data-url"]
+				del imgsrc["data-url"]
+			if "data-srcset" in imgsrc.attrs: del imgsrc["data-srcset"]
+			if "srcset" in imgsrc.attrs: del imgsrc["srcset"]
 			img = unquote(imgsrc["src"])
 			imgurl = urlsplit(urljoin(url, img))
 			if imgurl.scheme == "data": continue

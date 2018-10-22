@@ -58,8 +58,8 @@ Build requirements are as follows:
 
 Building should be as simple as:
 
-	$ git submodule update --init
-    $ cmake src
+    $ git submodule update --init
+    $ cmake -DCMAKE_BUILD_TYPE=Release src
     $ make
 
 
@@ -108,7 +108,7 @@ The ZSR format is fairly simple.  It consists of:
           - For each file metadatum defined at the beginning of the archive:
               - The two-byte length of the value and the value itself
           - The eight-byte size of the file when decompressed
-          - The length of the file's compressed data
+          - The eight-byte length of the file's compressed data
           - The file's data, as a raw XZ stream
       - If the entry is a *link*:
           - The eight-byte ID of the entry to which this link points
@@ -118,7 +118,7 @@ The ZSR format is fairly simple.  It consists of:
               - The eight-byte hash of the child's name
               - The eight-byte ID of the child
   - Index: one entry for each file, allowing fast random access to any file by ID
-      - The eight-byte number of index entries; that is, the total number of files and directories stored in the index
+      - The eight-byte number of index entries; that is, the total number of files and directories stored in the archive
       - For each file, the offset from the start of the data section to the start of the data entry for that file
   - User data: arbitrary user-defined data may follow the archive.  (This is used, for example, to store the search index for
     volumes.)  This region of the file is made available to the user as a `std::string_view` when the file is opened.
@@ -207,7 +207,7 @@ links, or `T_UNK` for other types.  By default, the following data are calculate
   - `extension(path)`:  Returns the extension of the file at `path`
   - `is_html(path)`:  Heuristically determines whether the file is an HTML file by extension
   - `html_title(path)`:  Extracts the contents of the `<title>` tag of an HTML file
-  - `iconv(string, from to)`: Converts `string` from one encoding to another
+  - `iconv(string, from, to)`: Converts `string` from one encoding to another
   - `mimetype(path)`: Uses file extension or libmagic to determine the MIME type of the file at `path`
 
 If the `encoding` key is present in the `params` table in `info.lua`, it will be interpreted as the encoding of the HTML pages in

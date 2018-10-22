@@ -45,15 +45,14 @@ namespace zsr
 		std::vector<std::string> meta_;
 		const std::function<std::string(const filecount &)> &revcheck_;
 		ntype type_;
-		offset parent_;
-		filecount redirect_;
+		filecount parent_, redirect_;
 		std::string name_;
 		offset len_, fullsize_;
 		const char *data_;
 		diskmap::map<std::string, filecount> childmap() const;
 		node follow(unsigned int limit = 0, unsigned int depth = 0) const; // Need to follow for isdir/isreg, content, children, add_child, addmeta, delmeta, meta, setmeta, getchild, extract (create a link)
 	public:
-		node(const archive &container, offset idx);
+		node(const archive &container, filecount idx);
 		node(const node &orig) = default;
 		node(node &&orig) = default;
 		filecount id() const { return id_; }

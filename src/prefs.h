@@ -11,14 +11,13 @@ namespace prefs
 {
 	const nlohmann::json schema = nlohmann::json::parse(fileinclude::loaded_file("prefs.json"));
 
-	const std::string preffname = "zsrsrv.conf";
 	std::vector<std::string> preflocs;
 	std::string conffile = "";
 	nlohmann::json userp;
 	std::map<std::string, nlohmann::basic_json<>> defaults;
 	std::vector<std::string> order;
 
-	void init() // TODO Make appname an argument and build preflocs from that
+	void init(const std::string &appname)
 	{
 		for (nlohmann::json::const_iterator iter = schema.begin(); iter != schema.end(); iter++)
 		{
@@ -26,9 +25,10 @@ namespace prefs
 			defaults[(*iter)["name"]] = *iter;
 		}
 
+		const std::string preffname = appname + ".conf";
 		std::string homedir = util::env_or("HOME", "");
 		preflocs = {
-			util::env_or("ZSRSRV_CONF", ""),
+			util::env_or(util::utf8upper(appname) + "_CONF", ""),
 			util::pathjoin({util::dirname(util::exepath()), preffname}),
 			util::pathjoin({util::env_or("XDG_CONFIG_HOME", util::pathjoin({homedir, ".config"})), preffname}),
 			util::pathjoin({homedir, "." + preffname}),
@@ -82,7 +82,7 @@ namespace prefs
 	{
 		auto def = defaults[pref]["default"]; // Do not support array or object
 		if (def.is_boolean()) userp[pref] = util::s2t<bool>(val);
-		else if (def.is_number()) userp[pref] = util::s2t<int>(val); // FIXME No float support
+		else if (def.is_number()) userp[pref] = util::s2t<int>(val); // This willl error on floats
 		else userp[pref] = val;
 	}
 

@@ -19,25 +19,25 @@ function is_html(path)
 	return extension(path) == "html" or extension(path) == "htm"
 end
 
-function html_title(path)
-	local f = io.open(path)
-	if not f then return basename(path) else f:close() end
-	for line in io.lines(path) do
-		local match = line:match("<[Tt][Ii][Tt][Ll][Ee]>(.*)</[Tt][Ii][Tt][Ll][Ee]>")
-		if match then return match end
-	end
-	return basename(path)
-end
-
 -- Functions registered from C++:
 --     iconv(in, from, to): Convert the encoding of a string
 --     mimetype(path): Return the MIME type of a file using its extension if possible or libmagic otherwise
+--     html_title(path): Retrieve the title from an HTML document
+--     html_encoding(path): Retrieve the declared encoding from an HTML document, or "latin-1" if missing
 
 function default_meta(path, ftype)
 	ret = {}
-	if ftype == T_REG then
+	if ftype == T_REG or ftype == T_LNK then
 		if is_html(path) then ret["title"] = html_title(path) end
 		ret["type"] = mimetype(path)
+	end
+	return ret
+end
+
+function default_meta_trim(path, ftype, pattern)
+	local ret = default_meta(path, ftype)
+	if ret["title"] then
+		ret["title"] = ret["title"]:match(pattern) or ret["title"]
 	end
 	return ret
 end

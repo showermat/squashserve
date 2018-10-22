@@ -11,7 +11,6 @@ namespace zsr
 
 	filecount writer::recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout) // TODO Needs a little refactoring
 	{
-		constexpr offset ptrfill{0};
 		std::string fullpath = util::resolve(util::dirname(fullroot_), path); // TODO Inefficient
 		struct stat s;
 		filenode::ntype type = filenode::ntype::reg;
@@ -64,7 +63,8 @@ namespace zsr
 			for (const std::string &val : metad) writestring(val, contout);
 			serialize(contout, static_cast<offset>(util::fsize(path)));
 			std::streampos sizepos = contout.tellp();
-			serialize(contout, ptrfill); // Placeholder for length
+			constexpr offset lenfill{0};
+			serialize(contout, lenfill); // Placeholder for length
 			lzma::wrbuf compressor{in};
 			contout << &compressor;
 			offset len = static_cast<offset>(contout.tellp() - sizepos - sizeof(offset));
@@ -76,7 +76,7 @@ namespace zsr
 		if (type == filenode::ntype::link)
 		{
 			links_.handle_src(fullpath, contout.tellp());
-			constexpr filecount fcfill{0}; // To fill in later
+			constexpr filecount fcfill{0}; // Placeholder for destination
 			serialize(contout, fcfill);
 		}
 		if (type == filenode::ntype::dir)
@@ -174,7 +174,7 @@ namespace zsr
 		}
 	}
 
-	void writer::write_body(const std::string &contname, const std::string &idxname)
+	void writer::write_body(std::string contname, std::string idxname)
 	{
 		if (linkpol_ == linkpolicy::process)
 		{
@@ -183,7 +183,9 @@ namespace zsr
 			loga(links_.size() << " links found");
 		}
 		loga("Writing archive body");
+		if (contname == "") contname = "content" + randext_;
 		contf_ = contname;
+		if (idxname == "") idxname = "index" + randext_;
 		idxf_ = idxname;
 		std::ofstream contout{contname}, idxout{idxname};
 		if (! contout) throw std::runtime_error{"Couldn't open " + contname + " for writing"};
@@ -200,8 +202,9 @@ namespace zsr
 		}
 	}
 
-	void writer::write_header(const std::string &tmpfname)
+	void writer::write_header(std::string tmpfname)
 	{
+		if (tmpfname == "") tmpfname = "header" + randext_;
 		headf_ = tmpfname;
 		std::ofstream out{tmpfname};
 		out.exceptions(std::ios_base::badbit);
@@ -235,7 +238,7 @@ namespace zsr
 		out << content.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
 		out.seekp(magic_number.size() + sizeof(version));
-		serialize(out, idxstart); // FIXME Endianness problems?
+		serialize(out, idxstart);
 		out.seekp(0, std::ios_base::end);
 		serialize(out, nfile_);
 		out << index.rdbuf();
@@ -252,6 +255,7 @@ namespace zsr
 		//::sigemptyset(&act.sa_mask);
 		//act.sa_handler = *sighdl.target<void(*)(int)>();
 		//if (! ::sigaction(SIGINT, &act, &oldact));
+		loga("Started");
 		write_header();
 		write_body();
 		combine(out);

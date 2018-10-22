@@ -15,7 +15,6 @@ namespace rsearch
 
 	void disktree::debug_print(zsr::offset off, std::string prefix) // Debug
 	{
-		// FIXME Bounds checking
 		const char *inptr = base_ + off;
 		const std::unordered_map<std::string, zsr::offset> curchild = children(inptr);
 		const std::unordered_set<zsr::filecount> myval = values(inptr);
@@ -93,11 +92,11 @@ namespace rsearch
 	std::unordered_map<std::string, zsr::offset> disktree::children(const char *&ptr)
 	{
 		std::unordered_map<std::string, zsr::offset> ret{};
-		treesize nchild = zsr::deser<treesize>(ptr);
+		treesize nchild = zsr::deser<treesize>(ptr, end_);
 		for (treesize i = 0; i < nchild; i++)
 		{
-			std::string_view name = zsr::deser<std::string_view>(ptr);
-			zsr::offset loc = zsr::deser<zsr::offset>(ptr);
+			std::string_view name = zsr::deser<std::string_view>(ptr, end_);
+			zsr::offset loc = zsr::deser<zsr::offset>(ptr, end_);
 			ret[std::string{name}] = loc;
 		}
 		return ret;
@@ -106,8 +105,8 @@ namespace rsearch
 	std::unordered_set<zsr::filecount> disktree::values(const char *&ptr)
 	{
 		std::unordered_set<zsr::filecount> ret{};
-		treesize nval = zsr::deser<treesize>(ptr);
-		for (treesize i = 0; i < nval; i++) ret.insert(zsr::deser<zsr::filecount>(ptr));
+		treesize nval = zsr::deser<treesize>(ptr, end_);
+		for (treesize i = 0; i < nval; i++) ret.insert(zsr::deser<zsr::filecount>(ptr, end_));
 		return ret;
 	}
 
@@ -115,7 +114,6 @@ namespace rsearch
 	{
 		std::unordered_set<zsr::filecount> ret{};
 		const char *inptr = base_ + nodepos;
-		// FIXME Bounds checking
 		const std::unordered_map<std::string, zsr::offset> curchild = children(inptr);
 		const std::unordered_set<zsr::filecount> myval = values(inptr);
 		ret.insert(myval.cbegin(), myval.cend());
@@ -163,7 +161,6 @@ namespace rsearch
 		zsr::offset top = nodefind(query);
 		if (top == 0) return std::unordered_set<zsr::filecount>{};
 		const char *inptr = base_ + top;
-		// FIXME Bounds checking
 		children(inptr);
 		return values(inptr);
 	}

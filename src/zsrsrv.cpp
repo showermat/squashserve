@@ -348,7 +348,7 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, uint32_
 
 int main(int argc, char **argv) try
 {
-	prefs::init();
+	prefs::init("zsrsrv");
 	std::string rsrcpath = prefs::get("resources");
 	if (rsrcpath == "") rsrcpath = util::pathjoin({util::dirname(util::exepath()), "resources.zsr"});
 	if (! util::fexists(rsrcpath)) throw std::runtime_error{"Can't find resource archive at " + rsrcpath + "\n"};

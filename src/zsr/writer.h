@@ -2,6 +2,7 @@
 #define ZSR_WRITER_H
 #include <list>
 #include <tuple>
+#include <unistd.h>
 #include "../util/util.h"
 #include "common.h"
 
@@ -62,17 +63,18 @@ namespace zsr
 		std::string headf_, contf_, idxf_;
 		filecount nfile_;
 		linkmgr links_;
+		std::string randext_;
 		void writestring(const std::string &s, std::ostream &out);
 		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
 	public:
 		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{},
-			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_} { }
+			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_}, randext_{"-" + util::t2s(::getpid()) + ".zsr.tmp"} { }
 		void userdata(std::istream &data) { userdata_ = &data; userdata_->exceptions(std::ios::badbit); }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::unordered_map<std::string, std::string>(const filenode &)> generator);
-		void write_body(const std::string &contname = "content.zsr.tmp", const std::string &idxname = "index.zsr.tmp");
-		void write_header(const std::string &tmpfname = "header.zsr.tmp");
+		void write_body(std::string contname = "", std::string idxname = "");
+		void write_header(std::string tmpfname = "");
 		void combine(std::ofstream &out);
 		void write(std::ofstream &out);
 		virtual ~writer();
