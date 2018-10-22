@@ -179,31 +179,28 @@ Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol)
 void Volwriter::write(std::ofstream &out)
 {
 	loga("Started");
-	std::string searchtmpf{"titles-" + util::t2s(::getpid()) + ".zsr.tmp"};
+	std::string searchfname{"titles-" + util::t2s(::getpid()) + ".zsr.tmp"};
+	std::fstream searchf{searchfname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc};
+	if (! searchf) throw std::runtime_error{"Couldn't open " + searchfname + " for writing"};
+	searchf.exceptions(std::ios_base::badbit);
+	util::rm(searchfname);
 	archwriter.write_header();
 	archwriter.write_body();
-	std::ofstream searchout{searchtmpf};
-	if (! searchout) throw std::runtime_error{"Couldn't open search temporary file"};
-	searchout.exceptions(std::ios_base::badbit);
 #ifdef ZSR_USE_XAPIAN
 	zsr::offset xapstart{0};
-	zsr::serialize(searchout, xapstart);
+	zsr::serialize(searchf, xapstart);
 #endif
-	searchwriter.write(searchout);
+	searchwriter.write(searchf);
 #ifdef ZSR_USE_XAPIAN
-	xapstart = searchout.tellp();
+	xapstart = searchf.tellp();
 	loga("Writing search index");
-	xap.write(searchout);
-	searchout.seekp(0);
-	zsr::serialize(searchout, xapstart);
+	xap.write(searchf);
+	searchf.seekp(0);
+	zsr::serialize(searchf, xapstart);
 #endif
-	searchout.close();
-	std::ifstream searchin{searchtmpf};
-	if (! searchin) throw std::runtime_error{"Couldn't open search temporary file"};
-	searchin.exceptions(std::ios_base::badbit);
-	archwriter.userdata(searchin);
+	searchf.seekg(0);
+	archwriter.userdata(searchf);
 	archwriter.combine(out);
-	util::rm(searchtmpf);
 }
 
 void Volume::create(const std::string &srcdir, const std::string &destdir, const std::string &id, const std::unordered_map<std::string, std::string> &info)

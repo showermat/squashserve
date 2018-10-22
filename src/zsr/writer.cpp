@@ -9,7 +9,7 @@ namespace zsr
 		serialize(out, s);
 	}
 
-	filecount writer::recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout) // TODO Needs a little refactoring
+	filecount writer::recursive_process(const std::string &path, filecount parent, std::fstream &contout, std::fstream &idxout) // TODO Needs a little refactoring
 	{
 		std::string fullpath = util::resolve(util::dirname(fullroot_), path); // TODO Inefficient
 		struct stat s;
@@ -184,67 +184,64 @@ namespace zsr
 		}
 		loga("Writing archive body");
 		if (contname == "") contname = "content" + randext_;
-		contf_ = contname;
+		contf_.open(contname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
+		if (! contf_) throw std::runtime_error{"Couldn't open " + contname + " for writing"};
+		util::rm(contname);
 		if (idxname == "") idxname = "index" + randext_;
-		idxf_ = idxname;
-		std::ofstream contout{contname}, idxout{idxname};
-		if (! contout) throw std::runtime_error{"Couldn't open " + contname + " for writing"};
-		if (! idxout) throw std::runtime_error{"Couldn't open " + idxname + " for writing"};
-		contout.exceptions(std::ios_base::badbit);
-		idxout.exceptions(std::ios_base::badbit);
+		idxf_.open(idxname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
+		util::rm(idxname);
+		if (! idxf_) throw std::runtime_error{"Couldn't open " + idxname + " for writing"};
+		contf_.exceptions(std::ios_base::badbit);
+		idxf_.exceptions(std::ios_base::badbit);
 		nfile_ = 0;
-		recursive_process(root_, 0, contout, idxout);
+		recursive_process(root_, 0, contf_, idxf_);
 		loga("Wrote " << nfile_ << " entries");
 		if (linkpol_ == linkpolicy::process)
 		{
 			loga("Writing links");
-			links_.write(contout);
+			links_.write(contf_);
 		}
 	}
 
 	void writer::write_header(std::string tmpfname)
 	{
 		if (tmpfname == "") tmpfname = "header" + randext_;
-		headf_ = tmpfname;
-		std::ofstream out{tmpfname};
-		out.exceptions(std::ios_base::badbit);
-		if (! out) throw std::runtime_error{"Couldn't open " + tmpfname + " for writing"};
-		serialize(out, magic_number);
-		serialize(out, version);
-		serialize(out, std::string(sizeof(offset), '\0'));
+		headf_.open(tmpfname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
+		if (! headf_) throw std::runtime_error{"Couldn't open " + tmpfname + " for writing"};
+		headf_.exceptions(std::ios_base::badbit);
+		util::rm(tmpfname);
+		serialize(headf_, magic_number);
+		serialize(headf_, version);
+		serialize(headf_, std::string(sizeof(offset), '\0'));
 		uint8_t msize = volmeta_.size();
-		serialize(out, msize);
+		serialize(headf_, msize);
 		for (const std::pair<const std::string, std::string> &pair : volmeta_)
 		{
-			writestring(pair.first, out);
-			writestring(pair.second, out);
+			writestring(pair.first, headf_);
+			writestring(pair.second, headf_);
 		}
 		msize = nodemeta_.size();
-		serialize(out, msize);
-		for (const std::string &mkey : nodemeta_) writestring(mkey, out);
+		serialize(headf_, msize);
+		for (const std::string &mkey : nodemeta_) writestring(mkey, headf_);
 	}
 
 	void writer::combine(std::ofstream &out)
 	{
 		loga("Combining archive components");
 		if (! out) throw std::runtime_error{"Could not open archive output file"};
-		std::ifstream header{headf_};
-		std::ifstream content{contf_};
-		std::ifstream index{idxf_};
-		header.exceptions(std::ios_base::badbit);
-		content.exceptions(std::ios_base::badbit);
-		index.exceptions(std::ios_base::badbit);
-		out << header.rdbuf();
-		out << content.rdbuf();
+		headf_.seekg(0);
+		contf_.seekg(0);
+		out << headf_.rdbuf();
+		out << contf_.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
 		out.seekp(magic_number.size() + sizeof(version));
 		serialize(out, idxstart);
 		out.seekp(0, std::ios_base::end);
 		serialize(out, nfile_);
-		out << index.rdbuf();
+		idxf_.seekg(0);
+		out << idxf_.rdbuf();
 		if (userdata_) out << userdata_->rdbuf();
 		loga("Done writing archive");
-		for (const std::string &file : {headf_, contf_, idxf_}) util::rm(file);
 	}
 
 	void writer::write(std::ofstream &out)
@@ -260,10 +257,5 @@ namespace zsr
 		write_body();
 		combine(out);
 		//::sigaction(SIGINT, &oldact, nullptr);
-	}
-
-	writer::~writer()
-	{
-		for (const std::string &file : {headf_, contf_, idxf_}) if (util::fexists(file)) util::rm(file);
 	}
 }

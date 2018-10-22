@@ -60,12 +60,12 @@ namespace zsr
 		std::vector<std::string> nodemeta_;
 		std::function<std::vector<std::string>(const filenode &)> metagen_;
 		std::istream *userdata_;
-		std::string headf_, contf_, idxf_;
+		std::fstream headf_, contf_, idxf_;
 		filecount nfile_;
 		linkmgr links_;
 		std::string randext_;
 		void writestring(const std::string &s, std::ostream &out);
-		filecount recursive_process(const std::string &path, filecount parent, std::ofstream &contout, std::ofstream &idxout);
+		filecount recursive_process(const std::string &path, filecount parent, std::fstream &contout, std::fstream &idxout);
 	public:
 		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{},
 			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_}, randext_{"-" + util::t2s(::getpid()) + ".zsr.tmp"} { }
@@ -77,7 +77,6 @@ namespace zsr
 		void write_header(std::string tmpfname = "");
 		void combine(std::ofstream &out);
 		void write(std::ofstream &out);
-		virtual ~writer();
 	};
 }
 
