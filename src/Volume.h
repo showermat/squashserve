@@ -53,6 +53,7 @@ private:
 		void write(std::ostream &out);
 	};
 #endif
+	bool debug;
 	const std::string indir;
 	zsr::writer archwriter;
 	rsearch::disktree_writer searchwriter;
@@ -65,7 +66,7 @@ private:
 #endif
 	std::vector<std::string> meta(const zsr::filenode &n);
 public:
-	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol);
+	Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol, bool dbg = false);
 	Volwriter(const Volwriter &orig) = delete;
 	Volwriter(Volwriter &&orig) = delete;
 	void write(std::ofstream &out);

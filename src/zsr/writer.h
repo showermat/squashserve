@@ -55,6 +55,7 @@ namespace zsr
 		enum class linkpolicy { process, follow, skip };
 	private:
 		const std::string root_, fullroot_;
+		bool debug_;
 		linkpolicy linkpol_;
 		std::unordered_map<std::string, std::string> volmeta_;
 		std::vector<std::string> nodemeta_;
@@ -67,8 +68,10 @@ namespace zsr
 		void writestring(const std::string &s, std::ostream &out);
 		filecount recursive_process(const std::string &path, filecount parent, std::fstream &contout, std::fstream &idxout);
 	public:
-		writer(const std::string &root, linkpolicy links = linkpolicy::process) : root_{root}, fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, linkpol_{links}, volmeta_{},
-			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{}, links_{fullroot_}, randext_{"-" + util::t2s(::getpid()) + ".zsr.tmp"} { }
+		writer(const std::string &root, linkpolicy links = linkpolicy::process, bool debug = false) : root_{root},
+			fullroot_{util::realpath(util::resolve(std::string{getenv("PWD")}, root_))}, debug_{debug}, linkpol_{links}, volmeta_{},
+			nodemeta_{}, metagen_{[](const filenode &n) { return std::vector<std::string>{}; }}, userdata_{nullptr}, nfile_{},
+			links_{fullroot_}, randext_{"-" + util::t2s(::getpid()) + ".zsr.tmp"} { }
 		void userdata(std::istream &data) { userdata_ = &data; userdata_->exceptions(std::ios::badbit); }
 		void volume_meta(const std::unordered_map<std::string, std::string> data) { volmeta_ = data; }
 		void node_meta(const std::vector<std::string> keys, std::function<std::vector<std::string>(const filenode &)> generator) { nodemeta_ = keys; metagen_ = generator; }

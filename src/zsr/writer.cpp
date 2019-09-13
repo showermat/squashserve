@@ -186,10 +186,10 @@ namespace zsr
 		if (contname == "") contname = "content" + randext_;
 		contf_.open(contname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
 		if (! contf_) throw std::runtime_error{"Couldn't open " + contname + " for writing"};
-		util::rm(contname);
+		if (! debug_) util::rm(contname);
 		if (idxname == "") idxname = "index" + randext_;
 		idxf_.open(idxname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
-		util::rm(idxname);
+		if (! debug_) util::rm(idxname);
 		if (! idxf_) throw std::runtime_error{"Couldn't open " + idxname + " for writing"};
 		contf_.exceptions(std::ios_base::badbit);
 		idxf_.exceptions(std::ios_base::badbit);
@@ -209,7 +209,7 @@ namespace zsr
 		headf_.open(tmpfname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc);
 		if (! headf_) throw std::runtime_error{"Couldn't open " + tmpfname + " for writing"};
 		headf_.exceptions(std::ios_base::badbit);
-		util::rm(tmpfname);
+		if (! debug_) util::rm(tmpfname);
 		serialize(headf_, magic_number);
 		serialize(headf_, version);
 		serialize(headf_, std::string(sizeof(offset), '\0'));
@@ -229,18 +229,26 @@ namespace zsr
 	{
 		loga("Combining archive components");
 		if (! out) throw std::runtime_error{"Could not open archive output file"};
+		out.seekp(0);
+		headf_.flush();
 		headf_.seekg(0);
-		contf_.seekg(0);
 		out << headf_.rdbuf();
+		contf_.flush();
+		contf_.seekg(0);
 		out << contf_.rdbuf();
 		offset idxstart = static_cast<offset>(out.tellp());
 		out.seekp(magic_number.size() + sizeof(version));
 		serialize(out, idxstart);
 		out.seekp(0, std::ios_base::end);
 		serialize(out, nfile_);
+		idxf_.flush();
 		idxf_.seekg(0);
 		out << idxf_.rdbuf();
-		if (userdata_) out << userdata_->rdbuf();
+		if (userdata_)
+		{
+			userdata_->seekg(0);
+			out << userdata_->rdbuf();
+		}
 		loga("Done writing archive");
 	}
 

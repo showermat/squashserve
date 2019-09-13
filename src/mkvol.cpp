@@ -11,12 +11,13 @@ void help_exit()
 {
 	std::cerr <<
 R"(Usage:
-    mkvol [-l POL] srcdir dest.zsr
+    mkvol [-d] [-l POL] srcdir dest.zsr
 Flags:
     -l POL: Handle symbolic links according to policy POL:
         process: Encode symbolic links within the tree as links in the archive (default)
         follow: Always follow symbolic links and archive the destination
         skip: Ignore symbolic links completely
+    -d: Enable debug mode: don't delete temporary files
 )"; // TODO Improve
 	exit(1);
 }
@@ -28,7 +29,7 @@ int main(int argc, char **argv) try
 	std::vector<std::string> args{};
 	try
 	{
-		auto cmdln = util::argmap(argc, argv, "l:");
+		auto cmdln = util::argmap(argc, argv, "l:d");
 		flags = cmdln.first;
 		args = cmdln.second;
 	}
@@ -38,6 +39,8 @@ int main(int argc, char **argv) try
 		help_exit();
 	}
 	if (args.size() < 2) help_exit();
+	bool debug = false;
+	if (flags.count("d")) debug = true;
 	zsr::writer::linkpolicy linkpol = zsr::writer::linkpolicy::process;
 	if (flags.count("l"))
 	{
@@ -49,7 +52,7 @@ int main(int argc, char **argv) try
 	std::ofstream out{args[1]};
 	if (! out) throw std::runtime_error{"Couldn't open output file"};
 	out.exceptions(std::ios_base::badbit);
-	Volwriter{args[0], linkpol}.write(out);
+	Volwriter{args[0], linkpol, debug}.write(out);
 	return 0;
 }
 catch (std::exception &e)

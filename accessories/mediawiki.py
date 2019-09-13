@@ -1,7 +1,6 @@
 #! /usr/bin/python
 
 import sys
-import lxml
 import bs4
 import re
 import os.path
@@ -27,6 +26,10 @@ import tracing
 # Add a meta tag for the revision being retrieved, so in the future we can avoid refetching unchanged revisions (adds an extra GET and requires moving images; probably no faster)
 # Eventually: postprocessing for redlinks?
 #
+# Data for October 2018:
+# Wikipedia: downloaded in 21 days; 14133924 articles, 8418000 redirects, 6212208 images, all occupying 366 GB on disk; archiving took 8.2 days (7.4 for content) with memory usage up to 15.9 GB; resulting archive 132 GB
+# Wiktionary: downloaded in 60 hours; 5857116 articles, 37992 redirects, 70341 images, all occupying 39 GB on disk; archiving took 31:15; resulting archive 8.76 GB
+#
 # Problem pages:
 # ...
 
@@ -38,8 +41,8 @@ debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persim
 	"C0 and C1 control codes"]
 
 sites = {
-	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/en/8/80/Wikipedia-logo-v2.svg", {0: ""}),
-	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/0/06/Wiktionary-logo-v2.svg", {0: "", 100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"}),
+	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg", {0: ""}),
+	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/e/ec/Wiktionary-logo.svg", {0: "", 100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"}),
 }
 rootdir = sys.argv[1]
 if rootdir == "debug":
@@ -48,7 +51,7 @@ if rootdir == "debug":
 (site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
 
 safe_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-concurrency = 32
+concurrency = 8
 origin = origin_root + "/wiki"
 imgdir = "img"
 oldimgdir = "img_old"
@@ -179,6 +182,8 @@ def writeout(title, content, tracer):
 		else:
 			tracer.image(src)
 			reply = requests.get(src, headers={"user-agent": useragent})
+			#try: reply = requests.get(src, headers={"user-agent": useragent})
+			#except: continue
 			if reply.status_code != 200: continue
 			if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
 			destdir = os.path.join(rootdir, imgdir, subkey)

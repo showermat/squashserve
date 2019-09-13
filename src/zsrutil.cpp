@@ -4,6 +4,8 @@
 #include "zsr/writer.h"
 #include "util/lua.h"
 
+// TODO Add archive consistency check option
+
 void help_exit()
 {
 	std::cerr <<

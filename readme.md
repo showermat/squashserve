@@ -275,14 +275,14 @@ of all matching articles.
 
 Of course, the holy grail of website archiving, and possibly the most useful site to have, is Wikipedia.  A goal of this project was
 to enable efficient offline Wikipedia browsing suitable for replacing OpenZIM.  With a couple of catches, ZSR scales up to handle
-Wikipedia pretty well.  I tested this with an October 2016 dump of Wikipedia, consisting of 5.45 M thumbnail images, 5.28 M HTML
-articles, and 7.58 M redirection links, which occupied 312 GB on disk prior to compression.  `mkvol` archived this in 8300 minutes
-using up to nearly 10 GB of memory, and resulting in a ZSR archive occupying 115.6 GB.  This is far from optimal, and I plan to
-devote more energy to decreasing the memory usage of the archiving process and the size of the resulting archive.  However, from my
-laptop's SSD, the archive proved quite usable, with pages consistently loading in under a second and typeahead search results for
-queries at least four characters long loading similarly quickly.  When loading from an external USB-3 hard drive, media-heavy pages
-took up to four or five seconds to load.  Overall, the experience is quite reasonable, and I expect this to improve as I work on
-finding better ways of doing things.
+Wikipedia pretty well.  I tested this with an October 2018 dump of Wikipedia, consisting of 6.21 M thumbnail images, 14.1 M HTML
+articles, and 8.42 M redirection links, which occupied 366 GB on disk prior to compression.  `mkvol` archived this in 8.2 days using
+up to nearly 16 GB of memory, and resulting in a ZSR archive occupying 132 GB.  This is far from optimal, and I plan to devote more
+energy to decreasing the memory usage of the archiving process and the size of the resulting archive.  However, from my laptop's
+SSD, the archive proved quite usable, with pages consistently loading in under a second and typeahead search results for queries at
+least four characters long loading similarly quickly.  When loading from an external USB-3 hard drive, media-heavy pages took up to
+four or five seconds to load.  Overall, the experience is quite reasonable, and I expect this to improve as I work on improving the
+archive format.
 
 The biggest issue I encountered on the journey to my offline Wikipedia was obtaining a complete copy of the wiki's data for
 archiving.  It seems strange, but none of the options I have been able to find provide a fast, simple way to get a complete copy of
@@ -321,13 +321,10 @@ all HTML and thumbnail images on the site.  Here is a summary of the methods I t
     strategy I am currently pursuing, with the resulting ZSR archive described above.  I plan to continue refining this approach,
     although I will also keep looking into the other approaches listed here in case one shows more merit.
 
-Before downloading your own copy of Wikipedia, make sure you have enough disk space for the copy and enough RAM to run `mkvol`.  500
-GB of disk space and 16 GB of RAM should be sufficient.  Also, if you're downloading to an ext4 partition, you will need to make
-sure that `dir_index` is disabled on the partition; otherwise, [you *will* run into hash
-collisions](https://unix.stackexchange.com/questions/222221) and the archive will be incomplete.  I recommend using an XFS-formatted
-partition for downloading.  Once your system is ready, getting your own copy of Wikipedia should be as easy as running
-`accessories/mediawiki.py wikipedia` and waiting for the download to finish, then running `mkvol` on the resulting `wikipedia`
-folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.
+Before downloading your own copy of Wikipedia, make sure you have enough disk space for the copy and enough RAM to run `mkvol`.  700
+GB of disk space and 16 GB of RAM plus a few GB of swap should be sufficient.  Once your system is ready, getting your own copy of
+Wikipedia should be as easy as running `accessories/mediawiki.py wikipedia` and waiting for the download to finish, then running
+`mkvol` on the resulting `wikipedia` folder.  The script creates the `_meta` directory for you, so it's all ready to be archived.
 
 ## Accessory Tools
 

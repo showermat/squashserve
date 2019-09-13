@@ -134,7 +134,7 @@ std::vector<std::string> Volwriter::meta(const zsr::filenode &n)
 	return ret;
 }
 
-Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol) : indir{srcdir}, archwriter{indir, linkpol}, searchwriter{}, info{}, volmeta{}, metanames{}
+Volwriter::Volwriter(const std::string &srcdir, zsr::writer::linkpolicy linkpol, bool dbg) : debug{dbg}, indir{srcdir}, archwriter{indir, linkpol, dbg}, searchwriter{}, info{}, volmeta{}, metanames{}
 #ifdef ZSR_USE_XAPIAN
 , xap{}
 #endif
@@ -183,7 +183,7 @@ void Volwriter::write(std::ofstream &out)
 	std::fstream searchf{searchfname, std::ios_base::in | std::ios_base::out | std::ios_base::trunc};
 	if (! searchf) throw std::runtime_error{"Couldn't open " + searchfname + " for writing"};
 	searchf.exceptions(std::ios_base::badbit);
-	util::rm(searchfname);
+	if (! debug) util::rm(searchfname);
 	archwriter.write_header();
 	archwriter.write_body();
 #ifdef ZSR_USE_XAPIAN
