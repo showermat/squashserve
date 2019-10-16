@@ -2,15 +2,14 @@
 #define _FILE_OFFSET_BITS 64
 #include <iostream>
 #include <fuse.h>
-#include <errno.h>
+#include <cerrno>
 #include <dirent.h>
-#include <string.h>
+#include <cstring>
 #include <sys/xattr.h>
 #include <vector>
 #include <unordered_map>
 #include <stdexcept>
 #include <memory>
-#include <mutex>
 #include "zsr/zsr.h"
 
 std::unique_ptr<const zsr::archive> ar{};

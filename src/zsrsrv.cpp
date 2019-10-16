@@ -9,7 +9,7 @@
 #include <memory>
 #include <stdexcept>
 #include <cstdlib>
-#include "../lib/json/json.hpp" // Thanks to github/nlohmann
+#include "nlohmann/json.hpp" // Thanks to github/nlohmann
 #include "util/util.h"
 #include "util/template.h"
 #include "zsr/zsr.h"

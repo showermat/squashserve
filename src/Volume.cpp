@@ -364,10 +364,10 @@ std::string Volume::quicksearch(std::string query)
 		for (const zsr::filecount &idx: idxs) ret.push_back(ar.index(idx));
 		return ret;
 	};
-	query = util::utf8lower(query);
 	std::list<zsr::node> nodes = getnodes(*archive_, titles_.exact_search(query));
 	for (const zsr::node &n : nodes) if (n.meta("title") == query) return n.path();
-	for (const zsr::node &n : nodes) if (util::utf8lower(n.meta("title")) == query) return n.path();
+	std::string lcquery = util::utf8lower(query);
+	for (const zsr::node &n : nodes) if (util::utf8lower(n.meta("title")) == lcquery) return n.path();
 	nodes = getnodes(*archive_, titles_.search(query));
 	if (nodes.size() == 1) return nodes.begin()->path();
 	for (std::list<zsr::node>::iterator iter = nodes.begin(); iter != nodes.end(); )

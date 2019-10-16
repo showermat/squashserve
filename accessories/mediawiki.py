@@ -38,7 +38,7 @@ debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persim
 	"Periodic table (large cells)", "Gallery of sovereign state flags", "Go (programming language)", "Foreign relations of China",
 	"Askinosie Chocolate", "Art Pepper", "ThisShouldThrowAnException", "Tokyo", "Myeloperoxidase", "Ayu", "Apex predator",
 	"Chongqing", "Implosive consonant", "São Paulo", "Yellowroot", "%$ON%", "Aluminum", "Aluminium", "PAD (control code)",
-	"C0 and C1 control codes"]
+	"C0 and C1 control codes", "Peach", "PEACH"]
 
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg", {0: ""}),
@@ -51,7 +51,7 @@ if rootdir == "debug":
 (site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
 
 safe_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-concurrency = 8
+concurrency = 16
 origin = origin_root + "/wiki"
 imgdir = "img"
 oldimgdir = "img_old"
@@ -173,23 +173,27 @@ def writeout(title, content, tracer):
 		elif re.compile("^[a-z]*://").match(src): pass
 		elif re.compile("^./Special:FilePath/").match(src): src = origin + src[1:]
 		else: raise Exception("Unhandled image link case " + src)
-		img["src"] = src
 		fname = urllib.parse.unquote(urllib.parse.urlparse(src)[2].split("/")[-1])
 		if re.search("//wikimedia.org/api/rest_v1/media/math/render/svg", src): fname += ".svg"
+		if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
 		subkey = safe_chars[hashlib.md5(fname.encode("UTF-8")).digest()[0] % len(safe_chars)]
+		img["src"] = os.path.join("..", "..", imgdir, subkey, fname)
+		if os.path.isfile(os.path.join(rootdir, imgdir, subkey, fname)): continue
 		if os.path.isfile(os.path.join(rootdir, oldimgdir, subkey, fname)):
 			os.rename(os.path.join(rootdir, oldimgdir, subkey, fname), os.path.join(rootdir, imgdir, subkey, fname))
 		else:
 			tracer.image(src)
-			reply = requests.get(src, headers={"user-agent": useragent})
-			#try: reply = requests.get(src, headers={"user-agent": useragent})
-			#except: continue
-			if reply.status_code != 200: continue
-			if not re.search("\.[a-zA-Z]{3,4}$", fname): raise Exception("File name missing extension: " + src);
-			destdir = os.path.join(rootdir, imgdir, subkey)
-			if not os.path.exists(destdir): os.mkdir(destdir)
-			with open(os.path.join(destdir, fname), "wb") as out: out.write(reply.content)
-		img["src"] = os.path.join("..", "..", imgdir, subkey, fname)
+			for i in range(5):
+				time.sleep(2 ** i)
+				try:
+					reply = requests.get(src, headers={"user-agent": useragent})
+					if reply.status_code != 200: raise HTTPError(reply.status_code)
+					destdir = os.path.join(rootdir, imgdir, subkey)
+					if not os.path.exists(destdir): os.mkdir(destdir)
+					with open(os.path.join(destdir, fname), "wb") as out: out.write(reply.content)
+					break
+				except:
+					print("(retry fetching %s in %d seconds)" % (src, 2 ** i))
 
 	tracer.cleaning()
 	for tag in html.find_all(True):
