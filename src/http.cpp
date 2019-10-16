@@ -14,8 +14,8 @@ namespace http
 
 	const std::unordered_map<std::string, std::string> &doc::headers()
 	{
-		if (! headers_.count("Content-type")) headers_["Content-type"] = type_;
-		if (! headers_.count("Content-length")) headers_["Content-length"] = util::t2s(content_.size());
+		if (! headers_.count("Content-Type")) headers_["Content-Type"] = type_;
+		if (! headers_.count("Content-Length")) headers_["Content-Length"] = util::t2s(content_.size());
 		return headers_;
 	}
 
@@ -63,55 +63,64 @@ namespace http
 	const std::unordered_map<int, std::pair<std::string, std::string>> error::messages{
 		{400, {"Bad Request", "The request you made is not valid"}},
 		{403, {"Forbidden", "You are not authorized to view this page"}},
-		{405, {"Method Not Allowed", "Only GET requests are supported by this server"}},
+		{405, {"Method Not Allowed", "Only GET requests are permitted by this server"}},
 		{500, {"Internal Server Error", "An error occurred while processing your request"}}
 	};
 
-	const std::string error::msg_template = "HTTP/1.1 %d %s\r\nContent-type: text/html\r\nContent-length: %d\r\n\r\n<html><head><title>%s</title></head><body><h1>%s</h1><p>%s.</p></body></html>";
+	const std::string error::msg_template = "<html><head><title>%s</title></head><body><h1>%s</h1><p>%s.</p></body></html>";
 
-	void error::send(struct mg_connection *conn)
+	void error::send(onion_response *res)
 	{
 		if (! messages.count(status_)) status_ = 500;
 		const std::pair<const std::string, std::string> &msg = messages.at(status_);
 		const char *title = msg.first.c_str();
 		int bodylen = 71 + 2 * msg.first.size() + msg.second.size();
-		mg_printf(conn, msg_template.c_str(), status_, title, bodylen, title, title, msg.second.c_str());
+		onion_response_set_code(res, status_);
+		onion_response_set_header(res, "Content-Type", "text/html");
+		onion_response_set_header(res, "Content-Length", util::t2s(bodylen).c_str());
+		onion_response_write_headers(res);
+		onion_response_printf(res, msg_template.c_str(), title, title, msg.second.c_str());
 	}
 
-	void server::handle(struct mg_connection *conn, int ev, void *data) try
+	void add_to_map(void *data, char *k, char *v, int flags)
 	{
-		if (ev != MG_EV_HTTP_REQUEST) return;
-		server *srv = static_cast<server *>(conn->mgr->user_data);
-		uint32_t remoteip = conn->sa.sin.sin_addr.s_addr;
+		static_cast<std::unordered_map<std::string, std::string> *>(data)->insert(std::pair<std::string, std::string>{std::string{k}, std::string{v}});
+	}
+
+	onion_connection_status server::handle(void *data, onion_request *req, onion_response *res) try
+	{
+		server *srv = static_cast<server *>(data);
+		std::string method = onion_request_methods[(onion_request_get_flags(req) & 0x0F)];
+		uint32_t remoteip = util::str2ip(std::string{onion_request_get_client_description(req)}); // I don't think the "description" is guaranteed to be an IP
 		if (! srv->filter.check(remoteip)) throw error{403};
-		struct http_message *msg = static_cast<struct http_message *>(data);
-		if (std::string{msg->method.p, msg->method.len} != "GET") throw error{405};
-		doc d = srv->callback(std::string{msg->uri.p, msg->uri.len}, std::string{msg->query_string.p, msg->query_string.len}, remoteip);
-		std::ostringstream head{};
-		head << "HTTP/1.1 200 OK\r\n";
-		for (const std::pair<const std::string, std::string> &header : d.headers()) head << header.first << ": " << header.second << "\r\n";
-		head << "\r\n";
-		mg_printf(conn, "%s", head.str().c_str());
-		mg_send(conn, d.content().data(), d.size());
+		if (method != "GET") throw error{405};
+		std::unordered_map<std::string, std::string> query{};
+		onion_dict_preorder(onion_request_get_query_dict(req), reinterpret_cast<void *>(add_to_map), &query);
+		doc d = srv->callback(std::string{onion_request_get_fullpath(req)}, query, remoteip);
+		onion_response_set_code(res, 200);
+		for (const std::pair<const std::string, std::string> &header : d.headers()) onion_response_set_header(res, header.first.c_str(), header.second.c_str());
+		onion_response_write_headers(res);
+		onion_response_write(res, d.content().data(), d.size());
+		return OCS_PROCESSED;
 	}
-	catch (error &e) { e.send(conn); }
-	catch (std::exception &e) { error{500}.send(conn); }
+	catch (error &e) { e.send(res); return OCS_PROCESSED; }
+	catch (std::exception &e) { error{500}.send(res); return OCS_PROCESSED; }
 
-	server::server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept) : mgr{}, callback{handler}, filter{accept}
+	server::server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::unordered_map<std::string, std::string>, uint32_t)> handler, const std::string &accept) : o{onion_new(O_THREADED)}, callback{handler}, filter{accept}
 	{
-		mg_mgr_init(&mgr, this);
-		mg_connection *conn = mg_bind(&mgr, (addr + ":" + util::t2s(port)).c_str(), handle);
-		if (! conn) throw std::runtime_error{"Unable to create socket connection"};
-		mg_set_protocol_http_websocket(conn);
+		invoke_handle = onion_handler_new(handle, static_cast<void *>(this), free_handler);
+		onion_set_root_handler(o, invoke_handle);
+		onion_set_hostname(o, addr.c_str());
+		onion_set_port(o, "2235");
 	}
 
 	void server::serve(int timeout)
 	{
-		while (true) mg_mgr_poll(&mgr, timeout);
+		onion_listen(o);
 	}
 
 	server::~server()
 	{
-		mg_mgr_free(&mgr);
+		onion_free(o);
 	}
 }

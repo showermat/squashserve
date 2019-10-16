@@ -167,7 +167,7 @@ http::doc shuffle(Volume &vol)
 	return http::redirect(http::mkpath({viewbase(), vol.id(), vol.shuffle()}));
 }
 
-http::doc view(Volume &vol, const std::string &path, const std::string &query)
+http::doc view(Volume &vol, const std::string &path, const std::unordered_map<std::string, std::string> &query)
 {
 	/* Using an iframe like this requires hacky JavaScript link rewriters to make things as transparent as possible, which causes
 	 * issues including the following.  However, it's the best way of doing a toolbar that I've been able to come up with so far.
@@ -177,7 +177,7 @@ http::doc view(Volume &vol, const std::string &path, const std::string &query)
 	if (! path.size()) return http::redirect(http::mkpath({"view", vol.id(), vol.info("home")}));
 	http::doc ret = resource("html/view.html");
 	std::unordered_map<std::string, std::string> tokens = vol.tokens(path);
-	tokens["query"] = query;
+	tokens["query"] = util::mkquerystr(query);
 	ret.content(templ::render(ret.content(), tokens));
 	return ret;
 }
@@ -265,20 +265,13 @@ std::string url_input(const std::string &url, int start)
 	return util::urldecode(std::string{startpos, url.end()});
 }
 
-http::doc urlhandle(const std::string &url, const std::string &querystr, uint32_t remoteip)
+http::doc urlhandle(const std::string &url, const std::unordered_map<std::string, std::string> &query, uint32_t remoteip)
 {
 	const uint32_t localip = util::str2ip("127.0.0.1");
 	std::vector<std::string> path = util::strsplit(url, '/');
 	if (path.size() && path[0] == "") path.erase(path.begin());
 	if (path.size() && path[path.size() - 1] == "") path.erase(path.end());
 	for (std::string &elem : path) elem = util::urldecode(elem);
-	std::unordered_map<std::string, std::string> query{};
-	if (querystr.size() > 0) for (const std::string &qu : util::strsplit(querystr, '&'))
-	{
-		std::string::size_type idx = qu.find("=");
-		if (idx == qu.npos) query[util::urldecode(qu)] = "";
-		else query[util::urldecode(qu.substr(0, idx), true)] = util::urldecode(qu.substr(idx + 1), true);
-	}
 	try
 	{
 		if (path.size() == 0 || path[0] == "") return home(remoteip == localip);
@@ -286,9 +279,8 @@ http::doc urlhandle(const std::string &url, const std::string &querystr, uint32_
 		{
 			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
 			if (! volumes.check(path[1])) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
-			std::string full_qstr = (querystr.size() ? "?" + querystr : "");
 			if (path[0] == "content") return content(volumes.get(path[1]), url_input(url, 2));
-			if (path[0] == "view") return view(volumes.get(path[1]), url_input(url, 2), full_qstr);
+			if (path[0] == "view") return view(volumes.get(path[1]), url_input(url, 2), query);
 			if (path[0] == "complete")
 			{
 				if (path.size() > 3) return error("Bad Request", "Trailing path elements");

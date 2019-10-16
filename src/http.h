@@ -9,8 +9,9 @@
 #include <regex>
 #include <stdexcept>
 #include <unordered_map>
+#include <onion/onion.hpp>
+#include <onion/dict.hpp>
 #include "util/util.h"
-#include "mongoose.h"
 
 namespace http
 {
@@ -48,18 +49,20 @@ namespace http
 		int status_;
 	public:
 		error(int status) : std::runtime_error{"HTTP " + util::t2s(status_)}, status_{status} { }
-		void send(struct mg_connection *conn);
+		void send(onion_response *res);
 	};
 
 	class server
 	{
 	private:
-		struct mg_mgr mgr;
-		std::function<doc(std::string, std::string, uint32_t)> callback;
+		onion *o;
+		onion_handler *invoke_handle;
+		std::function<doc(std::string, std::unordered_map<std::string, std::string>, uint32_t)> callback;
 		ipfilter filter;
-		static void handle(struct mg_connection *conn, int ev, void *data);
+		static onion_connection_status handle(void *data, onion_request *req, onion_response *res);
+		static void free_handler(void *data) { }
 	public:
-		server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::string, uint32_t)> handler, const std::string &accept = "");
+		server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::unordered_map<std::string, std::string>, uint32_t)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};

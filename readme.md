@@ -54,7 +54,7 @@ Build requirements are as follows:
 
   - The following libraries should be on most systems already: pthread, magic, lzma, iconv
 
-  - The following libraries might need to be installed: Lua, [Mongoose](https://github.com/cesanta/mongoose) (`mongoose` in AUR)
+  - The following libraries might need to be installed: Lua, [Onion](https://www.coralbits.com/libonion/) (`libonion-git` in AUR)
 
 Building should be as simple as:
 
