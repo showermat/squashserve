@@ -21,7 +21,10 @@ namespace http
 
 	doc redirect(const std::string &url)
 	{
-		return doc{"text/html", "<html><head><meta charset=\"utf8\"><meta http-equiv=\"refresh\" content=\"0;url=" + url + "\"></head></html>"};
+		doc ret{"text/html", "<html><head><meta charset=\"utf8\"><title>Moved</title></head><body>This content has moved to <a href=\"" + url + "\">" + url + "</a>.</body></html>"};
+		ret.status(302);
+		ret.header("Location", url);
+		return ret;
 	}
 
 	std::string mkpath(const std::vector<std::string> &items)
@@ -97,7 +100,7 @@ namespace http
 		std::unordered_map<std::string, std::string> query{};
 		onion_dict_preorder(onion_request_get_query_dict(req), reinterpret_cast<void *>(add_to_map), &query);
 		doc d = srv->callback(std::string{onion_request_get_fullpath(req)}, query, remoteip);
-		onion_response_set_code(res, 200);
+		onion_response_set_code(res, d.status());
 		for (const std::pair<const std::string, std::string> &header : d.headers()) onion_response_set_header(res, header.first.c_str(), header.second.c_str());
 		onion_response_write_headers(res);
 		onion_response_write(res, d.content().data(), d.size());

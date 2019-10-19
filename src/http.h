@@ -18,13 +18,16 @@ namespace http
 	class doc
 	{
 	private:
+		int status_;
 		std::string type_;
 		std::string content_;
 		std::unordered_map<std::string, std::string> headers_;
 	public:
 		doc() : type_{"text/plain"}, content_{}, headers_{} { }
-		doc(const std::string &type, const std::string &content, const std::unordered_map<std::string, std::string> &headers = {}) : type_{type}, content_{content}, headers_{headers} { }
+		doc(const std::string &type, const std::string &content, const std::unordered_map<std::string, std::string> &headers = {}) : status_{200}, type_{type}, content_{content}, headers_{headers} { }
 		doc(const std::string &path, const std::unordered_map<std::string, std::string> &headers = {});
+		void status(int value) { status_ = value; }
+		int status() { return status_; }
 		void content(const std::string &value) { content_ = value; }
 		const std::string &content() const { return content_; }
 		size_t size() const { return content_.size(); }
@@ -61,6 +64,8 @@ namespace http
 		ipfilter filter;
 		static onion_connection_status handle(void *data, onion_request *req, onion_response *res);
 		static void free_handler(void *data) { }
+		// static void log(onion_log_level level, const char *filename, int lineno, const char *fmt, ...);
+		// onion_log = server::log; // To set logger
 	public:
 		server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::unordered_map<std::string, std::string>, uint32_t)> handler, const std::string &accept = "");
 		void serve(int timeout = 1000);

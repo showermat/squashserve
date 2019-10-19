@@ -17,12 +17,6 @@
 #include "http.h"
 #include "prefs.h"
 
-class handle_error : public std::runtime_error
-{
-public:
-	handle_error(const std::string &msg) : runtime_error{msg} { }
-};
-
 std::unique_ptr<const zsr::archive> resources{};
 Volmgr volumes{};
 
@@ -34,10 +28,18 @@ http::doc resource(const std::string &path, const std::unordered_map<std::string
 	return http::doc(file.meta("type"), ret.str(), headers);
 }
 
-http::doc error(const std::string &header, const std::string &body)
+http::doc error(int status, const std::string &header, const std::string &body)
 {
 	http::doc ret = resource("html/error.html");
+	ret.status(status);
 	ret.content(templ::render(ret.content(), {{"header", header}, {"message", body}}));
+	return ret;
+}
+
+http::doc plain_error(int status, const std::string &message)
+{
+	http::doc ret{"text/plain", message};
+	ret.status(status);
 	return ret;
 }
 
@@ -116,7 +118,7 @@ http::doc search(Volume &vol, const std::string &query)
 			buf << templ::render(sects[1], qtoks);
 		}
 	}
-	catch (Volume::error &e) { return error(e.header(), e.body()); }
+	catch (Volume::error &e) { return error(500, e.header(), e.body()); }
 	buf << templ::render(sects[2], tokens);
 	ret.content(buf.str());
 	return ret;
@@ -190,7 +192,7 @@ http::doc content(Volume &vol, const std::string &path)
 		std::pair<std::string, std::string> contpair = vol.get(path);
 		return http::doc{contpair.first, contpair.second};
 	}
-	catch (Volume::error &e) { return error(e.header(), e.body()); }
+	catch (Volume::error &e) { return error(400, e.header(), e.body()); }
 }
 
 http::doc pref()
@@ -210,9 +212,9 @@ http::doc pref()
 
 http::doc rsrc(const std::string &path)
 {
-	if (! path.size()) return error("Bad Request", "Missing path to resource to retrieve");
+	if (! path.size()) return error(400, "Bad Request", "Missing path to resource to retrieve");
 	try { return resource(path, {{"Cache-control", "max-age=640000"}}); }
-	catch (std::runtime_error &e) { return error("Not Found", "The requested resource " + path + " could not be found"); }
+	catch (std::runtime_error &e) { return error(404, "Not Found", "The requested resource " + path + " could not be found"); }
 }
 
 http::doc action(const std::string &verb, const std::unordered_map<std::string, std::string> &args)
@@ -236,7 +238,7 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 	}
 	else if (verb == "add")
 	{
-		for (const std::string & reqarg : {"home", "location", "id"}) if (! args.count(reqarg)) return error("Volume Creation Failed", "Required parameter “" + reqarg + "” is missing.");
+		for (const std::string & reqarg : {"home", "location", "id"}) if (! args.count(reqarg)) return error(400, "Volume Creation Failed", "Required parameter “" + reqarg + "” is missing.");
 		std::string srcdir = args.at("location");
 		std::string id = args.at("id");
 		std::unordered_map<std::string, std::string> info;
@@ -250,12 +252,12 @@ http::doc action(const std::string &verb, const std::unordered_map<std::string, 
 		}
 		for (const std::string &key : keynames) if (args.count("key_" + key) && args.count("value_" + key)) info[args.at("key_" + key)] = args.at("value_" + key);
 		try { Volume::create(srcdir, prefs::get("basedir"), id, info); }
-		catch (std::runtime_error &e) { return error("Volume Creation Failed", e.what()); }
+		catch (std::runtime_error &e) { return error(500, "Volume Creation Failed", e.what()); }
 		volumes.refresh();
 		return http::redirect("/");
 	}
 	else if (verb == "quit") std::exit(0);
-	else return error("Bad Request", "Unknown action “" + verb + "”");
+	else return error(400, "Bad Request", "Unknown action “" + verb + "”");
 }
 
 std::string url_input(const std::string &url, int start)
@@ -277,64 +279,65 @@ http::doc urlhandle(const std::string &url, const std::unordered_map<std::string
 		if (path.size() == 0 || path[0] == "") return home(remoteip == localip);
 		if (path[0] == "search" || path[0] == "view" || path[0] == "content" || path[0] == "complete" || path[0] == "titles" || path[0] == "shuffle")
 		{
-			if (path.size() < 2) return error("Bad Request", "Missing volume ID");
-			if (! volumes.check(path[1])) return error("Not Found", "No volume with ID “" + path[1] + "” exists");
+			if (path.size() < 2) return error(400, "Bad Request", "Missing volume ID");
+			if (! volumes.check(path[1])) return error(404, "Not Found", "No volume with ID “" + path[1] + "” exists");
 			if (path[0] == "content") return content(volumes.get(path[1]), url_input(url, 2));
 			if (path[0] == "view") return view(volumes.get(path[1]), url_input(url, 2), query);
 			if (path[0] == "complete")
 			{
-				if (path.size() > 3) return error("Bad Request", "Trailing path elements");
+				if (path.size() > 3) return error(400, "Bad Request", "Trailing path elements");
 				return complete(volumes.get(path[1]), path[2]);
 			}
 			if (path[0] == "titles")
 			{
-				if (path.size() > 4) return error("Bad Request", "Trailing path elements");
+				if (path.size() > 4) return error(400, "Bad Request", "Trailing path elements");
 				return titles(volumes.get(path[1]), path[2], path.size() > 3 ? util::s2t<int>(path[3]) : 1);
 			}
 			if (path[0] == "shuffle")
 			{
-				if (path.size() > 2) return error("Bad Request", "Trailing path elements");
+				if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
 				return shuffle(volumes.get(path[1]));
 			}
 			if (path[0] == "search")
 			{
-				if (path.size() > 3) return error("Bad Request", "Trailing path elements");
+				if (path.size() > 3) return error(400, "Bad Request", "Trailing path elements");
 				return search(volumes.get(path[1]), path[2]);
 			}
 		}
 		if (path[0] == "load" || path[0] == "unload")
 		{
-			if (path.size() < 2) return error("Bad Request", "Missing category name");
-			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
+			if (path.size() < 2) return error(400, "Bad Request", "Missing category name");
+			if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
 			if (path[0] == "load") return loadcat(path[1]);
 			else return unloadcat(path[1]);
 		}
 		if (path[0] == "external")
 		{
-			if (path.size() < 2) return error("Bad Request", "Missing external path");
-			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
-			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
-			return http::doc{"text/plain", volumes.load_external(path[1])};
+			if (path.size() > 1) return plain_error(400, "Trailing path elements in request URL");
+			if (remoteip != localip) return plain_error(403, "You do not have permission to access this functionality");
+			if (! query.count("path")) return plain_error(400, "Missing “path” parameter in request URL");
+			try { return http::doc{"text/plain", volumes.load_external(query.at("path"))}; }
+			catch (std::exception &e) { return plain_error(400, e.what()); }
 		}
 		if (path[0] == "rsrc") return rsrc(url_input(url, 1));
 		if (path[0] == "action")
 		{
-			if (path.size() < 2) return error("Bad Request", "No action selected");
-			if (path.size() > 2) return error("Bad Request", "Trailing path elements");
-			if (remoteip != localip) return error("Denied", "You do not have permission to access this functionality");
+			if (path.size() < 2) return error(400, "Bad Request", "No action selected");
+			if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
+			if (remoteip != localip) return error(403, "Denied", "You do not have permission to access this functionality");
 			return action(path[1], query);
 		}
 		if (path[0] == "pref" || path[0] == "add")
 		{
-			if (path.size() > 1) return error("Bad Request", "Trailing path elements");
+			if (path.size() > 1) return error(400, "Bad Request", "Trailing path elements");
 			if (path[0] == "pref") return pref();
 			if (path[0] == "add") return http::doc{resource("html/add.html")};
 		}
-		throw handle_error{"Unknown action “" + path[0] + "”"};
+		return error(400, "Bad Request", "Unknown action “" + path[0] + "”");
 	}
 	catch (std::exception &e)
 	{
-		return error("Error", e.what());
+		return error(500, "Error", e.what());
 	}
 }
 

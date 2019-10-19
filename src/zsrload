@@ -64,12 +64,12 @@ if install:
 	exit(0)
 
 if path is None: usage_exit()
-loadurl = "http://{host}/external/%s".format(host=host)
+loadurl = "http://{host}/external".format(host=host)
 viewurl = "http://{host}/view/%s".format(host=host)
 
-res = requests.get(loadurl % (urllib.parse.quote(os.path.abspath(path), safe="")))
+res = requests.get(loadurl, params={"path": os.path.abspath(path)}, timeout=1)
 if res.status_code != 200:
-	print("Could not open file: %d" % (res.status_code))
+	print("Could not open file: (%d) %s" % (res.status_code, res.text))
 	exit(2)
 volid = res.text
 if "DISPLAY" in os.environ: subprocess.call(["xdg-open", viewurl % (volid)])
