@@ -114,7 +114,7 @@ namespace http
 		invoke_handle = onion_handler_new(handle, static_cast<void *>(this), free_handler);
 		onion_set_root_handler(o, invoke_handle);
 		onion_set_hostname(o, addr.c_str());
-		onion_set_port(o, "2235");
+		onion_set_port(o, util::t2s(port).c_str());
 	}
 
 	void server::serve(int timeout)

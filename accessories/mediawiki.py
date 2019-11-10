@@ -43,6 +43,7 @@ debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persim
 sites = {
 	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg", {0: ""}),
 	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/e/ec/Wiktionary-logo.svg", {0: "", 100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"}),
+	"wikivoyage": ("Wikivoyage", "Free worldwide travel guide", "https://en.wikivoyage.org", "https://en.wikivoyage.org/static/images/project-logos/enwikivoyage.png", {0: ""}),
 }
 rootdir = sys.argv[1]
 if rootdir == "debug":
@@ -69,10 +70,11 @@ def timestr(format = "%Y-%m-%d %H:%M:%S"):
 	return datetime.datetime.now().strftime(format)
 
 class HTTPError(Exception):
-	def __init__(self, code):
+	def __init__(self, code, url):
 		self.code = code
+		self.url = url
 	def __str__(self):
-		return "HTTP %d" % (self.code)
+		return "HTTP %d fetching %s" % (self.code, self.url)
 
 def friendlyname(fname):
 	subs = {"\"": "[quote]", "/": "[slash]", " ": "_", "_+": "_"}
@@ -187,7 +189,7 @@ def writeout(title, content, tracer):
 				time.sleep(2 ** i)
 				try:
 					reply = requests.get(src, headers={"user-agent": useragent})
-					if reply.status_code != 200: raise HTTPError(reply.status_code)
+					if reply.status_code != 200: raise HTTPError(reply.status_code, src)
 					destdir = os.path.join(rootdir, imgdir, subkey)
 					if not os.path.exists(destdir): os.mkdir(destdir)
 					with open(os.path.join(destdir, fname), "wb") as out: out.write(reply.content)
@@ -227,7 +229,7 @@ def download(title):
 	elif res.status_code == 200:
 		return res.text
 	else:
-		raise HTTPError(res.status_code);
+		raise HTTPError(res.status_code, url % (target));
 
 cnt = 0
 def getpage(title, tracer):

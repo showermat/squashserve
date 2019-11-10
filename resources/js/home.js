@@ -7,10 +7,9 @@ $(document).ready(function() {
 		var anchor = $(this);
 		anchor.find(".category-loading").show();
 		var target = anchor.parent().find("table.volume-list");
-		var url = "/load/";
-		if (anchor.parent().hasClass("loaded")) url = "/unload/";
-		url += anchor.data("catname");
-		$.get(url, function(data) {
+		var url = "/load";
+		if (anchor.parent().hasClass("loaded")) url = "/unload";
+		$.get(url, {cat : anchor.data("catname")}, function(data) {
 			target.html(data);
 			target.parent().toggleClass("loaded unloaded");
 			search_setup("search", ".search-input", ".search", true);

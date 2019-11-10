@@ -3,7 +3,7 @@ function match(id)
 	return new Bloodhound({
 		datumTokenizer: function (d) { return Bloodhound.tokenizers.whitespace(d.value); },
 		queryTokenizer : Bloodhound.tokenizers.whitespace,
-		remote : { url : "/complete/" + id + "/%QUERY", wildcard : "%QUERY", rateLimitWait : 500 }
+		remote : { url : "/complete/" + id + "?q=%QUERY", wildcard : "%QUERY", rateLimitWait : 500 }
 	});
 }
 
@@ -41,7 +41,7 @@ function search_setup(page, input, submit, newtab = false)
 	$(input).each(function() { autocomplete($(this), $(this).parent().data("volid"), newtab); });
 	$(submit).on('submit', function() {
 		var query = $(this).find(input).val();
-		var location = "/" + page + "/" + $(this).data("volid") + "/" + encodeURIComponent(query);
+		var location = "/" + page + "/" + $(this).data("volid") + "?q=" + encodeURIComponent(query);
 		if (newtab)
 		{
 			window.open(location);

@@ -97,7 +97,7 @@ http::doc search(Volume &vol, const std::string &query)
 	std::string match = vol.quicksearch(query);
 	if (match != "") return http::redirect(http::mkpath({viewbase(), vol.id(), match}));
 #ifndef ZSR_USE_XAPIAN
-	return http::redirect(http::mkpath({"titles", vol.id(), query}));
+	return http::redirect(http::mkpath({"titles", vol.id()}) + "?q=" + util::urlencode(query));
 #endif
 	std::unordered_map<std::string, std::string> tokens = vol.tokens();
 	tokens["query"] = query;
@@ -281,35 +281,22 @@ http::doc urlhandle(const std::string &url, const std::unordered_map<std::string
 		{
 			if (path.size() < 2) return error(400, "Bad Request", "Missing volume ID");
 			if (! volumes.check(path[1])) return error(404, "Not Found", "No volume with ID “" + path[1] + "” exists");
-			if (path[0] == "content") return content(volumes.get(path[1]), url_input(url, 2));
-			if (path[0] == "view") return view(volumes.get(path[1]), url_input(url, 2), query);
-			if (path[0] == "complete")
-			{
-				if (path.size() > 3) return error(400, "Bad Request", "Trailing path elements");
-				return complete(volumes.get(path[1]), path[2]);
-			}
-			if (path[0] == "titles")
-			{
-				if (path.size() > 4) return error(400, "Bad Request", "Trailing path elements");
-				return titles(volumes.get(path[1]), path[2], path.size() > 3 ? util::s2t<int>(path[3]) : 1);
-			}
-			if (path[0] == "shuffle")
-			{
-				if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
-				return shuffle(volumes.get(path[1]));
-			}
-			if (path[0] == "search")
-			{
-				if (path.size() > 3) return error(400, "Bad Request", "Trailing path elements");
-				return search(volumes.get(path[1]), path[2]);
-			}
+			Volume &vol = volumes.get(path[1]);
+			if (path[0] == "content") return content(vol, url_input(url, 2));
+			if (path[0] == "view") return view(vol, url_input(url, 2), query);
+			if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
+			if (path[0] == "shuffle") return shuffle(vol);
+			if (! query.count("q")) return error(400, "Bad Request", "Missing “q” parameter in request URL");
+			if (path[0] == "complete") return complete(vol, query.at("q"));
+			if (path[0] == "titles") return titles(vol, query.at("q"), query.count("page") ? util::s2t<int>(query.at("page")) : 1);
+			if (path[0] == "search") return search(vol, query.at("q"));
 		}
 		if (path[0] == "load" || path[0] == "unload")
 		{
-			if (path.size() < 2) return error(400, "Bad Request", "Missing category name");
-			if (path.size() > 2) return error(400, "Bad Request", "Trailing path elements");
-			if (path[0] == "load") return loadcat(path[1]);
-			else return unloadcat(path[1]);
+			if (path.size() > 1) return error(400, "Bad Request", "Trailing path elements");
+			if (! query.count("cat")) return error(400, "Bad Request", "Missing “cat” parameter in request URL");
+			if (path[0] == "load") return loadcat(query.at("cat"));
+			else return unloadcat(query.at("cat"));
 		}
 		if (path[0] == "external")
 		{

@@ -32,7 +32,7 @@
 	"default": 40
 }, {
 	"name": "pagesize",
-	"desc": "Number of titles results to display per page",
+	"desc": "Number of title results to display per page",
 	"default": 100
 }, {
 	"name": "toolbar",
