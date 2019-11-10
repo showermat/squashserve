@@ -68,6 +68,7 @@ namespace http
 		// onion_log = server::log; // To set logger
 	public:
 		server(const std::string &addr, uint16_t port, std::function<doc(std::string, std::unordered_map<std::string, std::string>, uint32_t)> handler, const std::string &accept = "");
+		void ssl(const std::string &cert, const std::string &key);
 		void serve(int timeout = 1000);
 		virtual ~server();
 	};

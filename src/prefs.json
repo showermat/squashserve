@@ -38,4 +38,16 @@
 	"name": "toolbar",
 	"desc": "Enable toolbar overlay when viewing pages",
 	"default": true
+}, {
+	"name": "ssl",
+	"desc": "Serve over HTTPS",
+	"default": false
+}, {
+	"name": "sslcert",
+	"desc": "Path to SSL certificate (PEM)",
+	"default": ""
+}, {
+	"name": "sslkey",
+	"desc": "Path to SSL private key",
+	"default": ""
 }]

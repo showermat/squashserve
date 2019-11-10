@@ -117,6 +117,11 @@ namespace http
 		onion_set_port(o, util::t2s(port).c_str());
 	}
 
+	void server::ssl(const std::string &cert, const std::string &key)
+	{
+		onion_set_certificate(o, O_SSL_CERTIFICATE_KEY, cert.c_str(), key.c_str(), O_SSL_NONE);
+	}
+
 	void server::serve(int timeout)
 	{
 		onion_listen(o);

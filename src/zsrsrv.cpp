@@ -336,7 +336,9 @@ int main(int argc, char **argv) try
 	if (! util::fexists(rsrcpath)) throw std::runtime_error{"Can't find resource archive at " + rsrcpath + "\n"};
 	resources.reset(new zsr::archive{rsrcpath});
 	volumes.init(prefs::get("basedir"));
-	http::server{prefs::get("localonly") ? "127.0.0.1" : "0.0.0.0", static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")}.serve();
+	http::server server{prefs::get("localonly") ? "127.0.0.1" : "0.0.0.0", static_cast<uint16_t>(prefs::get("port")), urlhandle, prefs::get("accept")};
+	if (prefs::get("ssl")) server.ssl(prefs::get("sslcert"), prefs::get("sslkey"));
+	server.serve();
 	return 0;
 }
 catch (std::exception &e)

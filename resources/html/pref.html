@@ -20,7 +20,7 @@
 	<td>
 		{{#type=str?}}<input type="text" name="{{key}}" value="{{value}}" class="form-value">{{/}}
 		{{#type=num?}}<input type="number" name="{{key}}" value="{{value}}" class="form-value">{{/}}
-		{{#type=bool?}}<input type="hidden" name="{{key}}" value="false"><input type="checkbox" name="{{key}}" value="true" {{value=true?checked:}} class="form-value">{{/}}
+		{{#type=bool?}}<input type="hidden" name="{{key}}" value="{{value}}"><input type="checkbox" {{value=true?checked:}} onclick='this.previousSibling.value = this.checked ? "true" : "false"' class="form-value">{{/}}
 	</td>
 </tr>
 %
