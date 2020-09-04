@@ -1,0 +1,6 @@
+[workspace]
+members = [
+	"disktree",
+	"mkvol",
+	"sqsrv",
+]

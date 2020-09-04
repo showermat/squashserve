@@ -224,8 +224,9 @@ def download(title):
 		location = urllib.parse.unquote(res.headers["location"]).split("#", 1)
 		target = "../" + friendlyname(location[0]) + (("#" + location[1]) if len(location) > 1 else "")
 		if not os.path.exists(os.path.dirname(fname)): os.mkdir(os.path.dirname(fname))
-		with open(fname, "w") as outf:
-			outf.write("<html><head><meta charset=\"utf8\"><title>%s</title><meta http-equiv=\"refresh\" content=\"0;url=%s\"></head></html>" % (title, target))
+		#with open(fname, "w") as outf:
+		#	outf.write("<html><head><meta charset=\"utf8\"><title>%s</title><meta http-equiv=\"refresh\" content=\"0;url=%s\"></head></html>" % (title, target))
+		os.symlink(target, fname)
 	elif res.status_code == 200:
 		return res.text
 	else:

@@ -1,0 +1,12 @@
+[package]
+name = "disktree"
+version = "0.1.0"
+authors = ["Matthew Schauer <matthew.schauer@e10x.net>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+itertools = "0.9"
+thiserror = "1.0"
+sled = "0.34"

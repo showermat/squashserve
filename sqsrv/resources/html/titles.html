@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>{{ volume.title | escape }}</title>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/typeahead.css">
+<link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
+<link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
+<script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/typeahead.bundle.js"></script>
+<script src="/rsrc/js/complete.js"></script>
+<script>$(document).ready(function() { search_setup("search", "#search-input", "#search"); });</script>
+</head>
+<body>
+<main class="normal">
+<div id="utils">
+	<a href="/"><i class="fa fa-2x fa-th-list" title="Library"></i></a>
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{{ volume.home }}"><i class="fa fa-2x fa-home" title="Home page"></i></a>
+</div>
+<h1>Pages for “{{ query | escape }}” in {{ volume.title | escape }}</h1>
+<form id="search" data-volid="{{ volume.id | escape }}">
+<input id="search-input" type="search" placeholder="Search again" autocomplete="off" spellcheck="false">
+<button type="submit">Go</button>
+</form>
+<table id="search-results">
+{% for result in results %}
+<tr>
+<td>
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{{ result.url }}">{{ result.title | escape }}</a>
+</td>
+</tr>
+{% endfor %}
+</table>
+{% if pages > 1 %}
+	<div id="pager">
+	{% if page > 1 %}
+		<div class="item"><a style="" href="/titles/{{ volume.id | url_encode }}?q={{ query | url_encode }}&p=1">«</a></div>
+		<div class="item"><a style="" href="/titles/{{ volume.id | url_encode }}?q={{ query | url_encode }}&p={{ page | minus:1 }}">‹</a></div>
+	{% endif %}
+	<div class="item">{{ page }} / {{ pages }}</div>
+	{% if page < pages %}
+		<div class="item"><a style="" href="/titles/{{ volume.id | url_encode }}?q={{ query | url_encode }}&p={{ page | plus:1 }}">›</a></div>
+		<div class="item"><a style="" href="/titles/{{ volume.id | url_encode }}?q={{ query | url_encode }}&p={{ pages }}">»</a></div>
+	{% endif %}
+	</div>
+{% endif %}
+</main>
+</body>
+</html>

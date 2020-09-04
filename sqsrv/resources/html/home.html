@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Library</title>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/typeahead.css">
+<link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
+<link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
+<script src="/rsrc/js/jquery-2.1.4.min.js"></script>
+<script src="/rsrc/js/typeahead.bundle.js"></script>
+<script src="/rsrc/js/complete.js"></script>
+<script src="/rsrc/js/home.js"></script>
+</head>
+<body>
+<main class="normal">
+<div id="utils">
+	{% if priv %}
+	<a href="/action/refresh"><i class="fa fa-2x fa-refresh"></i></a>
+	<a href="/action/quit" id="quit"><i class="fa fa-2x fa-power-off"></i></a>
+	{% endif %}
+</div>
+<h1>Library</h1>
+{% for category in categories %}
+{% if category.id != "" %}
+<div class="category-container {% if category.loaded %}loaded{% else %}unloaded{% endif %}">
+<a href="/{% if category.loaded %}unload{% else %}load{% endif %}?cat={{ category.id | url_encode }}" class="category-title" data-catname="{{ category.id | escape }}">{{ category.name | escape }} <i class="category-loading fa fa-pulse fa-spinner"></i></a>
+{% endif %}
+<table class="volume-list">
+{% for volume in category.volumes %}
+<tr>
+<td class="volume-icon"><img class="favicon" src="{{ volume.favicon }}"></td>
+<td class="volume-info">
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}" class="item-title" target="_blank">{{ volume.title | escape }}</a>
+	{% if volume.description %}<span class="volume-desc">{{ volume.description | escape }}</span>{% endif %}
+</td>
+<td class="volume-search vcenter">
+	<form class="search" data-volid="{{ volume.id | escape }}">
+	<input class="search-input typeahead" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
+	<button type="submit" >Go</button>
+	</form>
+</td>
+</tr>
+{% endfor %}
+</table>
+</div>
+{% endfor %}
+</main>
+</body>
+</html>
