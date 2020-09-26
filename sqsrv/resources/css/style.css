@@ -292,3 +292,23 @@ iframe#page
 	display: block;
 }
 
+table.dir-index tr:hover
+{
+	background: #eee;
+}
+
+table.dir-index a
+{
+	color: inherit;
+}
+
+td.index-icon
+{
+	width: 1em;
+	white-space: nowrap;
+}
+
+td.index-icon a
+{
+	text-decoration: none;
+}

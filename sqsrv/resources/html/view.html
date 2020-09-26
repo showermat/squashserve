@@ -6,7 +6,9 @@
 <link rel="stylesheet" href="/rsrc/css/style.css">
 <link rel="stylesheet" href="/rsrc/css/typeahead.css">
 <link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
-<link rel="icon" href="{{ volume.favicon }}">
+{% if volume.icon %}
+	<link rel="icon" href="/content/{{ volume.id }}/{{ volume.icon }}">
+{% endif %}
 <style>
 html { height: 100%; }
 </style>
@@ -19,8 +21,10 @@ html { height: 100%; }
 <div id="topbar"><div id="toolbar">
 	<div class="toolbar-spacer"></div>
 	<a href="/" class="toolbar-button" target="_top"><i class="fa fa-lg fa-th-list" title="Library"></i></a>
-	<a href="/view/{{ volume.id | url_encode }}/{{ volume.home }}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
-	<a href="{{ volume.live }}{{ query }}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link" title="Original page"></i></a>
+	<a href="/view/{{ volume.id | url_encode }}/{% if volume.home %}{{ volume.home }}{% endif %}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-home" title="Home page"></i></a>
+	{% if live %}
+		<a href="{{ live }}{{ query }}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-external-link-alt" title="Original page"></i></a>
+	{% endif %}
 	<a href="/shuffle/{{ volume.id | url_encode }}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
 	<div class="toolbar-spacer"></div>
 	<div class="toolbar-expand"></div>
@@ -29,7 +33,7 @@ html { height: 100%; }
 	<button type="submit">Go</button>
 	</form>
 	<div class="toolbar-spacer"></div>
-	<a href="/content/{{ volume.id | url_encode }}/{{ path }}{{query}}" id="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
+	<a href="/content/{{ volume.id | url_encode }}/{{ path }}{{ query }}" id="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
 </div></div>
 <iframe id="page" name="page" src="/content/{{ volume.id | url_encode }}/{{ path }}{{ query }}"></iframe>
 </body>

@@ -16,7 +16,7 @@
 <main class="normal">
 <div id="utils">
 	<a href="/"><i class="fa fa-2x fa-th-list" title="Library"></i></a>
-	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{{ volume.home }}"><i class="fa fa-2x fa-home" title="Home page"></i></a>
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{% if volume.home %}{{ volume.home }}{% endif %}"><i class="fa fa-2x fa-home" title="Home page"></i></a>
 </div>
 <h1>Pages for “{{ query | escape }}” in {{ volume.title | escape }}</h1>
 <form id="search" data-volid="{{ volume.id | escape }}">

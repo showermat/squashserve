@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use anyhow::{Context, Result};
+use super::{AppError, Result, StartupError, StartupResult};
 use itertools::Itertools;
+use rocket::http::ContentType;
 use squashfs::read::{Archive, Node, OwnedFile, XattrType};
+use thiserror::Error;
 
-const VOLEXT: &str = "sfs"; // TODO Use in mkvol as well
+const VOLEXT: &str = "sfs";
 
 pub mod tokens {
 	use std::collections::HashMap;
@@ -23,10 +25,50 @@ pub mod tokens {
 	}
 }
 
-fn string_keyed_xattrs(node: &Node) -> Result<HashMap<String, Vec<u8>>> {
+fn string_keyed_xattrs(node: &Node) -> std::result::Result<HashMap<String, Vec<u8>>, squashfs::SquashfsError> {
 	Ok(node.xattrs(XattrType::User)?.into_iter()
 		.filter_map(|(k, v)| String::from_utf8(k).ok().map(|x| (x, v)))
 		.collect::<HashMap<String, Vec<u8>>>())
+}
+
+fn resolve_path(node: &Node, cached_attrs: Option<&HashMap<String, Vec<u8>>>) -> Result<Option<PathBuf>> {
+	fn attr_path(attrs: &HashMap<String, Vec<u8>>) -> Option<PathBuf> {
+		let attr_str = |attr: &str| attrs.get(attr).and_then(|x| String::from_utf8(x.to_vec()).ok());
+		match (attr_str("parent"), attr_str("name")) {
+			(Some(parent), Some(name)) => Some(PathBuf::from(parent).join(name)),
+			_ => None,
+		}
+	}
+	match node.path() {
+		Some(path) => Ok(Some(path.to_path_buf())),
+		None => match cached_attrs {
+			Some(attrs) => Ok(attr_path(attrs)),
+			None => {
+				let attrs = string_keyed_xattrs(node)?;
+				Ok(attr_path(&attrs))
+			},
+		},
+	}
+}
+
+pub fn content_type(node: &Node) -> Result<ContentType> {
+	use std::str::FromStr;
+	let info = node.xattrs(XattrType::User)?.into_iter()
+		.map(|(k, v)| (String::from_utf8_lossy(&k).into_owned(), String::from_utf8_lossy(&v).into_owned()))
+		.collect::<HashMap<String, String>>();
+	let debug_path = node.path().unwrap_or("<unknown>".as_ref());
+	Ok(match info.get("type") {
+		Some(ctype) => ContentType::from_str(ctype)
+			.map_err(|x| AppError::ContentType(debug_path.to_path_buf(), format!("\"{}\" is not a valid MIME type: {}", ctype, x)))?,
+		None => {
+			let ext = node
+				.path().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Couldn't get file path to determine content type".to_string()))?
+				.extension().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown resource extension".to_string()))?
+				.to_str().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Invalid resource extension".to_string()))?;
+			ContentType::from_extension(ext)
+				.ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown resource content type".to_string()))?
+		}
+	})
 }
 
 pub struct Info {
@@ -34,8 +76,8 @@ pub struct Info {
 	pub id: String,
 	pub title: String,
 	pub metadir: PathBuf,
-	pub favicon: PathBuf,
-	pub home: PathBuf,
+	pub icon: Option<PathBuf>,
+	pub home: Option<PathBuf>,
 }
 
 impl Info {
@@ -43,25 +85,26 @@ impl Info {
 		fn get_str_def(info: &HashMap<String, Vec<u8>>, key: &str, def: &str) -> Result<String> {
 			Ok(info.get(key).cloned().map(String::from_utf8).unwrap_or(Ok(def.to_string()))?)
 		}
+		fn check_file(archive: &Archive, path: PathBuf) -> Result<Option<PathBuf>> {
+			match archive.get(&path)? {
+				Some(node) => match node.resolve()?.as_file() {
+					Ok(_) => Ok(Some(path)),
+					Err(_) => Ok(None),
+				},
+				None => Ok(None),
+			}
+		}
 		let info = string_keyed_xattrs(&archive.get("")?.expect("Couldn't get volume root"))?;
 		let metadir = PathBuf::from(get_str_def(&info, "metadir", ".meta")?);
-		let home = PathBuf::from(get_str_def(&info, "home", "index.html")?); // TODO Check existence; also consider auto-generated indices
-		let favicon_path = match info.get("icon") {
-			Some(path) => PathBuf::from(&String::from_utf8(path.to_vec())?),
-			None => metadir.join("favicon.png"),
-		};
-		let favicon = match archive.get(&favicon_path) { // TODO Should probably just use `icon` property and let template take care of the fallback
-			Ok(Some(_)) => Path::new("/content").join(id.clone()).join(favicon_path),
-			Ok(None) => PathBuf::from("/rsrc/img/volume.svg"),
-			Err(e) => Err(e)?,
-		};
+		let icon = check_file(archive, metadir.join("favicon.png"))?;
+		let home = check_file(archive, PathBuf::from(get_str_def(&info, "home", "index.html")?))?;
 		let title = get_str_def(&info, "title", id)?;
 		Ok(Self {
 			original: info,
 			id: id.to_string(),
 			title: title,
 			metadir: metadir,
-			favicon: favicon,
+			icon: icon,
 			home: home,
 		})
 	}
@@ -70,13 +113,14 @@ impl Info {
 		fn path_to_string(path: &Path) -> String {
 			path.to_str().expect("Path is invalid UTF-8").to_string()
 		}
-		vec![
+		let mut ret = vec![
 			("id".to_string(), self.id.clone()),
 			("title".to_string(), self.title.clone()),
 			("metadir".to_string(), path_to_string(&self.metadir)),
-			("favicon".to_string(), path_to_string(&self.favicon)),
-			("home".to_string(), path_to_string(&self.home)),
-		].into_iter().collect::<HashMap<String, String>>()
+		].into_iter().collect::<HashMap<String, String>>();
+		if let Some(icon) = &self.icon { ret.insert("icon".to_string(), path_to_string(&icon)); }
+		if let Some(home) = &self.home { ret.insert("home".to_string(), path_to_string(&home)); }
+		ret
 	}
 
 	pub fn get(&self, key: &str) -> Option<Vec<u8>> {
@@ -120,22 +164,27 @@ impl Volume {
 			.and_then(|x| disktree::Tree::new(x).ok()))
 	}
 
-	fn resolve_path(&self, id: u64) -> Result<Option<(String, PathBuf)>> {
-		fn attr_path(attrs: &HashMap<String, Vec<u8>>) -> Option<PathBuf> {
-			let attr_str = |attr: &str| attrs.get(attr).and_then(|x| String::from_utf8(x.to_vec()).ok());
-			match (attr_str("parent"), attr_str("name")) {
-				(Some(parent), Some(name)) => Some(PathBuf::from(parent).join(name)),
-				_ => None,
+	pub fn random(&self, ctype: ContentType) -> Result<Option<PathBuf>> {
+		let check = |id: u64| -> Result<Option<PathBuf>> {
+			let node = self.archive.get_id(id)?;
+			match node.is_file()? && content_type(&node)? == ctype {
+				true => Ok(resolve_path(&node, None)?),
+				false => Ok(None),
 			}
+		};
+		let total = self.archive.size() as u64;
+		for _ in 0..64 {
+			let candidate = rand::random::<u64>() % total;
+			if let Some(res) = check(candidate)? { return Ok(Some(res)); }
 		}
-		let attrs = string_keyed_xattrs(&self.archive.get_id(id)?)?;
-		Ok(match attr_path(&attrs) {
-			Some(path) => match attrs.get("title").and_then(|x| String::from_utf8(x.to_vec()).ok()) {
-				Some(title) => Some((title, path)),
-				None => None,
-			},
-			None => None,
-		})
+		let start = rand::random::<u64>() % total;
+		let mut candidate = start;
+		loop {
+			candidate = (candidate + 1) % total; // This won't work for archives with 1 inode, but I think that's okay.
+			if candidate == start { break; }
+			if let Some(res) = check(candidate)? { return Ok(Some(res)); }
+		}
+		return Ok(None);
 	}
 
 	pub fn exact_title(&self, query: &str) -> Result<Option<PathBuf>> {
@@ -144,7 +193,7 @@ impl Volume {
 			Some(mut index) => {
 				let results = index.exact_search(query)?;
 				match &results.as_slice() {
-					&[res] => Ok(self.resolve_path(*res)?.map(|x| x.1)),
+					&[res] => Ok(resolve_path(&self.archive.get_id(*res)?, None)?),
 					_ => Ok(None),
 				}
 			},
@@ -159,8 +208,17 @@ impl Volume {
 				let pages = ((results.len() as f64) / (page_size as f64)).ceil() as u32;
 				let start = std::cmp::min(((page - 1) * page_size) as usize, results.len());
 				let end = std::cmp::min((page * page_size) as usize, results.len());
-				let ret = results[start .. end].into_iter().map(|id| self.resolve_path(*id))
-				.filter_map(|x| {
+				let ret = results[start .. end].into_iter().map(|id| {
+					let node = self.archive.get_id(*id)?;
+					let attrs = string_keyed_xattrs(&node)?;
+					match attrs.get("title").and_then(|x| String::from_utf8(x.to_vec()).ok()) {
+						Some(title) => match resolve_path(&node, Some(&attrs))? {
+							Some(path) => Ok(Some((title, path))),
+							None => Ok(None),
+						},
+						None => Ok(None),
+					}
+				}).filter_map(|x| {
 					match x {
 						Ok(Some(y)) => Some(Ok(y)),
 						Err(e) => Some(Err(e)),
@@ -178,78 +236,107 @@ struct Category {
 	name: String,
 	loaded: RwLock<bool>,
 	order: u32,
-	volumes: HashSet<String>,
+	volumes: RwLock<HashSet<String>>,
+}
+
+impl Category {
+	fn new(name: String, order: u32) -> Self {
+		Category { name: name, loaded: RwLock::new(false), order: order, volumes: RwLock::new(HashSet::new()) }
+	}
+}
+
+#[derive(Error, Debug)]
+pub enum LoadError {
+	#[error("Library directory {0} is inaccessible: {0}")] Inaccessible(PathBuf, std::io::Error),
+	#[error("I/O error while reading library directory: {0}")] Io(#[from] std::io::Error),
+	#[error("Unable to extract file name from path {0}")] Filename(PathBuf),
 }
 
 pub struct Library {
 	dir: PathBuf,
-	all_volumes: HashMap<String, String>,
+	all_volumes: RwLock<HashMap<String, String>>, // Vol name -> cat name
 	categories: HashMap<String, Category>,
-	volumes: RwLock<HashMap<String, Arc<Volume>>>,
+	volumes: RwLock<HashMap<String, Arc<Volume>>>, // Loaded volumes only
 }
 
-impl Library { // TODO Test categories -- load and unload.  Make sure to implement external volumes
-	pub fn new(dir: &Path, cat_assign: &Vec<super::CategoryConfig>) -> Result<Self> {
-		let mut all_volumes = cat_assign.iter().flat_map(|cat| cat.volumes.iter().map(move |name| (name.to_string(), cat.name.to_string()))).collect::<HashMap<String, String>>(); // Map vol name -> cat name
+impl Library {
+	pub fn new(dir: &Path, cat_assign: &Vec<super::CategoryConfig>) -> std::result::Result<Self, LoadError> {
+		let mut all_volumes = cat_assign.iter()
+			.flat_map(|cat| cat.volumes.iter().map(move |name| (name.to_string(), cat.name.to_string())))
+			.collect::<HashMap<String, String>>(); // Map vol name -> cat name
 		let cat_order = cat_assign.iter().enumerate().map(|(i, cat)| (cat.name.clone(), i as u32 + 1)).collect::<HashMap<String, u32>>(); // Map cat name -> cat order
-		let mut categories = HashMap::new();
-		for entry in dir.read_dir().with_context(|| format!("Library directory {} is inaccessible", dir.display()))? {
+		let mut categories = vec![("".to_string(), Category::new("".to_string(), 0))].into_iter().collect::<HashMap<String, Category>>();
+		for entry in dir.read_dir().map_err(|e| LoadError::Inaccessible(dir.to_path_buf(), e))? {
 			let file = entry?.path();
 			if file.is_file() && file.extension().and_then(|x| x.to_str()) == Some(VOLEXT) {
-				let id = file.file_stem().and_then(|x| x.to_str()).ok_or(anyhow!("Could not get file name"))?.to_string();
+				let id = file.file_stem().and_then(|x| x.to_str())
+					.ok_or_else(|| LoadError::Filename(file.clone()))?.to_string();
 				let catname = all_volumes.entry(id.clone()).or_insert("".to_string()).to_string();
-				categories.entry(catname.to_string()).or_insert(Category {
-					name: catname.clone(),
-					loaded: RwLock::new(false),
-					order: *cat_order.get(&catname).unwrap_or(&0),
-					volumes: HashSet::new(),
-				}).volumes.insert(id);
+				categories.entry(catname.to_string())
+					.or_insert_with(|| Category::new(catname.clone(), *cat_order.get(&catname).expect("Found category without ordering")))
+					.volumes.write().expect("Poisoned lock").insert(id);
 			}
 		}
-		let ret = Self { dir: dir.to_path_buf(), all_volumes: all_volumes, categories: categories, volumes: RwLock::new(HashMap::new()) };
-		ret.load("")?;
+		let ret = Self { dir: dir.to_path_buf(), all_volumes: RwLock::new(all_volumes), categories: categories, volumes: RwLock::new(HashMap::new()) };
+		ret.load("").expect("No default category");
 		Ok(ret)
 	}
 
-	pub fn tokens(&self) -> Vec<tokens::Category> {
-		self.categories.iter().map(|(id, cat)| (id, cat)).sorted_by(|first, second| first.1.order.cmp(&second.1.order)).map(|(id, cat)| {
-			tokens::Category {
-				id: id.to_string(),
-				name: cat.name.to_string(),
-				loaded: *cat.loaded.read().expect("Poisoned lock"),
-				volumes: cat.volumes.iter().sorted().map(|id| self.volumes.read().expect("Poisoned lock").get(id).unwrap().info().string_values()).collect(),
-			}
-		}).collect()
+	fn category_tokens(&self, id: &str) -> Result<tokens::Category> {
+		let cat = self.categories.get(id).ok_or(AppError::NoCategory(id.to_string()))?;
+		let loaded = *cat.loaded.read().expect("Poisoned lock");
+		Ok(tokens::Category {
+			id: id.to_string(),
+			name: cat.name.to_string(),
+			loaded: loaded,
+			volumes: match loaded {
+				true => cat.volumes.read().expect("Poisoned lock").iter().sorted()
+					.map(|id| self.volumes.read().expect("Poisoned lock").get(id).unwrap().info().string_values())
+					.collect(),
+				false => vec![],
+			},
+		})
+	}
+
+	pub fn tokens(&self) -> Result<Vec<tokens::Category>> {
+		self.categories.iter().map(|(id, cat)| (cat.order, id)).sorted().map(|(order, id)| self.category_tokens(id)).collect()
 	}
 	
-	pub fn load(&self, category: &str) -> Result<()> {
+	pub fn load(&self, category: &str) -> Result<tokens::Category> {
 		match self.categories.get(category) {
 			Some(cat) => {
 				let mut volumes = self.volumes.write().expect("Poisoned lock");
-				for volume in &cat.volumes {
-					volumes.insert(volume.to_string(), Arc::new(Volume::new(volume, &self.dir.join(Path::new(volume).with_extension(VOLEXT)))?));
+				for volume in cat.volumes.read().expect("Poisoned lock").iter() {
+					if !volumes.contains_key(volume) {
+						volumes.insert(volume.to_string(), Arc::new(Volume::new(volume, &self.dir.join(Path::new(volume).with_extension(VOLEXT)))?));
+					}
 				}
 				*cat.loaded.write().expect("Poisoned lock") = true;
 			},
-			None => Err(anyhow!("Category {} does not exist", category))?,
+			None => Err(AppError::NoCategory(category.to_string()))?,
 		}
-		Ok(())
+		Ok(self.category_tokens(category)?)
 	}
 
 	pub fn unload(&self, category: &str) {
 		if let Some(cat) = self.categories.get(category) {
-			for volume in &cat.volumes { let _ = self.volumes.write().expect("Poisoned lock").remove(volume); }
+			for volume in cat.volumes.read().expect("Poisoned lock").iter() { let _ = self.volumes.write().expect("Poisoned lock").remove(volume); }
 			*cat.loaded.write().expect("Poisoned lock") = false;
 		}
 	}
 
 	pub fn load_external(&self, path: &Path) -> Result<String> {
-		unimplemented!();
+		let id = format!("@ext:{:x}", rand::random::<u32>());
+		let vol = Volume::new(&id, path)?;
+		self.volumes.write().expect("Poisoned lock").insert(id.clone(), Arc::new(vol));
+		self.all_volumes.write().expect("Poisoned lock").insert(id.clone(), "".to_string());
+		self.categories.get("").expect("No default category").volumes.write().expect("Poisoned lock").insert(id.clone());
+		Ok(id)
 	}
 
 	pub fn get(&self, id: &str) -> Result<Arc<Volume>> {
-		let category = self.all_volumes.get(id).ok_or(anyhow!("Volume {} not found", id))?.clone(); // TODO If volume is already present, skip the load
-		self.load(&category)?;
+		let category = self.all_volumes.read().expect("Posoned lock").get(id).ok_or(AppError::NoVolume(id.to_string()))?.clone();
+		self.load(&category)?; // TODO Technically there's a race condition here, where the category could get unloaded before the next line runs
 		Ok(self.volumes.read().expect("Poisoned lock").get(id).expect("Volume absent even after loading requisite category").clone())
 	}
 }

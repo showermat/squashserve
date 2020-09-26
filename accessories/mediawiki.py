@@ -348,25 +348,21 @@ tracing.cleanup()
 if os.path.isfile(resfpath) and not interrupt: os.unlink(resfpath)
 if interrupt: exit(0)
 
-info = """params = {
+info = """info = {
 	title = "%s",
 	description = "%s",
 	language = "eng",
 	created = "%s",
-	refer = "%s",
+	source = "%s",
 	origin = "%s;^wiki/./(.*).html$;wiki/$1",
 	home = "%s/M/Main_Page.html",
 }
 
-function meta(path, ftype)
-	ret = {}
-	if ftype == T_REG then
-		if is_html(path) then ret["title"] = html_title(path) end
-		ret["type"] = mimetype(path)
-	elseif ftype == T_LNK then
-		if is_html(path) then ret["title"] = basename(path):gsub("_", " ") end
+function attrs(file)
+	if file:is_link() and is_html(file) then
+		return {title = file:stem():gsub("_", " ")}
 	end
-	return ret
+	return {}
 end
 """ % (site_name, site_description, timestr("%Y-%m-%d"), origin_root, origin_root, htmldir)
 infofile = open(os.path.join(rootdir, metadir, infoname), "w")

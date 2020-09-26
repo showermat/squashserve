@@ -8,10 +8,12 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
+chrono = "0.4"
 clap = "2.33"
 disktree = { path = "../disktree" }
 encoding = "0.2"
 html-escape = "0.2"
+lazy_static = "1.4"
 magic = "0.12"
 mime_guess = "2.0"
 mlua = { version = "0.4", features = ["lua54", "vendored"] }

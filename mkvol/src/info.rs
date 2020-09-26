@@ -126,13 +126,15 @@ fn is_html(path: &Path) -> bool {
 }
 
 fn html_encoding(path: &Path) -> Result<String> {
-	let checks = vec![ // TODO Initialize once
-		(Regex::new(r#"(?i-u)<\s*(html|meta)\s+[^>]*charset\s*=\s*["']?([^"' \t]+)["']?[^>]*>"#)?, 2), // <html|meta charset="...">
-		(Regex::new(r#"(?i-u)<\s*meta\s+[^>]*content\s*=\s*["'][^"']+;\s+charset=([^ \t"']+)[^"']*["'][^>]*>"#)?, 1), // <meta http-equiv="Content-Type" content="text/html; charset=...">
-	];
+	lazy_static! {
+		static ref CHECKS: Vec<(Regex, usize)> = vec![
+			(Regex::new(r#"(?i-u)<\s*(html|meta)\s+[^>]*charset\s*=\s*["']?([^"' \t]+)["']?[^>]*>"#).expect("HTML encoding check 1 does not compile"), 2), // <html|meta charset="...">
+			(Regex::new(r#"(?i-u)<\s*meta\s+[^>]*content\s*=\s*["'][^"']+;\s+charset=([^ \t"']+)[^"']*["'][^>]*>"#).expect("HTML encoding check 2 does not compile"), 1), // <meta http-equiv="Content-Type" content="text/html; charset=...">
+		];
+	}
 	let content = head(path)?;
-	for (check, group) in checks {
-		if let Some(encoding) = check.captures(&content).and_then(|x| x.get(group)).and_then(|x| String::from_utf8(x.as_bytes().to_vec()).ok()) {
+	for (check, group) in CHECKS.iter() {
+		if let Some(encoding) = check.captures(&content).and_then(|x| x.get(*group)).and_then(|x| String::from_utf8(x.as_bytes().to_vec()).ok()) {
 			return Ok(encoding)
 		}
 	}
@@ -145,9 +147,11 @@ fn to_utf8(input: &[u8], charset: &str) -> Result<String> {
 }
 
 fn html_title_encoded(path: &Path, encoding: &str) -> Result<String> {
-	let title_re = Regex::new(r"(?i-u)<\s*title[^>]*>\s*(.*?)\s*<\s*/\s*title[^>]*>")?; // TODO Initialize once
+	lazy_static! {
+		static ref TITLE_RE: Regex = Regex::new(r"(?i-u)<\s*title[^>]*>\s*(.*?)\s*<\s*/\s*title[^>]*>").expect("HTML title regex does not compile");
+	}
 	let content = head(path)?;
-	let match_bytes = title_re.captures(&content).and_then(|x| x.get(1)).map(|x| x.as_bytes().clone()).unwrap_or(b"");
+	let match_bytes = TITLE_RE.captures(&content).and_then(|x| x.get(1)).map(|x| x.as_bytes().clone()).unwrap_or(b"");
 	let decoded = to_utf8(&match_bytes, encoding).unwrap_or("".to_string());
 	Ok(html_escape::decode_html_entities(&decoded).into_owned())
 }
@@ -160,7 +164,7 @@ fn lua_sub_html_title(lua: &mlua::Lua, (file, pattern): (File, String)) -> mlua:
 	let ret = lua.create_table()?;
 	if is_html(&file.path) {
 		let title = html_title(&file.path).map_err(luaanyhow)?;
-		let regex = regex::Regex::new(&pattern).map_err(mkluaerr)?; // TODO Initialize once
+		let regex = regex::Regex::new(&pattern).map_err(mkluaerr)?;
 		let processed = regex.captures(&title).ok_or(anyhow!("Pattern \"{}\" does not capture a group", pattern)).map_err(luaanyhow)?.get(1).map(|x| x.as_str()).unwrap_or(&title);
 		ret.set("title", processed.to_string())?;
 	}
@@ -210,7 +214,7 @@ impl Info {
 	}
 
 	pub fn set_attrs(&self, path: &Path, xattrs: &mut HashMap<OsString, Vec<u8>>) -> Result<()> {
-		let calculated: HashMap<OsString, Vec<u8>> = if path == self.root { // TODO There's really no reason to store these as xattrs any more.  Let's put them in YAML in .meta.
+		let calculated: HashMap<OsString, Vec<u8>> = if path == self.root {
 			Self::str_map_into_attrs(self.lua.globals().get::<_, mlua::Table>("info").map(|x| table_to_map::<String, String>(x)).unwrap_or(Ok(HashMap::new()))?)
 		}
 		else {

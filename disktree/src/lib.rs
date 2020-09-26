@@ -29,7 +29,7 @@ fn diff_start(base: &str, check: &str) -> usize {
 	let mut i = 0;
 	for (base_char, check_char) in base.chars().zip(check.chars()) {
 		if base_char != check_char { break; }
-		i += 1;
+		i += base_char.len_utf8();
 	}
 	i
 }
@@ -162,6 +162,7 @@ impl<T: Write> Writer<T> {
 pub struct Builder {
 	tmpfile: PathBuf,
 	db: sled::Db,
+	len: u64,
 }
 
 fn sled_append(key: &[u8], old: Option<&[u8]>, new: &[u8]) -> Option<Vec<u8>> {
@@ -175,7 +176,7 @@ impl Builder {
 		let path = file.as_ref().to_path_buf();
 		let db = sled::open(&path)?;
 		db.set_merge_operator(sled_append);
-		Ok(Self { tmpfile: path, db: db })
+		Ok(Self { tmpfile: path, db: db, len: 0 })
 	}
 
 	pub fn add(&mut self, key: &str, val: Value) -> Result<()> {
@@ -184,26 +185,40 @@ impl Builder {
 		let suffix_bytes = (val | FLAG_PARTIAL).to_be_bytes();
 		let norm = normalize(key);
 		self.db.merge(norm.clone(), &val_bytes)?;
+		self.len += 1;
 		let mut i = 0;
 		for (a, b) in norm.chars().tuple_windows() {
 			i += a.len_utf8();
 			if !a.is_alphanumeric() && b.is_alphanumeric() || a.is_whitespace() && !b.is_whitespace() {
 				self.db.merge(norm[i..].as_bytes(), &suffix_bytes)?;
+				self.len += 1;
 			}
 		}
 		Ok(())
 	}
 
-	pub fn build<T: Write>(&self, out: T) -> Result<()> {
+	pub fn build<T: Write>(&self, out: T, callback: Option<fn(u64)>) -> Result<()> {
 		let mut writer = Writer::new(out);
+		let mut processed: u64 = 0;
+		let mut progress = 0;
 		for entry in self.db.range::<&[u8], _>(..) {
 			let (keyvec, valvec) = entry?;
 			let key = String::from_utf8(keyvec.to_vec()).expect("Wrote UTF-8 to Sled, but didn't get it back");
 			let vals = valvec.into_iter().chunks(8).into_iter().map(|chunk| {
 				let bytes = chunk.map(|x| *x).collect::<Vec<u8>>();
-				u64::from_be_bytes(bytes.as_slice().try_into().expect("Wrote u64 to Sled, but didn't get one back"))
+				u64::from_be_bytes(bytes.as_slice().try_into().expect("Wrote u64s to Sled, but didn't get them back"))
 			}).sorted().unique();
-			for val in vals { writer.add(&key, val)?; }
+			for val in vals {
+				writer.add(&key, val)?;
+				if let Some(f) = callback {
+					processed += 1;
+					let new_progress = processed * 1000 / self.len;
+					if new_progress > progress {
+						progress = new_progress;
+						f(progress);
+					}
+				}
+			}
 		}
 		writer.finish()?;
 		Ok(())

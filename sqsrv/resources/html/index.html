@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Index of /{{ path }}</title>
+<meta charset="UTF-8" />
+<link rel="stylesheet" href="/rsrc/css/style.css">
+<link rel="stylesheet" href="/rsrc/css/font-awesome.min.css">
+<link rel="icon" href="/rsrc/img/favicon.png" sizes="16x16" type="image/png">
+</head>
+<body>
+<main class="normal">
+<h1>{{ tail }}</h1>
+<table class="dir-index">
+{% for entry in entries %}
+{% capture url %}{{ viewbase }}/{{ volume.id | url_encode }}{% if path != "" %}/{% endif %}{{ path | escape }}/{{ entry.name | escape }}{% endcapture %}
+<tr>
+<td class="index-icon">
+	<a href="{{ url }}">
+		{% if entry.kind == "directory" %}
+			<i class="fa fa-folder"></i>
+		{% elsif entry.kind == "regular file" %}
+			<i class="fa fa-file"></i>
+		{% elsif entry.kind == "block device" or entry.kind == "character device" %}
+			<i class="fa fa-save"></i>
+		{% elsif entry.kind == "socket" or entry.kind == "named pipe" %}
+			<i class="fa fa-network-wired"></i>
+		{% elsif entry.kind == "up" %}
+			<i class="fa fa-arrow-left"></i>
+		{% endif %}
+		{% if entry.link %}<i class="fa fa-link"></i>{% endif %}
+	</a>
+</td>
+<td class="index-name">
+	<a href="{{ url }}">{{ entry.name | escape }}</a>
+</td>
+<td class="index-type">
+	{{ entry.mime }}
+</td>
+<td class="index-size">
+	{{ entry.size }}
+</td>
+</a>
+</tr>
+{% endfor %}
+</table>
+</main>
+</body>
+</html>

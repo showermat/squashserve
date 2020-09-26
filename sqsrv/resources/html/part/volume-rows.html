@@ -1,0 +1,15 @@
+{% for volume in volumes %}
+<tr>
+<td class="volume-icon"><img class="favicon" src="{% if volume.icon %}/content/{{ volume.id }}/{{ volume.icon }}{% else %}/rsrc/img/volume.svg{% endif %}"></td>
+<td class="volume-info">
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{% if volume.home %}{{ volume.home }}{% endif %}" class="item-title" target="_blank">{{ volume.title | escape }}</a>
+	{% if volume.description %}<span class="volume-desc">{{ volume.description | escape }}</span>{% endif %}
+</td>
+<td class="volume-search vcenter">
+	<form class="search" data-volid="{{ volume.id | escape }}">
+	<input class="search-input typeahead" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
+	<button type="submit" >Go</button>
+	</form>
+</td>
+</tr>
+{% endfor %}
