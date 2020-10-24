@@ -5,6 +5,8 @@ use std::collections::{BTreeMap,BTreeSet};
 use std::convert::TryInto;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use itertools::Itertools;
 
 #[derive(thiserror::Error, Debug)]
@@ -117,13 +119,14 @@ impl WriteNode {
 		}
 	}
 
-	fn print(&self, prefix: &str) -> String {
+	#[allow(dead_code)]
+	fn debug_print(&self, prefix: &str) -> String {
 		match self {
 			WriteNode::Written(offset) => format!("*{}", offset),
 			WriteNode::Unwritten(values, children) => {
 				let mut ret = format!("{:?}", values.iter().map(|x| x & DEFLAG).collect::<Vec<u64>>());
 				for (key, child) in children {
-					ret += &format!("\n{}{:?} → {}", prefix, key, child.print(&(prefix.to_string() + "  ")));
+					ret += &format!("\n{}{:?} → {}", prefix, key, child.debug_print(&(prefix.to_string() + "  ")));
 				}
 				ret
 			}
@@ -162,10 +165,11 @@ impl<T: Write> Writer<T> {
 pub struct Builder {
 	tmpfile: PathBuf,
 	db: sled::Db,
-	len: u64,
+	len: AtomicU64,
+	finished: RwLock<bool>,
 }
 
-fn sled_append(key: &[u8], old: Option<&[u8]>, new: &[u8]) -> Option<Vec<u8>> {
+fn sled_append(_key: &[u8], old: Option<&[u8]>, new: &[u8]) -> Option<Vec<u8>> {
 	let mut v = old.map(|x| x.to_vec()).unwrap_or(vec![]);
 	v.extend(new);
 	Some(v)
@@ -176,31 +180,35 @@ impl Builder {
 		let path = file.as_ref().to_path_buf();
 		let db = sled::open(&path)?;
 		db.set_merge_operator(sled_append);
-		Ok(Self { tmpfile: path, db: db, len: 0 })
+		Ok(Self { tmpfile: path, db: db, len: AtomicU64::new(0), finished: RwLock::new(false) })
 	}
 
-	pub fn add(&mut self, key: &str, val: Value) -> Result<()> {
+	pub fn add(&self, key: &str, val: Value) -> Result<()> {
+		let finished = self.finished.read().expect("Poisoned lock");
+		if *finished { Err(Error::Finished)?; }
 		if val & !DEFLAG != 0 { Err(Error::Range)?; }
 		let val_bytes = val.to_be_bytes();
 		let suffix_bytes = (val | FLAG_PARTIAL).to_be_bytes();
 		let norm = normalize(key);
 		self.db.merge(norm.clone(), &val_bytes)?;
-		self.len += 1;
+		self.len.fetch_add(1, Ordering::Relaxed);
 		let mut i = 0;
 		for (a, b) in norm.chars().tuple_windows() {
 			i += a.len_utf8();
 			if !a.is_alphanumeric() && b.is_alphanumeric() || a.is_whitespace() && !b.is_whitespace() {
 				self.db.merge(norm[i..].as_bytes(), &suffix_bytes)?;
-				self.len += 1;
+				self.len.fetch_add(1, Ordering::Relaxed);
 			}
 		}
 		Ok(())
 	}
 
 	pub fn build<T: Write>(&self, out: T, callback: Option<fn(u64)>) -> Result<()> {
+		*self.finished.write().expect("Poisoned lock") = true;
 		let mut writer = Writer::new(out);
 		let mut processed: u64 = 0;
 		let mut progress = 0;
+		let len = self.len.load(Ordering::Relaxed);
 		for entry in self.db.range::<&[u8], _>(..) {
 			let (keyvec, valvec) = entry?;
 			let key = String::from_utf8(keyvec.to_vec()).expect("Wrote UTF-8 to Sled, but didn't get it back");
@@ -212,7 +220,7 @@ impl Builder {
 				writer.add(&key, val)?;
 				if let Some(f) = callback {
 					processed += 1;
-					let new_progress = processed * 1000 / self.len;
+					let new_progress = processed * 1000 / len;
 					if new_progress > progress {
 						progress = new_progress;
 						f(progress);
@@ -232,6 +240,9 @@ impl Drop for Builder {
 		}
 	}
 }
+
+unsafe impl Sync for Builder { }
+unsafe impl Send for Builder { }
 
 pub struct Tree<T: Read + Seek> {
 	f: T,

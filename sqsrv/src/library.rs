@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use super::{AppError, Result, StartupError, StartupResult};
+use super::{AppError, Result};
 use itertools::Itertools;
 use rocket::http::ContentType;
+use rocket::http::uri::Uri;
 use squashfs::read::{Archive, Node, OwnedFile, XattrType};
 use thiserror::Error;
 
@@ -11,7 +12,6 @@ const VOLEXT: &str = "sfs";
 
 pub mod tokens {
 	use std::collections::HashMap;
-	use std::path::PathBuf;
 	use serde::Serialize;
 
 	type Volume = HashMap<String, String>;
@@ -29,6 +29,10 @@ fn string_keyed_xattrs(node: &Node) -> std::result::Result<HashMap<String, Vec<u
 	Ok(node.xattrs(XattrType::User)?.into_iter()
 		.filter_map(|(k, v)| String::from_utf8(k).ok().map(|x| (x, v)))
 		.collect::<HashMap<String, Vec<u8>>>())
+}
+
+pub fn path_encode(path: &Path) -> Result<PathBuf> {
+	Ok(PathBuf::from(Uri::percent_encode(path.to_str().ok_or_else(|| AppError::PathUtf8(path.to_path_buf()))?).replace("%2F", "/")))
 }
 
 fn resolve_path(node: &Node, cached_attrs: Option<&HashMap<String, Vec<u8>>>) -> Result<Option<PathBuf>> {
@@ -63,10 +67,10 @@ pub fn content_type(node: &Node) -> Result<ContentType> {
 		None => {
 			let ext = node
 				.path().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Couldn't get file path to determine content type".to_string()))?
-				.extension().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown resource extension".to_string()))?
-				.to_str().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Invalid resource extension".to_string()))?;
+				.extension().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown extension".to_string()))?
+				.to_str().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Invalid extension".to_string()))?;
 			ContentType::from_extension(ext)
-				.ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown resource content type".to_string()))?
+				.ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown content type".to_string()))?
 		}
 	})
 }
@@ -87,15 +91,18 @@ impl Info {
 		}
 		fn check_file(archive: &Archive, path: PathBuf) -> Result<Option<PathBuf>> {
 			match archive.get(&path)? {
-				Some(node) => match node.resolve()?.as_file() {
-					Ok(_) => Ok(Some(path)),
-					Err(_) => Ok(None),
+				Some(node) => match node.resolve()? {
+					None => Ok(None),
+					Some(resolved) => match resolved.as_file() {
+						Ok(_) => Ok(path_encode(&path).ok()),
+						Err(_) => Ok(None),
+					},
 				},
 				None => Ok(None),
 			}
 		}
 		let info = string_keyed_xattrs(&archive.get("")?.expect("Couldn't get volume root"))?;
-		let metadir = PathBuf::from(get_str_def(&info, "metadir", ".meta")?);
+		let metadir = path_encode(&PathBuf::from(get_str_def(&info, "metadir", ".meta")?))?;
 		let icon = check_file(archive, metadir.join("favicon.png"))?;
 		let home = check_file(archive, PathBuf::from(get_str_def(&info, "home", "index.html")?))?;
 		let title = get_str_def(&info, "title", id)?;
@@ -167,20 +174,20 @@ impl Volume {
 	pub fn random(&self, ctype: ContentType) -> Result<Option<PathBuf>> {
 		let check = |id: u64| -> Result<Option<PathBuf>> {
 			let node = self.archive.get_id(id)?;
-			match node.is_file()? && content_type(&node)? == ctype {
+			match node.is_file()? && resolve_path(&node, None)?.is_some() && content_type(&node)? == ctype {
 				true => Ok(resolve_path(&node, None)?),
 				false => Ok(None),
 			}
 		};
 		let total = self.archive.size() as u64;
 		for _ in 0..64 {
-			let candidate = rand::random::<u64>() % total;
+			let candidate = rand::random::<u64>() % total + 1;
 			if let Some(res) = check(candidate)? { return Ok(Some(res)); }
 		}
-		let start = rand::random::<u64>() % total;
+		let start = rand::random::<u64>() % total + 1;
 		let mut candidate = start;
 		loop {
-			candidate = (candidate + 1) % total; // This won't work for archives with 1 inode, but I think that's okay.
+			candidate = candidate % total + 1; // This won't work for archives with 1 inode, but I think that's okay.
 			if candidate == start { break; }
 			if let Some(res) = check(candidate)? { return Ok(Some(res)); }
 		}
@@ -213,7 +220,7 @@ impl Volume {
 					let attrs = string_keyed_xattrs(&node)?;
 					match attrs.get("title").and_then(|x| String::from_utf8(x.to_vec()).ok()) {
 						Some(title) => match resolve_path(&node, Some(&attrs))? {
-							Some(path) => Ok(Some((title, path))),
+							Some(path) => Ok(Some((title, path_encode(&path)?))),
 							None => Ok(None),
 						},
 						None => Ok(None),
@@ -278,7 +285,6 @@ impl Library {
 			}
 		}
 		let ret = Self { dir: dir.to_path_buf(), all_volumes: RwLock::new(all_volumes), categories: categories, volumes: RwLock::new(HashMap::new()) };
-		ret.load("").expect("No default category");
 		Ok(ret)
 	}
 
@@ -299,7 +305,14 @@ impl Library {
 	}
 
 	pub fn tokens(&self) -> Result<Vec<tokens::Category>> {
-		self.categories.iter().map(|(id, cat)| (cat.order, id)).sorted().map(|(order, id)| self.category_tokens(id)).collect()
+		self.categories.iter().map(|(id, cat)| (cat.order, id)).sorted().map(|(_order, id)| self.category_tokens(id)).collect()
+	}
+
+	pub fn loaded(&self, category: &str) -> Result<bool> {
+		match self.categories.get(category) {
+			Some(cat) => Ok(*cat.loaded.read().expect("Poisoned lock")),
+			None => Err(AppError::NoCategory(category.to_string()))?,
+		}
 	}
 	
 	pub fn load(&self, category: &str) -> Result<tokens::Category> {
@@ -336,7 +349,7 @@ impl Library {
 
 	pub fn get(&self, id: &str) -> Result<Arc<Volume>> {
 		let category = self.all_volumes.read().expect("Posoned lock").get(id).ok_or(AppError::NoVolume(id.to_string()))?.clone();
-		self.load(&category)?; // TODO Technically there's a race condition here, where the category could get unloaded before the next line runs
+		self.load(&category)?; // TODO Technically there's a race condition here, where the category could get unloaded again before the next line runs
 		Ok(self.volumes.read().expect("Poisoned lock").get(id).expect("Volume absent even after loading requisite category").clone())
 	}
 }

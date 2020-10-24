@@ -192,7 +192,6 @@ form#search
 {
 	height: 16px;
 	margin: 0px;
-	margin-top: -2px;
 }
 
 form.search
@@ -264,8 +263,13 @@ div.toolbar-spacer
 a.toolbar-button
 {
 	display: block;
-	height: 16px;
 	margin: 0px 12px;
+}
+
+a.toolbar-button i
+{
+	font-size: 16px;
+	line-height: 16px;
 }
 
 a#close-button
@@ -311,4 +315,11 @@ td.index-icon
 td.index-icon a
 {
 	text-decoration: none;
+}
+
+td.table-cut
+{
+	text-align: center;
+	color: gray;
+	font-style: italic;
 }

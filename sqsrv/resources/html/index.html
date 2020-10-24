@@ -26,6 +26,8 @@
 			<i class="fa fa-network-wired"></i>
 		{% elsif entry.kind == "up" %}
 			<i class="fa fa-arrow-left"></i>
+		{% else %}
+			<i class="fa fa-question"></i>
 		{% endif %}
 		{% if entry.link %}<i class="fa fa-link"></i>{% endif %}
 	</a>
@@ -42,6 +44,9 @@
 </a>
 </tr>
 {% endfor %}
+{% if elided != "0" %}
+	<tr><td colspan=4 class="table-cut">({{ elided }} additional entries elided)</td></tr
+{% endif %}
 </table>
 </main>
 </body>

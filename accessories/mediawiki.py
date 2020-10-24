@@ -41,15 +41,36 @@ debug_pages = ["Main Page", "China", "Hydronium", "Maxwell's equations", "Persim
 	"C0 and C1 control codes", "Peach", "PEACH"]
 
 sites = {
-	"wikipedia": ("Wikipedia", "The free encyclopedia", "https://en.wikipedia.org", "https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg", {0: ""}),
-	"wiktionary": ("Wiktionary", "The free dictionary", "https://en.wiktionary.org", "https://upload.wikimedia.org/wikipedia/commons/e/ec/Wiktionary-logo.svg", {0: "", 100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"}),
-	"wikivoyage": ("Wikivoyage", "Free worldwide travel guide", "https://en.wikivoyage.org", "https://en.wikivoyage.org/static/images/project-logos/enwikivoyage.png", {0: ""}),
+	"wikipedia": (
+		"Wikipedia",
+		"The free encyclopedia",
+		"https://en.wikipedia.org",
+		"https://upload.wikimedia.org/wikipedia/commons/8/80/Wikipedia-logo-v2.svg",
+		{0: ""},
+		[],
+	),
+	"wiktionary": (
+		"Wiktionary",
+		"The free dictionary",
+		"https://en.wiktionary.org",
+		"https://upload.wikimedia.org/wikipedia/commons/e/ec/Wiktionary-logo.svg",
+		{100: "Appendix", 104: "Index", 110: "Thesaurus", 114: "Citations", 118: "Reconstruction"},
+		["Wiktionary:Main Page", "Wiktionary:Index_to_appendices", "Wiktionary:All Thesaurus pages"],
+	),
+	"wikivoyage": (
+		"Wikivoyage",
+		"Free worldwide travel guide",
+		"https://en.wikivoyage.org",
+		"https://en.wikivoyage.org/static/images/project-logos/enwikivoyage.png",
+		{0: ""},
+		[],
+	),
 }
 rootdir = sys.argv[1]
 if rootdir == "debug":
 	debug = True
 	rootdir = "wikipedia"
-(site_name, site_description, origin_root, faviconsrc, namespaces) = sites[rootdir]
+(site_name, site_description, origin_root, faviconsrc, namespaces, extra_pages) = sites[rootdir]
 
 safe_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 concurrency = 16
@@ -77,7 +98,7 @@ class HTTPError(Exception):
 		return "HTTP %d fetching %s" % (self.code, self.url)
 
 def friendlyname(fname):
-	subs = {"\"": "[quote]", "/": "[slash]", " ": "_", "_+": "_"}
+	subs = {"\"": "|quote|", "/": "|slash|", " ": "_", "_+": "_"}
 	parts = fname.split("#", 1)
 	for (char, sub) in subs.items(): parts[0] = re.sub(char, sub, parts[0])
 	if parts[0][0] in safe_chars: first = parts[0][0]
@@ -260,6 +281,7 @@ def articles(q, tag = (0, "")):
 	global interrupt
 	url = origin_root + "/w/api.php?format=json&action=query&list=allpages&aplimit=500&apnamespace=%d&apcontinue=%s"
 	q.put((0, "Main Page"))
+	for page in extra_pages: q.put((0, page))
 	while True:
 		if interrupt: return
 		req = requests.get(url % ([ i[0] for i in namespaces.items() ][tag[0]], urllib.parse.quote(tag[1])))

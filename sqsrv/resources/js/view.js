@@ -24,13 +24,7 @@ $(document).ready(function() {
 			return true;
 		});
 	});
-	autocomplete($("#search-input"), volid);
-	$("#search").on('submit', function() {
-		var query = $("#search-input").val();
-		window.location = "/search/" + volid + "/" + encodeURIComponent(query);
-		$("#search-input").val("");
-		return false;
-	});
+	search_setup("search", "#search-input", "#search");
 	$(window).bind('hashchange', function() {
 		$("#page").get(0).contentDocument.location.hash = window.location.hash;
 		window.frames[0].scrollBy(0, -36);

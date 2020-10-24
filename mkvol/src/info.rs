@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display, Error as FmtError, Formatter};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use regex::bytes::Regex;
 
 const HEAD_SIZE: usize = 4096;
@@ -68,7 +68,6 @@ impl std::fmt::Display for InternalError {
 }
 
 impl std::error::Error for InternalError { }
-
 
 #[derive(Debug, Clone)]
 struct File {
@@ -143,7 +142,7 @@ fn html_encoding(path: &Path) -> Result<String> {
 
 fn to_utf8(input: &[u8], charset: &str) -> Result<String> {
 	let encoder = encoding::label::encoding_from_whatwg_label(&charset).ok_or(anyhow!("Encoding {} not known", charset))?;
-	Ok(encoder.decode(&input, encoding::DecoderTrap::Replace).map_err(|e| anyhow!("Failed to decode to {}", charset))?)
+	Ok(encoder.decode(&input, encoding::DecoderTrap::Replace).map_err(|_e| anyhow!("Failed to decode to {}", charset))?)
 }
 
 fn html_title_encoded(path: &Path, encoding: &str) -> Result<String> {
@@ -232,7 +231,7 @@ impl Info {
 				}
 			}
 		}
-		xattrs.retain(|k, v| v.len() > 0);
+		xattrs.retain(|_k, v| v.len() > 0);
 		Ok(())
 	}
 }

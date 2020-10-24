@@ -28,9 +28,9 @@ html { height: 100%; }
 	<a href="/shuffle/{{ volume.id | url_encode }}" class="toolbar-button" target="_top"><i class="fa fa-lg fa-random" title="Random page"></i></a>
 	<div class="toolbar-spacer"></div>
 	<div class="toolbar-expand"></div>
-	<form id="search">
-	<input id="search-input" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
-	<button type="submit">Go</button>
+	<form id="search" data-volid="{{ volume.id | url_encode }}">
+		<input id="search-input" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
+		<button type="submit">Go</button>
 	</form>
 	<div class="toolbar-spacer"></div>
 	<a href="/content/{{ volume.id | url_encode }}/{{ path }}{{ query }}" id="close-button" target="_top"><img src="/rsrc/img/x.svg"></a>
