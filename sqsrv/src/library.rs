@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use super::{AppError, Result};
@@ -7,6 +8,7 @@ use rocket::http::ContentType;
 use rocket::http::uri::Uri;
 use squashfs::read::{Archive, Node, OwnedFile, XattrType};
 use thiserror::Error;
+use walkdir::WalkDir;
 
 const VOLEXT: &str = "sfs";
 
@@ -198,10 +200,31 @@ impl Volume {
 		match self.index()? {
 			None => Ok(None),
 			Some(mut index) => {
-				let results = index.exact_search(query)?;
-				match &results.as_slice() {
-					&[res] => Ok(resolve_path(&self.archive.get_id(*res)?, None)?),
-					_ => Ok(None),
+				let results = index.exact_search(query)?.into_iter().map(|id| self.archive.get_id(id).unwrap()).collect::<Vec<_>>();
+				match results.as_slice() {
+					[] => Ok(None),
+					[res] => resolve_path(res, None),
+					nodes => {
+						let titles = nodes.into_iter().filter_map(|node| {
+							let attrs = string_keyed_xattrs(&node).unwrap();
+							let title = attrs.get("title").and_then(|x| String::from_utf8(x.to_vec()).ok());
+							match title {
+								Some(t) => Some((t, node)),
+								None => None,
+							}
+						}).collect::<HashMap<_, _>>();
+						if let Some(res) = titles.get(query) { resolve_path(res, None) }
+						else {
+							match titles.into_iter().fold((0, None), |acc, x| {
+								let distance = strsim::levenshtein(query, &x.0);
+								if acc.1.is_none() || distance < acc.0 { (distance, Some(x.1)) }
+								else { acc }
+							}).1 {
+								Some(closest) => resolve_path(closest, None),
+								None => Ok(None),
+							}
+						}
+					},
 				}
 			},
 		}
@@ -242,13 +265,12 @@ impl Volume {
 struct Category {
 	name: String,
 	loaded: RwLock<bool>,
-	order: u32,
 	volumes: RwLock<HashSet<String>>,
 }
 
 impl Category {
-	fn new(name: String, order: u32) -> Self {
-		Category { name: name, loaded: RwLock::new(false), order: order, volumes: RwLock::new(HashSet::new()) }
+	fn new(name: String) -> Self {
+		Category { name: name, loaded: RwLock::new(false), volumes: RwLock::new(HashSet::new()) }
 	}
 }
 
@@ -260,31 +282,42 @@ pub enum LoadError {
 }
 
 pub struct Library {
-	dir: PathBuf,
-	all_volumes: RwLock<HashMap<String, String>>, // Vol name -> cat name
+	all_volumes: RwLock<HashMap<String, (PathBuf, String)>>, // Vol name -> (location, cat name)
 	categories: HashMap<String, Category>,
 	volumes: RwLock<HashMap<String, Arc<Volume>>>, // Loaded volumes only
 }
 
 impl Library {
-	pub fn new(dir: &Path, cat_assign: &Vec<super::CategoryConfig>) -> std::result::Result<Self, LoadError> {
-		let mut all_volumes = cat_assign.iter()
-			.flat_map(|cat| cat.volumes.iter().map(move |name| (name.to_string(), cat.name.to_string())))
-			.collect::<HashMap<String, String>>(); // Map vol name -> cat name
-		let cat_order = cat_assign.iter().enumerate().map(|(i, cat)| (cat.name.clone(), i as u32 + 1)).collect::<HashMap<String, u32>>(); // Map cat name -> cat order
-		let mut categories = vec![("".to_string(), Category::new("".to_string(), 0))].into_iter().collect::<HashMap<String, Category>>();
-		for entry in dir.read_dir().map_err(|e| LoadError::Inaccessible(dir.to_path_buf(), e))? {
-			let file = entry?.path();
-			if file.is_file() && file.extension().and_then(|x| x.to_str()) == Some(VOLEXT) {
-				let id = file.file_stem().and_then(|x| x.to_str())
-					.ok_or_else(|| LoadError::Filename(file.clone()))?.to_string();
-				let catname = all_volumes.entry(id.clone()).or_insert("".to_string()).to_string();
-				categories.entry(catname.to_string())
-					.or_insert_with(|| Category::new(catname.clone(), *cat_order.get(&catname).expect("Found category without ordering")))
-					.volumes.write().expect("Poisoned lock").insert(id);
+	pub fn new(dir: &Path) -> std::result::Result<Self, LoadError> {
+		let tree = WalkDir::new(&dir).follow_links(true);
+		let mut all_volumes: HashMap<String, (PathBuf, String)> = HashMap::new();
+		let mut categories: HashMap<String, Category> = HashMap::new();
+		for entry in tree {
+			match entry {
+				Err(e) => {
+					let path = e.path().map(|x| x.to_string_lossy().into_owned()).unwrap_or("(unknown)".to_string());
+					eprintln!("Unable to read {}: {}", path, e.to_string());
+				},
+				Ok(file) => {
+					if file.file_type().is_file() && file.path().extension() == Some(OsStr::new(VOLEXT)) {
+						let cat = file.path().ancestors().skip(1).take(std::cmp::max(file.depth(), 1) - 1)
+							.filter_map(|x| x.file_name()).map(|x| x.to_string_lossy()).collect::<Vec<_>>()
+							.into_iter().rev().join(": ");
+						let plain_id = file.path().file_stem().and_then(|x| x.to_str())
+							.ok_or_else(|| LoadError::Filename(file.path().to_path_buf()))?.to_string();
+						let mut id = plain_id.clone();
+						let mut suffix = 0;
+						while all_volumes.contains_key(&id) {
+							suffix += 1;
+							id = format!("{}-{}", plain_id, suffix);
+						}
+						all_volumes.insert(id.to_string(), (file.path().to_path_buf(), cat.clone()));
+						categories.entry(cat.to_string()).or_insert_with(|| Category::new(cat.to_string())).volumes.write().expect("Poisoned lock").insert(id);
+					}
+				},
 			}
 		}
-		let ret = Self { dir: dir.to_path_buf(), all_volumes: RwLock::new(all_volumes), categories: categories, volumes: RwLock::new(HashMap::new()) };
+		let ret = Self { all_volumes: RwLock::new(all_volumes), categories: categories, volumes: RwLock::new(HashMap::new()) };
 		Ok(ret)
 	}
 
@@ -297,7 +330,7 @@ impl Library {
 			loaded: loaded,
 			volumes: match loaded {
 				true => cat.volumes.read().expect("Poisoned lock").iter().sorted()
-					.map(|id| self.volumes.read().expect("Poisoned lock").get(id).unwrap().info().string_values())
+					.filter_map(|id| self.volumes.read().expect("Poisoned lock").get(id).map(|x| x.info().string_values()))
 					.collect(),
 				false => vec![],
 			},
@@ -305,7 +338,7 @@ impl Library {
 	}
 
 	pub fn tokens(&self) -> Result<Vec<tokens::Category>> {
-		self.categories.iter().map(|(id, cat)| (cat.order, id)).sorted().map(|(_order, id)| self.category_tokens(id)).collect()
+		self.categories.iter().map(|(id, cat)| (&cat.name, id)).sorted().map(|(_order, id)| self.category_tokens(id)).collect()
 	}
 
 	pub fn loaded(&self, category: &str) -> Result<bool> {
@@ -319,9 +352,14 @@ impl Library {
 		match self.categories.get(category) {
 			Some(cat) => {
 				let mut volumes = self.volumes.write().expect("Poisoned lock");
-				for volume in cat.volumes.read().expect("Poisoned lock").iter() {
-					if !volumes.contains_key(volume) {
-						volumes.insert(volume.to_string(), Arc::new(Volume::new(volume, &self.dir.join(Path::new(volume).with_extension(VOLEXT)))?));
+				let all_volumes = self.all_volumes.read().expect("Poisoned lock");
+				for volname in cat.volumes.read().expect("Poisoned lock").iter() {
+					if !volumes.contains_key(volname) {
+						let path = &all_volumes.get(volname).expect(&format!("Volume \"{}\" for category \"{}\" not in all volumes", volname, category)).0;
+						match Volume::new(volname, &path) {
+							Ok(volume) => { volumes.insert(volname.to_string(), Arc::new(volume)); },
+							Err(e) => eprintln!("Failed to load volume {}: {}", volname, e),
+						}
 					}
 				}
 				*cat.loaded.write().expect("Poisoned lock") = true;
@@ -333,23 +371,27 @@ impl Library {
 
 	pub fn unload(&self, category: &str) {
 		if let Some(cat) = self.categories.get(category) {
-			for volume in cat.volumes.read().expect("Poisoned lock").iter() { let _ = self.volumes.write().expect("Poisoned lock").remove(volume); }
+			for volume in cat.volumes.read().expect("Poisoned lock").iter() {
+				let _ = self.volumes.write().expect("Poisoned lock").remove(volume);
+			}
 			*cat.loaded.write().expect("Poisoned lock") = false;
 		}
 	}
 
-	pub fn load_external(&self, path: &Path) -> Result<String> {
+	pub fn get(&self, id: &str) -> Result<Arc<Volume>> {
+		let category = self.all_volumes.read().expect("Posoned lock").get(id).ok_or(AppError::NoVolume(id.to_string()))?.1.clone();
+		if !self.loaded(&category).expect("Category in all volumes doesn't exist") {
+			self.load(&category)?; // Technically there's a race condition here, where the category could get unloaded again before the next line runs
+		}
+		Ok(self.volumes.read().expect("Poisoned lock").get(id).expect("Loaded category but contained volume does not exist").clone())
+	}
+
+	pub fn load_external(&self, path: &Path) -> Result<Arc<Volume>> {
 		let id = format!("@ext:{:x}", rand::random::<u32>());
 		let vol = Volume::new(&id, path)?;
 		self.volumes.write().expect("Poisoned lock").insert(id.clone(), Arc::new(vol));
-		self.all_volumes.write().expect("Poisoned lock").insert(id.clone(), "".to_string());
+		self.all_volumes.write().expect("Poisoned lock").insert(id.clone(), (path.to_path_buf(), "".to_string()));
 		self.categories.get("").expect("No default category").volumes.write().expect("Poisoned lock").insert(id.clone());
-		Ok(id)
-	}
-
-	pub fn get(&self, id: &str) -> Result<Arc<Volume>> {
-		let category = self.all_volumes.read().expect("Posoned lock").get(id).ok_or(AppError::NoVolume(id.to_string()))?.clone();
-		self.load(&category)?; // TODO Technically there's a race condition here, where the category could get unloaded again before the next line runs
-		Ok(self.volumes.read().expect("Poisoned lock").get(id).expect("Volume absent even after loading requisite category").clone())
+		Ok(self.get(&id)?)
 	}
 }

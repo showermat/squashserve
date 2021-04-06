@@ -27,7 +27,7 @@ use rocket::http::uri::{Formatter, FromUriParam, Path as UriPath, Query as UriQu
 use rocket::outcome::Outcome;
 use rocket::request::{FromQuery, FromSegments, Query, Request};
 use rocket::response::{Redirect, Responder, Stream};
-use rocket::response::content::{Content, Html, Json};
+use rocket::response::content::{Content, Html, Json, Plain};
 use rocket::State;
 use serde::{Deserialize, Serialize};
 use squashfs::read::{Archive, Data, Dir, OwnedFile};
@@ -216,12 +216,6 @@ struct SslConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CategoryConfig {
-	name: String,
-	volumes: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(default = "Config::default")]
 struct Config {
 	basedir: PathBuf,
@@ -233,7 +227,6 @@ struct Config {
 	toolbar: bool,
 	indices: bool,
 	ssl: Option<SslConfig>,
-	categories: Vec<CategoryConfig>,
 }
 
 impl Config {
@@ -248,7 +241,6 @@ impl Config {
 			toolbar: true,
 			indices: false,
 			ssl: None,
-			categories: Vec::new(),
 		}
 	}
 
@@ -259,7 +251,6 @@ impl Config {
 			Box::new(|| Ok(PathBuf::from(&std::env::var(&custom_var)?))),
 			Box::new(|| Ok(Path::new(&std::env::var("XDG_CONFIG_HOME")?).join(&subpath))),
 			Box::new(|| Ok(Path::new(&std::env::var("HOME")?).join(".config").join(&subpath))),
-			Box::new(|| Ok(Path::new("/home").join(std::env::var("USER")?).join(".config").join(&subpath))),
 			Box::new(|| Ok(Path::new("/etc").join(&subpath))),
 		];
 		for test in fallback {
@@ -326,6 +317,7 @@ enum Response<'a> {
 	Redirect(Redirect),
 	Html(Html<String>),
 	Json(Json<String>),
+	Text(Plain<String>),
 }
 
 impl<'a> Response<'a> {
@@ -339,6 +331,10 @@ impl<'a> Response<'a> {
 
 	fn json<T: Serialize + ?Sized>(t: &T) -> Result<Self> {
 		Ok(Self::Json(Json(serde_json::to_string(t)?)))
+	}
+
+	fn text(s: String) -> Self {
+		Self::Text(Plain(s))
 	}
 }
 
@@ -372,6 +368,7 @@ fn home(app: State<App>, remote_ip: Option<SocketAddr>) -> Result<Response> {
 
 fn index<'a>(app: State<'a, App>, volume: &Volume, pathbuf: &PathBuf, mut dir: Dir) -> Result<Response<'a>> {
 	let mut entries = dir.by_ref().take(INDEX_MAX).map(|child| {
+		let child = child?;
 		let resolved = child.resolve()?;
 		let (name, size) = match resolved {
 			Some(node) => {
@@ -565,32 +562,33 @@ fn unload<'a>(app: State<'a, App>, cat: String) -> Result<Response<'a>> {
 fn external<'a>(app: State<'a, App>, path: String, remote_ip: Option<SocketAddr>) -> Result<Response<'a>> {
 	let local = remote_ip.map(|x| x.ip().is_loopback()).unwrap_or(false);
 	if !local { Err(AppError::Unauthorized)?; }
-	let id = app.library().load_external(&Path::new(&path))?;
-	Ok(Response::redirect(uri!(view: id, PathBuf::new(), _)))
+	let vol = app.library().load_external(&Path::new(&path))?;
+	let home = vol.info().home.as_ref().unwrap_or(&PathBuf::new()).to_path_buf();
+	Ok(Response::text(uri!(view: &vol.info().id, home, _).to_string()))
 }
 
 #[get("/action/refresh")]
 fn refresh<'a>(app: State<'a, App>, remote_ip: Option<SocketAddr>) -> Result<Response<'a>> {
 	let local = remote_ip.map(|x| x.ip().is_loopback()).unwrap_or(false);
 	if !local { Err(AppError::Unauthorized)?; }
-	*app.library_mut() = Library::new(&app.config.basedir, &app.config.categories)?;
+	*app.library_mut() = Library::new(&app.config.basedir)?;
 	Ok(Response::redirect(uri!(home)))
 }
 
 #[get("/action/quit")]
 fn quit<'a>(_app: State<'a, App>, remote_ip: Option<SocketAddr>) {
 	let local = remote_ip.map(|x| x.ip().is_loopback()).unwrap_or(false);
-	// TODO Can I send a response and then exit?
-	if local { std::process::exit(0); }
+	if local { std::process::exit(0); } // Pending ShutdownHandle in Rocket 0.5
 }
 
 fn run() -> StartupResult<()> {
 	let config = Config::new()?;
-	let library = Library::new(&config.basedir, &config.categories)?;
+	let library = Library::new(&config.basedir)?;
 	let resources = Archive::new(&config.resources)?;
 	let mut partials = InMemorySource::new();
 	if let Some(partdir) = resources.get("html/part")? {
 		for file in partdir.resolve_exists()?.as_dir()? {
+			let file = file?;
 			let resolved = file.resolve_exists()?;
 			if resolved.is_file()? {
 				let name = file.path().expect("No path for file retrieved by path").file_stem().expect("No file name for non-root").to_str().unwrap().to_string();
@@ -607,7 +605,7 @@ fn run() -> StartupResult<()> {
 		library: RwLock::new(library),
 		parser: parser,
 	};
-	let rocket_conf = RocketConfig::build(Environment::Development)
+	let rocket_conf = RocketConfig::build(Environment::active()?)
 		.address(app.config.listen.clone())
 		.port(app.config.port);
 	let rocket_conf = match &app.config.ssl {

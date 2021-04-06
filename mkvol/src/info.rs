@@ -207,6 +207,7 @@ impl Info {
 		Self::set_globals(&lua)?;
 		let mut script = String::new();
 		let path = [root, Path::new(meta_dir), Path::new("info.lua")].iter().collect::<PathBuf>();
+		lua.globals().set("metadir", root.join(&meta_dir).to_str().expect("Invalid UTF-8 in metadata directory").to_string())?;
 		std::fs::File::open(&path)?.read_to_string(&mut script)?;
 		lua.load(&script).exec().map_err(LuaError::from)?;
 		Ok(Self { root: root.to_path_buf(), lua: lua })
@@ -235,3 +236,5 @@ impl Info {
 		Ok(())
 	}
 }
+
+unsafe impl Sync for Info { }

@@ -14,7 +14,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use info::Info;
-use squashfs::write::{Source, SourceData, SourceFile, TreeProcessor, Writer};
+use squashfs::write::{SourceData, SourceFile, TreeProcessor};
 use anyhow::{Context, Result};
 use chrono::prelude::*;
 use std_semaphore::Semaphore;
@@ -41,12 +41,11 @@ fn main() -> Result<()> {
 	).get_matches();
 
 	let root = Path::new(args.value_of("DIR").expect("Missing required argument"));
-	let outname = args.value_of("OUT").map(PathBuf::from).unwrap_or(root.with_extension(VOLEXT));
+	let outname = args.value_of("OUT").map(PathBuf::from).unwrap_or(PathBuf::from(root.file_name().unwrap_or(OsStr::new("volume"))).with_extension(VOLEXT));
 	let tmpdir = args.value_of("TMPDIR").map(PathBuf::from).unwrap_or(outname.parent().expect("Output file has no parent").to_path_buf());
 	let metadir = OsString::from(args.value_of("METADIR").unwrap_or(".meta"));
-	let writer = Writer::open(outname.clone()).with_context(|| format!("Unable to open output file {}", outname.display()))?;
 	let inf = Arc::new(Mutex::new(Info::new(&root, &metadir).with_context(|| format!("Couldn't load volume metadata in {}", root.join(&metadir).display()))?)); // TODO How hard would it be to make Info thread-safe?  (With the requirement that the info.lua be threadsafe)
-	let processor = Arc::new(TreeProcessor::new(writer, root).with_context(|| format!("Failed to create tree processor for writing archive from {}", root.display()))?);
+	let processor = Arc::new(TreeProcessor::new(&outname).with_context(|| format!("Failed to create tree processor for writing archive from {}", root.display()))?);
 	let metasource: Arc<Mutex<Option<SourceFile>>> = Arc::new(Mutex::new(None));
 	let rootsource: Arc<Mutex<Option<SourceFile>>> = Arc::new(Mutex::new(None));
 	let index = Arc::new({
@@ -56,7 +55,7 @@ fn main() -> Result<()> {
 	let workers = threadpool::Builder::new().build();
 	let limiter = Arc::new(Semaphore::new(workers.max_count() as isize * 2)); // Required pending https://github.com/rust-threadpool/rust-threadpool/pull/104
 	let iter_processor = processor.clone();
-	for entry in iter_processor.iter() {
+	for entry in iter_processor.iter(root) {
 		limiter.acquire();
 		let limiter = limiter.clone();
 		let source = entry.with_context(|| "Tree processor failed to handle file")?;
@@ -111,7 +110,7 @@ fn main() -> Result<()> {
 	println!();
 	let meta = match metasource.lock().expect("Poisoned lock").take() {
 		Some(real_meta) => real_meta,
-		None => SourceFile { path: root.join(&metadir), content: Source::defaults(SourceData::Dir(Box::new(std::iter::empty()))) },
+		None => SourceFile::defaults(root.join(&metadir), SourceData::Dir(Box::new(std::iter::empty()))),
 	};
 
 	println!("Building search index...");
@@ -119,10 +118,10 @@ fn main() -> Result<()> {
 	fn showprogress(permille: u64) {
 		print!("{}{}%", CLRLN, permille as f64 / 10.0);
 		let _ = std::io::stdout().flush();
-	};
+	}
 	index.build(&File::create(titles_tmp.clone()).with_context(|| format!("Could not create {} for temporary title index storage", titles_tmp.display()))?, Some(showprogress)).with_context(|| "Failed building title index")?; // TODO It would be nice if we could write the index directly to the archive
 	print!("{}", CLRLN);
-	let title_index = SourceFile { path: root.join(&metadir).join(TITLE_IDX), content: Source::defaults(SourceData::File(Box::new(File::open(&titles_tmp).with_context(|| format!("Could not read temporary title index {}", titles_tmp.display()))?))) };
+	let title_index = SourceFile::defaults(root.join(&metadir).join(TITLE_IDX), SourceData::File(Box::new(File::open(&titles_tmp).with_context(|| format!("Could not read temporary title index {}", titles_tmp.display()))?)));
 	//title_index.content.flags |= BlockFlags::DontCompress | BlockFlags::DontFragment;
 
 	println!("Writing special files...");
