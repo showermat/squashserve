@@ -33,7 +33,10 @@ impl std::convert::From<mlua::Error> for LuaError {
 
 impl Display for LuaError {
 	fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
-		Display::fmt(&self.err, f)
+		match &*self.err {
+			mlua::Error::CallbackError { traceback, cause } => write!(f, "Callback error at traceback: {}\nCaused by underlying error: {}", traceback, cause),
+			e => Display::fmt(&e, f),
+		}
 	}
 }
 
@@ -164,7 +167,7 @@ fn lua_sub_html_title(lua: &mlua::Lua, (file, pattern): (File, String)) -> mlua:
 	if is_html(&file.path) {
 		let title = html_title(&file.path).map_err(luaanyhow)?;
 		let regex = regex::Regex::new(&pattern).map_err(mkluaerr)?;
-		let processed = regex.captures(&title).ok_or(anyhow!("Pattern \"{}\" does not capture a group", pattern)).map_err(luaanyhow)?.get(1).map(|x| x.as_str()).unwrap_or(&title);
+		let processed = regex.captures(&title).and_then(|x| x.get(1)).map(|x| x.as_str()).unwrap_or(&title);
 		ret.set("title", processed.to_string())?;
 	}
 	Ok(ret)

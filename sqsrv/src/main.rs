@@ -34,8 +34,9 @@ use squashfs::read::{Archive, Data, Dir, OwnedFile};
 use thiserror::Error;
 
 const APPNAME: &str = "sqsrv";
-const INDEX_MAX: usize = 100; // Maximum number of files shown in auto-generated indices // TODO This is a pretty miserable limit and we need to figure out the bottlenecks
-const DIR_SIZE_MAX: usize = 100; // Maximum size that will be counted for directories in auto-generated indices
+// TODO This is a pretty miserable limit and we need to figure out the bottlenecks
+const INDEX_MAX: usize = 1000; // Maximum number of files shown in auto-generated indices
+const DIR_SIZE_MAX: usize = 1000; // Maximum size that will be counted for directories in auto-generated indices
 
 // TODO Squashfs errors (both StartupError and AppError) don't capture the path of the volume that
 // has the problem.  Figure out the least painful way to make that information available --
@@ -376,7 +377,7 @@ fn index<'a>(app: State<'a, App>, volume: &Volume, pathbuf: &PathBuf, mut dir: D
 				let size = match node.data()? {
 					Data::File(file) => bytesize::ByteSize::b(file.size()).to_string_as(true),
 					Data::Dir(dir) => match dir.take(DIR_SIZE_MAX).count() {
-						DIR_SIZE_MAX => "100+".to_string(),
+						DIR_SIZE_MAX => format!("{}+", DIR_SIZE_MAX),
 						x => x.to_string(),
 					},
 					_ => "".to_string(),
@@ -427,7 +428,7 @@ fn content<'a>(app: State<'a, App>, id: String, path: UncheckedPath) -> Result<R
 			match node.resolve()? {
 				Some(resolved) => match resolved.data()? {
 					Data::File(_) => {
-						let ctype = content_type(&node)?;
+						let ctype = content_type(&node).unwrap_or(ContentType::Plain); // Maybe mark large files and invalid UTF-8 as `Binary` instead
 						let conv = |vol: *const Volume| -> Result<OwnedFile<'a>> { unsafe { Ok((*vol).get(&pathbuf)?.unwrap().into_owned_file()?) } }; // This needs some work!
 						let read = ReadHandle { handle: OwningHandle::try_new(volume, conv)? };
 						Ok(Response::Stream(Content(ctype, Stream::from(read))))

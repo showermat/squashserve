@@ -203,7 +203,7 @@ impl Builder {
 		Ok(())
 	}
 
-	pub fn build<T: Write>(&self, out: T, callback: Option<fn(u64)>) -> Result<()> {
+	pub fn build<T: Write>(&self, out: T, callback: Option<&dyn Fn(u64)>) -> Result<()> {
 		*self.finished.write().expect("Poisoned lock") = true;
 		let mut writer = Writer::new(out);
 		let mut processed: u64 = 0;
