@@ -14,7 +14,6 @@ pub enum Error {
 	#[error("I/O error: {0}")] Io(#[from] std::io::Error),
 	#[error("Tried to write keys in non-lexicographic order")] Order,
 	#[error("Cannot add to a tree that is finished writing")] Finished,
-	#[error("Tried to read {0} bytes, but only got {1} back")] IncompleteRead(usize, usize),
 	#[error("String contains invalid UTF-8: {0}")] Utf8(#[from] std::string::FromUtf8Error),
 	#[error("Values must be smaller than 2**60")] Range,
 	#[error("Error in Sled database: {0}")] Sled(#[from] sled::Error),
@@ -250,8 +249,7 @@ pub struct Tree<T: Read + Seek> {
 
 impl<T: Read + Seek> Tree<T> {
 	fn checked_read(&mut self, buf: &mut [u8]) -> Result<()> {
-		let rdsize = self.f.read(buf)?;
-		if rdsize != buf.len() { Err(Error::IncompleteRead(buf.len(), rdsize))?; }
+		self.f.read_exact(buf)?;
 		Ok(())
 	}
 

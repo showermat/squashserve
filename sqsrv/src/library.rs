@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use super::{AppError, Result};
@@ -146,8 +147,6 @@ impl Info {
 	}
 }
 
-//impl Serialize for Info {}
-
 pub struct Volume {
 	archive: Archive,
 	info: Info,
@@ -167,10 +166,10 @@ impl Volume {
 		Ok(self.archive.get(path)?)
 	}
 
-	fn index(&self) -> Result<Option<disktree::Tree<OwnedFile>>> {
+	fn index(&self) -> Result<Option<disktree::Tree<BufReader<OwnedFile>>>> {
 		Ok(self.archive.get(".meta/titles.idx")?
 			.and_then(|x| x.into_owned_file().ok())
-			.and_then(|x| disktree::Tree::new(x).ok()))
+			.and_then(|x| disktree::Tree::new(BufReader::new(x)).ok()))
 	}
 
 	pub fn random(&self, ctype: ContentType) -> Result<Option<PathBuf>> {

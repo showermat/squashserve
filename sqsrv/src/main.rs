@@ -302,13 +302,33 @@ impl App {
 	}
 }
 
+struct InnerReadHandle<'a> {
+	file: OwnedFile<'a>,
+	ctype: ContentType,
+}
+
+impl<'a> std::ops::Deref for InnerReadHandle<'a> {
+	type Target = Self;
+
+	fn deref(&self) -> &Self::Target {
+		&self
+	}
+}
+
+impl<'a> std::ops::DerefMut for InnerReadHandle<'a> {
+
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self
+	}
+}
+
 pub struct ReadHandle<'a> {
-	handle: OwningHandle<Arc<Volume>, OwnedFile<'a>>,
+	handle: OwningHandle<Arc<Volume>, InnerReadHandle<'a>>,
 }
 
 impl<'a> std::io::Read for ReadHandle<'a> {
 	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-		(*self.handle).read(buf)
+		(*self.handle).file.read(buf)
 	}
 }
 
@@ -419,32 +439,50 @@ fn index<'a>(app: State<'a, App>, volume: &Volume, pathbuf: &PathBuf, mut dir: D
 }
 
 #[get("/content/<id>/<path..>")]
-fn content<'a>(app: State<'a, App>, id: String, path: UncheckedPath) -> Result<Response<'a>> {
+fn content<'a>(app: State<'a, App>, id: String, path: UncheckedPath) -> Result<Response<'a>> { // FIXME Unwraps
+	// This is a miserable hack, stemming from the fact that `OwningHandle` does not provide a way
+	// to decide within the dependent object construction closure whether to create an owning
+	// handle or return something else that is not owned.  (In this case, we want to return either
+	// an owning handle for an `OwnedFile` or else a directory listing or error.)  The closest
+	// thing we get is `try_new`, which can return an error, so we abuse that to smuggle out
+	// non-owned-objects in the fake error struct below.  This hack is necessary because a) the
+	// owned object *must* be created from the pointer passed into the construction closure and b)
+	// in this case the construction involves looking up a node in the volume, which is a very
+	// expensive operation that we want to avoid doing multiple times at all costs.  Otherwise I
+	// would leave the original implementation, where the node was retrieved once to check its
+	// metadata and then another time when constructing the `OwningHandle`.
+	enum HandleResult<'a> {
+		NotHandle(Response<'a>),
+		ActualError(AppError),
+	}
+
 	let pathbuf = path.decoded().to_path_buf();
 	let volume = app.inner().library().get(&id)?;
-	match (*volume).get(&pathbuf)? {
-		None => Err(AppError::NoFile(id, pathbuf))?,
-		Some(node) => {
-			match node.resolve()? {
-				Some(resolved) => match resolved.data()? {
-					Data::File(_) => {
-						let ctype = content_type(&node).unwrap_or(ContentType::Plain); // Maybe mark large files and invalid UTF-8 as `Binary` instead
-						let conv = |vol: *const Volume| -> Result<OwnedFile<'a>> { unsafe { Ok((*vol).get(&pathbuf)?.unwrap().into_owned_file()?) } }; // This needs some work!
-						let read = ReadHandle { handle: OwningHandle::try_new(volume, conv)? };
-						Ok(Response::Stream(Content(ctype, Stream::from(read))))
+	let maybe_handle = OwningHandle::try_new(volume, |vol: *const Volume| {
+		let vol = unsafe { vol.as_ref().expect("Volume pointer null in owning handle construction") };
+		match vol.get(&pathbuf).map_err(HandleResult::ActualError)? {
+			None => Err(HandleResult::ActualError(AppError::NoFile(id, pathbuf))), // TODO It would be better to provide the path of the target that does not exist
+			Some(node) => match node.resolve().map_err(|e| HandleResult::ActualError(e.into()))? {
+				None => Err(HandleResult::ActualError(AppError::NoFile(id, pathbuf))),
+				Some(resolved) => match resolved.data().map_err(|e| HandleResult::ActualError(e.into()))? {
+					Data::File(_) => Ok(InnerReadHandle {
+						ctype: content_type(&node).unwrap_or(ContentType::Plain), // Maybe mark large files and invalid UTF-8 as `Binary` instead
+						file: node.into_owned_file().map_err(|e| HandleResult::ActualError(e.into()))?,
+					}),
+					Data::Dir(dir) => match app.config.indices {
+						true => Err(HandleResult::NotHandle(index(app, &vol, &pathbuf, dir).map_err(HandleResult::ActualError)?)),
+						false => Err(HandleResult::ActualError(AppError::NoFile(id, pathbuf))),
 					},
-					//Data::Symlink(target) => Ok(Response::redirect(uri!(content: id, PathBuf::from(target)))),
-					Data::Dir(dir) => {
-						match app.config.indices {
-							true => Ok(index(app, &volume, &pathbuf, dir)?),
-							false => Err(AppError::NoFile(id, pathbuf))?,
-						}
-					},
-					_ => Err(AppError::FileType(id, pathbuf, node.data()?.name()))?,
+					_ => Err(HandleResult::ActualError(AppError::FileType(id, pathbuf, node.data().unwrap().name()))),
 				},
-				None => Err(AppError::NoFile(id, pathbuf))?, // TODO It would be better to provide the path of the target that does not exist
-			}
-		},
+			},
+		}
+	});
+
+	match maybe_handle {
+		Ok(handle) => Ok(Response::Stream(Content((*handle).ctype.clone(), Stream::from(ReadHandle { handle })))),
+		Err(HandleResult::NotHandle(response)) => Ok(response),
+		Err(HandleResult::ActualError(e)) => Err(e),
 	}
 }
 
