@@ -1,0 +1,62 @@
+#! /bin/python
+
+import sys
+import os
+import os.path
+import requests
+import subprocess
+import urllib.parse
+import yaml # PyYAML
+
+def usage_exit():
+	print("Usage: sqload [-h <host>] <path>")
+	exit(1)
+
+def server_config():
+	subpath = ["sqsrv", "sqsrv.yaml"]
+	locs = [
+		("SQSRV_CONF", []),
+		("XDG_CONFIG_HOME", subpath),
+		("HOME", [".config"] + subpath),
+		(None, ["/", "etc"] + subpath),
+	]
+	tried = []
+	for (var, sub) in locs:
+		if var is None: path = sub
+		elif os.environ.get(var): path = [os.environ.get(var)] + sub
+		else: continue
+		path = os.path.join(*path)
+		if os.path.isfile(path):
+			with open(path) as inf: return yaml.safe_load(inf)
+		if path not in tried: tried.append(path)
+	print("Couldn't find SquashServe server configuration in any of the following locations: " + " ".join(tried))
+	exit(3)
+
+host = None
+path = None
+
+argind = 1
+while argind < len(sys.argv):
+	if sys.argv[argind] == "-h" or sys.argv[argind] == "--host":
+		if argind >= len(sys.argv) - 1: usage_exit()
+		host = sys.argv[argind + 1]
+		argind += 1
+	elif path is not None: usage_exit()
+	else: path = sys.argv[argind]
+	argind += 1
+
+if host is None:
+	host = "localhost:%d" % (server_config().get("port", 2234),)
+if path is None: usage_exit()
+loadurl = "http://{host}/external".format(host=host)
+viewurl = "http://{host}%s".format(host=host)
+
+try:
+	res = requests.get(loadurl, params={"path": os.path.abspath(path)}, timeout=1)
+except Exception as e:
+	print(e)
+	exit(4)
+if res.status_code != 200:
+	print("Could not open file: (%d) %s" % (res.status_code, res.text))
+	exit(2)
+if "DISPLAY" in os.environ: subprocess.call(["xdg-open", viewurl % (res.text,)])
