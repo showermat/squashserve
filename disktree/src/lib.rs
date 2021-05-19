@@ -23,8 +23,8 @@ type Result<T> = std::result::Result<T, Error>;
 
 type Value = u64;
 
-const DEFLAG: u64 = 0x0FFFFFFFFFFFFFFF;
-const FLAG_PARTIAL: u64 = 0x1000000000000000;
+const DEFLAG: Value = 0x0FFFFFFFFFFFFFFF;
+const FLAG_PARTIAL: Value = 0x1000000000000000;
 
 fn diff_start(base: &str, check: &str) -> usize {
 	let mut i = 0;

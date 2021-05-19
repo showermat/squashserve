@@ -12,7 +12,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use info::Info;
 use squashfs::write::{SourceData, SourceFile, TreeProcessor};
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 		(author: "Matthew Schauer")
 		(about: "Create SquashFS volumes for Squashserve")
 		(@arg DIR: +required "Directory to archive")
-		(@arg OUT: -o +takes_value "Output file to create, or DIR.sfs by default") // TODO Probably more standard to create in current directory by default
+		(@arg OUT: -o +takes_value "Output file to create, or DIR.sfs by default")
 		(@arg METADIR: -m --metadir +takes_value "Use custom subdirectory for metadata, rather than .meta")
 		(@arg TMPDIR: --tmpdir +takes_value "Store temporary files here, rather than in the same directory as the output file")
 	).get_matches();
@@ -78,10 +78,14 @@ fn main() -> Result<()> {
 
 	let workers = threadpool::Builder::new().build();
 	let limiter = Arc::new(Semaphore::new(workers.max_count() as isize * 2)); // Required pending https://github.com/rust-threadpool/rust-threadpool/pull/104
+	let mut count: u32 = 0;
+	let finished = Arc::new((Mutex::new(0), Condvar::new()));
 
 	for entry in iter_processor.iter(root) {
 		if exiting.load(Ordering::Relaxed) { break; }
 		limiter.acquire();
+		let current = count;
+		count += 1;
 		let limiter = limiter.clone();
 		let source = entry.with_context(|| "Tree processor failed to handle file")?;
 		let inf = inf.clone();
@@ -91,6 +95,8 @@ fn main() -> Result<()> {
 		let rootsource = rootsource.clone();
 		let processor = processor.clone();
 		let index = index.clone();
+		let finished = finished.clone();
+		let outer_finished = finished.clone();
 		workers.execute(move || {
 			let process = move |mut source: SourceFile, relpath: PathBuf| -> Result<()> {
 				inf.lock().expect("Poisoned lock").set_attrs(&source.path, &mut source.content.xattrs).with_context(|| "Failed to invoke Lua function to calculate attributes")?;
@@ -112,7 +118,13 @@ fn main() -> Result<()> {
 				}
 				else {
 					let maybe_title = source.content.xattrs.get(OsStr::new("user.title")).cloned();
-					let id = processor.add(source).with_context(|| "Failed adding entry to archive")? as u64;
+					let id = {
+						let (unlocked_next, cond) = &*finished;
+						let mut next = unlocked_next.lock().expect("Poisoned lock");
+						while *next < current { next = cond.wait(next).expect("Poisoned lock"); }
+						let id = processor.add(source).with_context(|| "Failed adding entry to archive")? as u64;
+						id
+					};
 					if let Some(title) = maybe_title {
 						if let Ok(utf_title) = String::from_utf8(title) {
 							index.add(&utf_title, id).with_context(|| format!("Could not add title \"{}\" to title index", utf_title))?;
@@ -126,8 +138,13 @@ fn main() -> Result<()> {
 				Ok(())
 			};
 			if let Err(e) = process(source, relpath.clone()) {
-				println!("Error processing {}: {:#}", relpath.display(), e); // TODO Some errors should probably cause us to abort
+				println!("{}Error processing {}: {:#}", CLRLN, relpath.display(), e); // TODO Some errors should probably cause us to abort
 			}
+			let (unlocked_next, cond) = &*outer_finished;
+			let mut next = unlocked_next.lock().expect("Poisoned lock");
+			while *next < current { next = cond.wait(next).expect("Poisoned lock"); }
+			*next = current + 1;
+			cond.notify_all();
 			limiter.release();
 		});
 	}

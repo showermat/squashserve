@@ -34,9 +34,7 @@ use squashfs::read::{Archive, Data, Dir, OwnedFile};
 use thiserror::Error;
 
 const APPNAME: &str = "sqsrv";
-// TODO This is a pretty miserable limit and we need to figure out the bottlenecks
-const INDEX_MAX: usize = 1000; // Maximum number of files shown in auto-generated indices
-const DIR_SIZE_MAX: usize = 1000; // Maximum size that will be counted for directories in auto-generated indices
+const INDEX_MAX: usize = 10000; // Maximum number of files shown in auto-generated indices
 
 // TODO Squashfs errors (both StartupError and AppError) don't capture the path of the volume that
 // has the problem.  Figure out the least painful way to make that information available --
@@ -393,13 +391,14 @@ fn index<'a>(app: State<'a, App>, volume: &Volume, pathbuf: &PathBuf, mut dir: D
 		let resolved = child.resolve()?;
 		let (name, size) = match resolved {
 			Some(node) => {
-				let name = node.data()?.name();
-				let size = match node.data()? {
+				let data = node.data()?;
+				let name = data.name();
+				let size = match data {
 					Data::File(file) => bytesize::ByteSize::b(file.size()).to_string_as(true),
-					Data::Dir(dir) => match dir.take(DIR_SIZE_MAX).count() {
+					/*Data::Dir(dir) => match dir.take(DIR_SIZE_MAX).count() { // Not performant
 						DIR_SIZE_MAX => format!("{}+", DIR_SIZE_MAX),
 						x => x.to_string(),
-					},
+					},*/
 					_ => "".to_string(),
 				};
 				(name, size)
@@ -417,9 +416,9 @@ fn index<'a>(app: State<'a, App>, volume: &Volume, pathbuf: &PathBuf, mut dir: D
 			size: size,
 		})
 	}).collect::<Result<Vec<IndexEntry>>>()?;
-	let elided = dir.take(INDEX_MAX * 10).count();
+	let elided = dir.take(INDEX_MAX).count();
 	let elided_str =
-		if elided == INDEX_MAX * 10 { format!("At least {}", elided) }
+		if elided == INDEX_MAX { format!("At least {}", elided) }
 		else { elided.to_string() };
 	entries.sort_by_key(|x| x.name.clone());
 	if pathbuf.parent().is_some() {

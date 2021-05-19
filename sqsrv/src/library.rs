@@ -63,17 +63,19 @@ pub fn content_type(node: &Node) -> Result<ContentType> {
 	let info = node.xattrs(XattrType::User)?.into_iter()
 		.map(|(k, v)| (String::from_utf8_lossy(&k).into_owned(), String::from_utf8_lossy(&v).into_owned()))
 		.collect::<HashMap<String, String>>();
-	let debug_path = node.path().unwrap_or("<unknown>".as_ref());
+	let path = resolve_path(node, None)?;
+	let debug_path = path.clone().map(|x| x.to_path_buf()).unwrap_or(PathBuf::from("<unknown>"));
 	Ok(match info.get("type") {
 		Some(ctype) => ContentType::from_str(ctype)
-			.map_err(|x| AppError::ContentType(debug_path.to_path_buf(), format!("\"{}\" is not a valid MIME type: {}", ctype, x)))?,
+			.map_err(|x| AppError::ContentType(debug_path, format!("\"{}\" is not a valid MIME type: {}", ctype, x)))?,
 		None => {
-			let ext = node
-				.path().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Couldn't get file path to determine content type".to_string()))?
-				.extension().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown extension".to_string()))?
-				.to_str().ok_or(AppError::ContentType(debug_path.to_path_buf(), "Invalid extension".to_string()))?;
-			ContentType::from_extension(ext)
-				.ok_or(AppError::ContentType(debug_path.to_path_buf(), "Unknown content type".to_string()))?
+			let ext = path
+				.ok_or(AppError::ContentType(debug_path.clone(), "Couldn't get file path to determine content type".to_string()))?
+				.extension().ok_or(AppError::ContentType(debug_path.clone(), "Unknown extension".to_string()))?
+				.to_str().ok_or(AppError::ContentType(debug_path.clone(), "Invalid extension".to_string()))?
+				.to_string();
+			ContentType::from_extension(&ext)
+				.ok_or(AppError::ContentType(debug_path, "Unknown content type".to_string()))?
 		}
 	})
 }
@@ -175,8 +177,9 @@ impl Volume {
 	pub fn random(&self, ctype: ContentType) -> Result<Option<PathBuf>> {
 		let check = |id: u64| -> Result<Option<PathBuf>> {
 			let node = self.archive.get_id(id)?;
-			match node.is_file()? && resolve_path(&node, None)?.is_some() && content_type(&node)? == ctype {
-				true => Ok(resolve_path(&node, None)?),
+			let path = resolve_path(&node, None)?;
+			match node.is_file()? && path.is_some() && content_type(&node)? == ctype {
+				true => Ok(path),
 				false => Ok(None),
 			}
 		};
