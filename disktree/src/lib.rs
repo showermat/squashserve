@@ -1,4 +1,3 @@
-#![feature(map_first_last)]
 #![feature(btree_drain_filter)]
 
 use std::collections::{BTreeMap,BTreeSet};

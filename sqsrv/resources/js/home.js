@@ -12,10 +12,10 @@ $(document).ready(function() {
 		$.get(url, {cat : anchor.data("catname")}, function(data) {
 			target.html(data);
 			target.parent().toggleClass("loaded unloaded");
-			search_setup("search", ".search-input", ".search", true);
+			search_setup("search", ".search-input", ".search", false);
 			anchor.find(".category-loading").hide();
 		});
 		return false;
 	});
-	search_setup("search", ".search-input", ".search", true);
+	search_setup("search", ".search-input", ".search", false);
 });

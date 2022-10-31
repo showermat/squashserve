@@ -7,7 +7,7 @@ use super::{AppError, Result};
 use itertools::Itertools;
 use rocket::http::ContentType;
 use rocket::http::uri::Uri;
-use squashfs::read::{Archive, Node, OwnedFile, XattrType};
+use squashfs_ng::read::{Archive, Node, OwnedFile, XattrType};
 use thiserror::Error;
 use walkdir::WalkDir;
 
@@ -28,7 +28,7 @@ pub mod tokens {
 	}
 }
 
-fn string_keyed_xattrs(node: &Node) -> std::result::Result<HashMap<String, Vec<u8>>, squashfs::SquashfsError> {
+fn string_keyed_xattrs(node: &Node) -> std::result::Result<HashMap<String, Vec<u8>>, squashfs_ng::SquashfsError> {
 	Ok(node.xattrs(XattrType::User)?.into_iter()
 		.filter_map(|(k, v)| String::from_utf8(k).ok().map(|x| (x, v)))
 		.collect::<HashMap<String, Vec<u8>>>())

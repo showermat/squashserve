@@ -4,7 +4,7 @@ extern crate encoding;
 #[macro_use] extern crate lazy_static;
 extern crate magic;
 extern crate mlua;
-extern crate squashfs;
+extern crate squashfs_ng;
 
 mod info;
 
@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use info::Info;
-use squashfs::write::{SourceData, SourceFile, TreeProcessor};
+use squashfs_ng::write::{SourceData, SourceFile, TreeProcessor};
 use anyhow::{Context, Result};
 use chrono::prelude::*;
 use signal_hook::consts::TERM_SIGNALS;

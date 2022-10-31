@@ -2,7 +2,7 @@
 <tr>
 <td class="volume-icon"><img class="favicon" src="{% if volume.icon %}/content/{{ volume.id }}/{{ volume.icon }}{% else %}/rsrc/img/volume.svg{% endif %}"></td>
 <td class="volume-info">
-	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{% if volume.home %}{{ volume.home }}{% endif %}" class="item-title" target="_blank">{{ volume.title | escape }}</a>
+	<a href="{{ viewbase }}/{{ volume.id | url_encode }}/{% if volume.home %}{{ volume.home }}{% endif %}" class="item-title">{{ volume.title | escape }}</a>
 	{% if volume.description %}<span class="volume-desc">{{ volume.description | escape }}</span>{% endif %}
 </td>
 <td class="volume-search vcenter">
