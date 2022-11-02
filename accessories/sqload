@@ -5,7 +5,6 @@ import os
 import os.path
 import requests
 import subprocess
-import urllib.parse
 import yaml # PyYAML
 
 def usage_exit():
@@ -29,7 +28,7 @@ def server_config():
 		if os.path.isfile(path):
 			with open(path) as inf: return yaml.safe_load(inf)
 		if path not in tried: tried.append(path)
-	print("Couldn't find SquashServe server configuration in any of the following locations: " + " ".join(tried))
+	print("Couldn't find Squashserve server configuration in any of the following locations: " + " ".join(tried))
 	exit(3)
 
 host = None
